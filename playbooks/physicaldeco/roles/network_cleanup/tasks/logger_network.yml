@@ -1,0 +1,236 @@
+---
+# - name: "LOGGER MODULE NETWORK"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+#     network_logg: "network_log.yml"
+#     graceperiod_flag: true 
+#     network: False
+#     nas_check: true
+
+#   tasks:    
+    - name: "Logger and Create/Update TR- Win@proach "
+      block:
+
+        - name: VM_host list
+          shell: cat network_log.yml
+          delegate_to: localhost
+          register: vm_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm: "{{ vm_result.stdout }}" 
+          delegate_to: localhost
+            
+        - name: "Debug output"
+          debug:
+            var: vm
+
+        - meta: end_host
+          when: vm == ""
+
+        - name: VM_host list
+          shell: cat record_id_logger.json
+          delegate_to: localhost
+          register: record_result              
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id: "{{ record_result.stdout }}" 
+          delegate_to: localhost             
+        
+        
+        
+################# CREATE TR ################
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "VM DECO -LOGGER"
+            assignee_name: "CDCDt105263"
+            assignee_group: "DINFDECO"            
+            severity: "4"
+            overview: "Physical DECO -LOGGER"  #(NETWORK - BACKUP - NAS_STORAGE - IP_DNS - VM_POWEROFF_DELETION)"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"
+            password: "{{ winAproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+          when: record_id == ""
+        
+        - set_fact:
+            record_id_logger: "{{create_tr_output.record_id}}"
+          when: record_id == ""  
+        
+        - name: "Debug output"
+          debug:
+            var: record_id_logger
+          when: record_id == ""  
+
+        - copy:
+            content: '{{ record_id_logger|to_json }}'
+            dest: record_id_logger.json
+          delegate_to: localhost
+          when: record_id == ""   
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_id_logger }}"
+          register: add_document
+          delegate_to: localhost
+          when: record_id == ""
+
+################# LOGGER ###################
+        - name: VM_host list
+          shell: cat record_id_logger.json
+          delegate_to: localhost
+          register: vm_result             
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            record_id_logger: "{{ vm_result.stdout[1:-1] }}"  
+          delegate_to: localhost
+            
+        - name: "Debug output"
+          debug:
+            var: record_id_logger  
+
+        - name: logger data
+          shell: cat network_log.yml
+          delegate_to: localhost
+          register: net_log 
+                    
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            log_network: "{{ net_log.stdout }}" 
+          delegate_to: localhost        
+
+        # - name: "Test custom module Logger."
+        #   logger_data:
+        #     Logdata: "{{ item }}"
+        #   loop: "{{log_network}}"   
+        #   register: logger_output
+        #   delegate_to: localhost 
+        #   ignore_errors: True
+        
+        # - name: "Debugging previous module's output"
+        #   debug:
+        #     var: logger_output
+        # - set_fact:
+        #     output_logger: "{{ logger_output }}"
+
+        # - name: "success log list"
+        #   shell: echo "{{ item.output }}" >> output_network_log.yml 
+        #   loop: "{{output_logger.results}}"                    
+        #   delegate_to: localhost  
+        
+
+        # - name: VM_host list
+        #   shell: cat output_network_log.yml
+        #   delegate_to: localhost
+        #   register: netwk_log             
+
+        # - name: save the vm list to a Variable as a Fact
+        #   set_fact:
+        #     final_net_logger: "{{ netwk_log.stdout_lines }}" 
+        #   delegate_to: localhost  
+
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            winaproach_user: "{{ winaproach_username }}"
+          delegate_to: localhost
+
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            winaproach_password: "{{ winAproach_password }}"
+          delegate_to: localhost 
+
+
+
+################# LOGGER UPDATE TO TR ###################
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{record_id_logger}}"
+            message: "{{ log_network }}"           #"{{final_net_logger}}"             
+            username: "{{ winaproach_user }}"
+            password: "{{ winaproach_password }}"          
+          delegate_to: localhost
+          register: add_msg_output_log
+
+        - name: "Debug output"
+          debug:
+            var: add_msg_output_log
+
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check network logger "
+
+
+    - name: "Logger and Create/Update TR- Win@proach "
+      block:     
+
+        - name: "Set header"
+          shell: echo > network_failure.yml            
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > record_failure_network.json           
+          run_once: true
+          delegate_to: localhost 
+
+        - name: "Set header"
+          shell: echo > final_network.yml          
+          run_once: true
+          delegate_to: localhost
+
+
+        # - name: "Set header"
+        #   shell: echo > server_info.csv                
+        #   run_once: true
+        #   delegate_to: localhost   
+        
+
+        - name: "Set header"
+          shell: echo > record_net.json               
+          run_once: true
+          delegate_to: localhost 
+
+
+        - name: "Set header"
+          shell: echo > final_network.yml           
+          run_once: true
+          delegate_to: localhost
+         
+
+        - name: "Set header"
+          shell: echo > network_success.yml            
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > network_log.yml                
+          run_once: true
+          delegate_to: localhost  
+
+        - name: "Set header"
+          shell: echo > output_network_log.yml         
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > network_tr.yml         
+          run_once: true
+          delegate_to: localhost                
+
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check network logger "         

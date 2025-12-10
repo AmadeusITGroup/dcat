@@ -1,0 +1,12 @@
+- name: "cmdb duplicate check"
+  hosts: target_servers
+  gather_facts: no    
+  vars:
+  tasks: 
+
+    - name: Fetch ESXi details
+      enclosure_synergon_data_fetch:
+        enclosure: "{{ inventory_hostname }}"
+        synergon_api: "{{ synergon_url }}"
+      delegate_to: localhost
+      register: esxi_data

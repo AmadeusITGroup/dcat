@@ -1,0 +1,218 @@
+# - name: "CIFS Storage Cleanup Module"
+#   hosts: all
+#   gather_facts: no
+
+#   collections:
+#     - netapp.ontap
+
+#   vars:
+#     client_match : '{{ inventory_hostname }}'
+#     cifs_share_access_control: ""
+#     #user_group_acl: "" ## should be given explicitly if need to be deleted
+
+#   tasks:
+
+    - name: handle the error for CIFS Storage Cleanup Module
+      throttle: 1
+      block:
+        - name: awx creds username to var
+          set_fact:
+            pAccount_user: "{{ synergon_username }}"
+          delegate_to: localhost
+
+        - name: awx creds password to var
+          set_fact:
+            pAccount_pass: "{{ synergon_password }}"
+          delegate_to: localhost
+
+        - set_fact:
+            cifs_vserver: "" 
+            cifs_share_name: ""                 
+            cifs_group: "" 
+            cifs_volume: ""         
+
+        - set_fact:
+            cifs_vserver: "{{ cifs_share_name_result.0}}" 
+            cifs_share_name: "{{ cifs_share_name_result.1 }}"                 
+            cifs_group: "{{ cifs_share_name_result.2}}"
+
+
+################### fetching volume for specific share name and user group ####################             
+        - name: Fetching the volume name and checking if the share access control is empty
+          nas_custom_cifs_volume:
+            username: "{{ pAccount_user }}"
+            password: "{{ pAccount_pass }}"
+            storage_box: "{{ nas_hostname }}"
+            system_name: "{{  cifs_group }}"  
+            share_name: "{{  cifs_share_name }}"                  
+          delegate_to: localhost
+          register: vol_acl_check
+          when: cifs_group != ""  and cifs_vserver is not search "-mc"
+
+        - set_fact:
+            cifs_volume: "{{vol_acl_check.share_output}}"             
+          when: cifs_group != ""  and cifs_vserver is not search "-mc"
+
+
+############# Deleting the user or group with the server name in it ################ 
+        # - name: deletion of user or group with server name
+        #   na_ontap_cifs_acl:
+        #     state: absent
+        #     share_name: "{{ cifs_share_name }}"
+        #     user_or_group:  "{{ cifs_group }}"
+        #     vserver: "{{ cifs_vserver }}"
+        #     hostname:  "{{ nas_hostname }}"
+        #     username: "{{ pAccount_user }}"
+        #     password:  "{{ pAccount_pass}}"
+        #     https: yes
+        #     validate_certs: no 	
+        #   delegate_to: localhost
+        #   register: user_deletion_result                   
+        #   when:  cifs_volume is defined and cifs_volume is not search ("no entries for volume") and cifs_vserver is not search "-mc"
+
+        # - name: Get timestamp from the system
+        #   shell: "date +%Y-%m-%d/%H:%M"
+        #   delegate_to: localhost
+        #   register: tstamp              
+                    
+        # - set_fact:
+        #     time: "{{tstamp.stdout}}"                 
+
+        # - name: "deletion user group info to success file"
+        #   shell: echo "  {{ inventory_hostname }}, {{ time }}, [INFO], system account deleted from {{cifs_share_name}} of sharename in {{ nas_hostname }}." >> {{file_success}}                    
+        #   delegate_to: localhost
+        #   when: user_deletion_result.changed == true          
+
+################# checking if the share access control is empty alongwith rule check for the specific volume  ########################
+
+        # - name: checking if the share access control is empty
+        #   nas_fetch_cifs_acl_rules_empty_check:
+        #     username:  "{{ pAccount_user }}"
+        #     password: "{{ pAccount_pass }}"
+        #     storage_box: "{{ nas_hostname }}"
+        #     vol_name:  "{{  cifs_volume }}"  
+        #     v_server:  "{{ cifs_vserver }}"                                     
+        #   delegate_to: localhost
+        #   register: output_cifs_acl_rul
+        #   when: user_deletion_result is defined and user_deletion_result.changed == true
+
+
+        # - set_fact:
+        #     acl_empty_check: "{{ output_cifs_acl_rul.acl_rule_output.1 }}"
+        #   when: user_deletion_result is defined and user_deletion_result.changed == true 
+
+        # - name: "cifs validation info before volume offline"
+        #   shell: echo "{{ output_cifs_acl_rul.acl_rule_output.1 }}" >> nas_validation_check_volume.txt
+        #   delegate_to: localhost
+        #   when : acl_empty_check is defined and acl_empty_check is not search "No ACL and rule"          
+      
+
+# ############# Unmount junction path associated  before share access control is deleted ###################
+        # - name: Unmount the volume from junction_path 
+        #   na_ontap_volume:
+        #     state: present
+        #     name: "{{ cifs_volume }}"
+        #     vserver: "{{ cifs_vserver }}"
+        #     junction_path: ''
+        #     hostname: "{{ nas_hostname }}"
+        #     username: "{{ pAccount_user }}"
+        #     password:  "{{ pAccount_pass}}"
+        #     https: true
+        #     validate_certs: false
+        #   delegate_to: localhost
+        #   register: junctionpath_unmount_result  
+        #   when: acl_empty_check is defined and acl_empty_check is search "No ACL and rule"
+
+
+###########  deletion of share name ###########################
+        # - name: Delete CIFS share
+        #   netapp.ontap.na_ontap_cifs:
+        #     state: absent
+        #     name: "{{ cifs_share_name }}"
+        #     vserver: "{{ cifs_vserver }}"
+        #     hostname: "{{ nas_hostname }}"
+        #     username: "{{ pAccount_user }}"
+        #     password:  "{{ pAccount_pass }}"
+        #     https: true
+        #     validate_certs: false
+        #   delegate_to: localhost
+        #   register: share_deletion_result  
+        #   when: junctionpath_unmount_result.changed == true
+
+
+############### volume offline ######################################            
+        # - name: Take unmounted volume offline 
+        #   na_ontap_volume:
+        #     state: present
+        #     name: "{{ cifs_volume }}"
+        #     vserver: "{{ cifs_vserver }}"
+        #     is_online: false
+        #     hostname: "{{ nas_hostname }}"
+        #     username: "{{ pAccount_user }}"
+        #     password:  "{{ pAccount_pass}}"
+        #     https: true
+        #     validate_certs: false
+        #   delegate_to: localhost
+        #   register: volume_offline_result
+        #   when: share_deletion_result.changed == true   
+
+
+      #   - name: Get timestamp from the system
+      #     shell: "date +%Y-%m-%d/%H:%M"
+      #     delegate_to: localhost
+      #     register: tstamp              
+                     
+      #   - set_fact:
+      #       time: "{{tstamp.stdout}}"                          
+
+      #   - name: "Access removal and unmounting result info to success file"
+      #     shell: echo " {{ inventory_hostname }}, {{ time }}, [INFO], Access removal and unmounting done for volume {{ cifs_volume }} in {{ nas_hostname }} storage box." >> {{file_success}}                    
+      #     delegate_to: localhost 
+      #     when:  junctionpath_unmount_result.changed == true
+
+      #   - name: "Add to final host success list"
+      #     shell: echo " {{ inventory_hostname }}, {{ time }}, [INFO], Access removal and unmounting done for volume {{ cifs_volume }} in {{ nas_hostname }} storage box." >> {{vm_nas_proceed}}                    
+      #     delegate_to: localhost 
+      #     when:  junctionpath_unmount_result.changed == true        
+
+
+      # rescue: 
+      #   - name: when above one throws error the below task should execute
+      #     debug:
+      #       msg: "Exception occurred but rescued - check errors for cifs_storage_deletion module with server name " 
+
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                    
+        - set_fact:
+            time: "{{tstamp.stdout}}"          
+
+        - name: "Add info to failure file"
+          shell: echo "{{ inventory_hostname }},{{ time }}, [ERROR],Exception occurred,check errors for module nfs storage export policy file,storage box {{ nas_hostname }},having system account as {{ cifs_group }} and share name {{ cifs_share_name }} "  >> {{file_failure}}                    
+          delegate_to: localhost
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_nas_hostname_failure.txt                    
+          delegate_to: localhost
+          
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost  
+
+        - name: "update entry for DECO server"
+          azure_update_module_vals:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "nasstorage"
+            status: "F"               
+          register: update_status
+          delegate_to: localhost 

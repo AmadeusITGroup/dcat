@@ -1,0 +1,172 @@
+---
+- hosts: localhost
+  gather_facts: no
+  #no_log: True
+  vars:
+    env_data: "{{ env_data }}"
+    associated_cis: "{{ associated_cis }}"
+    # input: "{{ lookup('file','config.json') | from_json }}"
+    input: "{{ lookup('file', 'esxideco/config.json') | from_json }}"
+    # env_data: "{{ hostvars['localhost']['env_data'] | default('dev') }}"  # or pass it in
+    env_data: "{{ hostvars['localhost']['env_data'] | default('prod') }}"  # or pass it in
+
+       
+  tasks: 
+
+  - name: Display input JSON
+    set_fact:
+      serial: 5
+
+
+  # - name: register env information
+  #   debug: 
+  #     msg: "{{ serial }}"
+  #   register: serial_number
+
+  - name: Display input JSON
+    set_fact:
+      jsondata: "{{ associated_cis }}"
+       
+
+  - name: print json data
+    debug:
+      var: jsondata
+
+  - name: Set config variables globally
+    set_fact:
+      config_data: "{{ input[env_data] }}" 
+    run_once: true
+    delegate_to: localhost
+
+
+  - name: Debug - Show loaded config
+    debug:
+      var: config_data
+
+
+
+
+
+
+
+
+  # - name: Add servers to inventory dynamically
+  #   add_host:
+  #     name: "{{ item['hosts'] }}"
+  #     groups: enclosures
+  #   loop: "{{ associated_cis }}"
+
+  # - name: Debug - Enclosure Group
+  #   debug:
+  #     msg: "Enclosures in enclosures: {{ groups['enclosures'] }}"
+
+
+
+
+
+
+
+
+      
+  # - name: Fetch ESXi details
+  #   enclosure_synergon_data_fetch:
+  #     enclosure: "{{ item }}"
+  #     synergon_api: "{{ synergon_url }}"
+  #   loop: "{{ groups['target_servers'] }}"
+  #   delegate_to: localhost
+  #   register: esxi_data
+
+  # # - name: Extract Blades from fetched data
+  # #   set_fact:
+  # #     all_blades: "{{ esxi_data.esxi_details | map(attribute='ci_name') | list }}"
+
+  # - name: Extract Blades from fetched data
+  #   set_fact:
+  #     all_blades: "{{ esxi_data.results | map(attribute='esxi_details') | list | flatten | map(attribute='ci_name') | list }}"
+
+  # - name: Debug - Show fetched Blades
+  #   debug:
+  #     var: all_blades   
+
+  # - name: Debug - Show fetched Blades
+  #   debug:
+  #     var: all_blades   
+
+  # - name: Add blades to dynamic host group
+  #   add_host:
+  #     name: "{{ item }}"
+  #     groups: "blades"
+  #   loop: "{{ all_blades }}"
+
+  # - name: Debug - Blades Group
+  #   debug:
+  #     msg: "Blades in blades group: {{ groups['blades'] }}"
+
+  
+  # - debug:
+  #     var: associated_cis
+         
+  # - debug:
+  #     var: cr
+
+  # - debug:
+  #     var: target_servers
+
+  # - debug:
+  #     var: graceperiod_flag
+
+  # - debug:
+  #     var: retention_days
+
+
+
+- import_playbook: esxideco/main_populate_files.yml     # Populate files
+
+- import_playbook: esxideco/main_azure_conn_string.yml  # connect to Azure
+
+- import_playbook: esxideco/main_groupingowners.yml
+  vars:
+    target_hosts: "enclosures"
+
+
+
+- import_playbook: esxideco/main_idempotency_validator.yml  # Create Azure Table
+  vars:
+    target_hosts: "enclosures"
+
+- import_playbook: esxideco/main_healthcheck_peripherals.yml
+
+
+- import_playbook: esxideco/main_cmdb_check_duplicate_enclosure.yml    # Validate single entry in cmdb
+  vars:
+    target_hosts: "enclosures"
+
+- import_playbook: esxideco/main_idempotency_validator.yml   # check updated Azure table
+  vars:
+    target_hosts: "enclosures"
+
+
+
+- import_playbook: esxideco/main_fqdn_vcenter_fetch.yml    # Update FQDN and vcenter
+  vars:
+    target_hosts: "enclosures"
+
+- import_playbook: esxideco/main_idempotency_validator.yml      # check updated Azure table
+  vars:
+    target_hosts: "enclosures"
+
+
+
+- import_playbook: esxideco/main_cmdb_fetch_enclosure.yml    # Check cmdb status is In Production
+  vars:
+    target_hosts: "enclosures"
+
+- import_playbook: esxideco/main_idempotency_validator.yml      # check updated Azure table
+  vars:
+    target_hosts: "enclosures"
+
+
+
+- import_playbook: esxideco/main_blades.yml
+
+

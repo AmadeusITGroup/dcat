@@ -1,0 +1,132 @@
+---
+
+# - name: "Filter hostlist Enclosure healthcheck"
+#   hosts: "{{ target_hosts }}"
+#   gather_facts: no    
+#   tasks: 
+#     - name: Filter hostlist blades healthcheck
+#       ansible.builtin.import_role:
+#         name: enclosure_esxi_healthcheck
+#         tasks_from: filter_hostlist_blades_healthcheck.yml
+
+
+- name: "Create TR Healthcheck for peripherals"
+  hosts: localhost
+  gather_facts: no
+  vars:
+  tasks:
+    - name: TR Healthcheck for peripherals
+      ansible.builtin.import_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: create_tr_health_check_enclosure.yml
+
+# =======================================================================================================
+# Healthcheck of external components
+# =======================================================================================================
+
+- name: "Healthcheck from localhost"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    cmdb_url_update: "{{ hostvars['localhost']['config_data']['cmdb_url_update'] }}"
+    # san_input: "{{ hostvars['localhost']['config_data']['san_box'] }}"
+    synergon_url: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+    synergon_username: "{{ synergon_username }}"
+    synergon_password: "{{ synergon_password }}"
+  tasks:
+    - name: Health check CMDB
+      ansible.builtin.import_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: health_check_cmdb.yml
+
+    # - name: Health check SAN validation
+    #   ansible.builtin.import_role:
+    #     name: enclosure_esxi_healthcheck
+    #     tasks_from: health_check_san_validation.yml
+
+    - name: Health check Synergon
+      ansible.builtin.import_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: health_check_synergon.yml
+
+# - name: "Healthcheck from localhost"
+#   hosts: enclosures
+#   gather_facts: no
+#   vars:
+#     cmdb_url_update: "{{ hostvars['localhost']['config_data']['cmdb_url_update'] }}"
+#     synergon_url: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+#   tasks:
+#     - name: Health check Blade Count
+#       ansible.builtin.import_role:
+#         name: enclosure_esxi_healthcheck
+#         tasks_from: health_check_blade_count.yml
+
+# =======================================================================================================
+
+# Commenting since Poweron becomes an issue during retrigger
+
+# - name: "Healthcheck from localhost"
+#   hosts: enclosures
+#   gather_facts: no
+#   vars:
+#     synergon_url: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+
+#   tasks:
+#     - name: "Fetch vCenter details"
+#       fetch_esxi_type:
+#         esxiname: '{{ inventory_hostname }}'
+#         synergon_api: '{{ synergon_url }}'
+#       delegate_to: localhost
+#       register: synergon_output
+#       until: '"Successfully" in synergon_output.msg or "Unable to find" in synergon_output.msg or "duplicate entries" in synergon_output.msg'
+#       retries: 3
+#       delay: 10
+
+#     - name: Identify server type (Blade, Rack, or Unidentified)
+#       set_fact:
+#         server_type: >-
+#           {% if ('Synergy' in synergon_output.esxi_details.vendorModel or
+#                   'BL' in synergon_output.esxi_details.vendorModel) and
+#                 'hp' in synergon_output.esxi_details.vendorName|lower %}
+#             HPBlade
+#           {% elif 'DL' in synergon_output.esxi_details.vendorModel and
+#                 'hp' in synergon_output.esxi_details.vendorName|lower %}
+#             HPRack
+#           {% elif 'flex system' in synergon_output.esxi_details.vendorModel|lower and
+#                 'lenovo' in synergon_output.esxi_details.vendorName|lower %}
+#             LenovoBlade
+#           {% elif 'thinksystem' in synergon_output.esxi_details.vendorModel|lower and
+#                 'lenovo' in synergon_output.esxi_details.vendorName|lower %}
+#             LenovoRack
+#           {% else %}
+#             Unidentified
+#           {% endif %}
+
+
+# =======================================================================================================
+# Update TR
+# =======================================================================================================
+
+
+- name: "Update TR for healthcheck ESXi"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+        
+    - name: Healthcheck create PTR
+      ansible.builtin.import_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: create_ptr_health_check.yml
+        
+    - name: Healthcheck add info
+      ansible.builtin.import_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: add_info_healthcheck.yml
+

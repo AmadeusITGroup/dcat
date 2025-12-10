@@ -1,0 +1,41 @@
+---
+    - name: "Synergon Health check status"
+      block:
+
+        - name: Check if synergon api up or not
+          uri:
+            url: https://{{ synergon_url }}/v1/ui#/esxi/list_hosts_esxihosts__get          
+          register: result_synergon
+          until: "result_synergon.status == 200"
+          retries: 3
+          delay: 10
+
+     
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Synergon status"
+          shell: echo "#Synergon api - {{ time }}, [INFO], {{ synergon_url }} is up and running, good to proceed with ESXi deco" >> check_synergon_success.yml   
+          delegate_to: localhost          
+
+
+      rescue:
+        - debug:
+            msg: "Synergon is unavaiable" 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Synergon status"
+          shell: echo "!Synergon api - {{ time }}, [ERROR], {{ synergon_url }} is down currently after 3 retries needs attention" >> check_synergon_fail.yml   
+          delegate_to: localhost

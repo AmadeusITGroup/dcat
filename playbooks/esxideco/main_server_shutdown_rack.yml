@@ -1,0 +1,41 @@
+---
+- name: "server_shutdown cleanup"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: server_shutdown cleanup
+      ansible.builtin.import_role:
+        name: server_shutdown_rack
+        tasks_from: filter_hostlist_server_shutdown.yml
+
+- name: "Create TR for server_shutdown cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    server_shutdown: "false"
+    graceperiod_flag: True
+    cmdb_fetch_bgp: true
+  tasks:
+    - name: server_shutdown cleanup
+      ansible.builtin.import_role:
+        name: server_shutdown_rack
+        tasks_from: create_tr_server_shutdown.yml
+
+- name: "server_shutdown cleanup"
+  hosts: esxideco_rack
+  gather_facts: no   
+  tasks: 
+    - name: server_shutdown cleanup
+      ansible.builtin.import_role:
+        name: server_shutdown_rack
+        tasks_from: server_shutdown_main.yml
+      when: server_shutdown == "F" and ilo_reset == "T"
+
+- name: "Add info TR for server_shutdown cleanup"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: server_shutdown cleanup
+      ansible.builtin.import_role:
+        name: server_shutdown_rack
+        tasks_from: add_info_server_shutdown.yml

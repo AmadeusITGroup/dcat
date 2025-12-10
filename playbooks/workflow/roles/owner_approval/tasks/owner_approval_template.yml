@@ -1,0 +1,222 @@
+---             
+    - name: "Handling node list, TR and retention days"
+      throttle: 1
+      block:  
+        - set_fact:
+            owner_file: "owner_group.txt"
+            no_data_file: "no_data_file.txt"
+            logger_file: "deco_results.yml"
+
+        # - name: Display the JSON file content
+        #   shell: cat private_endpoint_connection_string.yml
+        #   delegate_to: localhost
+        #   register: result_private_endpoint_connection_string
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+        #   delegate_to: localhost                        
+        
+
+        # - name: "Check entry for DECO server"
+        #   final_owner_tr:
+        #     ci: "{{ inventory_hostname }}"
+        #     cr: "{{ cr }}"
+        #     event_number: "0"
+        #     event_status: "F"
+        #     created_on: "F"
+        #     last_update: "F"
+        #     connection_string: "{{ private_endpoint_connection_string }}"
+        #   register: owner_tr_add
+        #   delegate_to: localhost 
+
+        # - debug:
+        #     var: owner_tr_add        
+
+        # - set_fact: 
+        #     owner_tr: '{{owner_tr_add.create_entity_result.event_number}}' 
+
+
+        # - name: "DECO cmdb check failure "
+        #   shell: echo "{{ inventory_hostname }}, [INFO], already Owner TR {{ owner_tr }} has been processed." >> {{logger_file}}                    
+        #   delegate_to: localhost
+        #   when: owner_tr != "0"             
+
+        # - meta: end_host
+        #   when: owner_tr != "0"         
+        #   when: owner_tr != "0"         
+           
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Test CMDB custom module"
+          server_details_app:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: '{{ inventory_hostname |lower }}'
+            instance_id: ''
+            cmdb_server: "{{CMDB_URL}}" 
+            user_name: "{{ emdb_username }}" 
+            pass_word: "{{ emdb_password }}" 
+          delegate_to: localhost
+          register: output
+          until: '"Exception" not in output.cmdb_result'
+          retries: 3
+          delay: 30
+
+        - set_fact:
+            cmdb_status: "{{output.cmdb_result}}"
+
+        - name: "DECO cmdb check failure "
+          shell: echo "{{ inventory_hostname }}, [ERROR], {{ cmdb_status }}." >> {{logger_file}}                    
+          delegate_to: localhost                    
+          when: '"Kindly check with application team" in cmdb_status'
+
+        - name: "DECO cmdb check success "
+          shell: echo "{{ inventory_hostname }}, [SUCCESS], {{ cmdb_status }}." >> {{logger_file}}                    
+          delegate_to: localhost                    
+          when: '"You are good to proceed with deco for server" in cmdb_status'
+
+        - name: "DECO cmdb check failure "
+          shell: echo "{{ inventory_hostname }}" >> ci.yml                   
+          delegate_to: localhost
+          when: '"Kindly check with application team" in cmdb_status' 
+
+        - name: Display the JSON file content
+          shell: cat ci.yml 
+          delegate_to: localhost
+          register: result_ci
+          when: '"Kindly check with application team" in cmdb_status'
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ci: "{{ result_ci.stdout }}"
+          delegate_to: localhost
+          when: '"Kindly check with application team" in cmdb_status'           
+
+         
+
+        - name: Check snow api call back
+          update_snow:
+            action: Approval
+            ritm_number: "{{ ritm_number }}"
+            status: Waiting
+            comments: CMDB status of the server is not "In Production" or "Deco in Progress" please validate and kindly update status to "In Production" or "Deco in Progress" for the CI {{ ci }}
+            username: "{{ SN_USERNAME }}"
+            password: "{{ SN_PASSWORD }}"
+          delegate_to: localhost
+          run_once: True  
+          register: api_result
+          when: '"Kindly check with application team" in cmdb_status'
+
+        - meta: end_play
+          when: '"Kindly check with application team" in cmdb_status'
+
+        - debug:
+            var: output
+
+        - set_fact:
+            vm_cmdb_status: "{{output.cmdb_result}}"
+
+        - name: Filter owner group for DB servers
+          filter_group_db:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: "{{ inventory_hostname }}"
+            cmdb_server: "{{CMDB_URL}}" 
+            user_name: "{{ emdb_username }}"
+            pass_word: "{{ emdb_password }}"
+            instance_id: ''
+          delegate_to: localhost
+          register: host_group_db_result
+          when: server_type == "DB Servers"
+
+        - name: Filter owner group for Non-DB servers
+          filter_group:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: "{{ inventory_hostname }}"
+            cmdb_server: "{{CMDB_URL}}" 
+            user_name: "{{ emdb_username }}" 
+            pass_word: "{{ emdb_password }}"
+            instance_id: ''
+          delegate_to: localhost
+          register: host_group_non_db_result
+          when: server_type == "Non-DB Servers"
+
+
+        # - name: Debug raw host_group result
+        #   debug:
+        #     var: "{{ 'host_group_db_result' if server_type == 'DB Servers' else 'host_group_non_db_result' }}"
+
+        - name: Debug raw host_group result
+          debug:
+            msg: "{{ host_group_db_result if server_type == 'DB Servers' else host_group_non_db_result }}"
+
+
+        - name: Normalize host_group_status
+          set_fact:
+            host_group_status: >-
+              {{
+                (host_group_db_result.Status if server_type == "DB Servers" and host_group_db_result.Status is defined else
+                host_group_non_db_result.Status if server_type == "Non-DB Servers" and host_group_non_db_result.Status is defined else
+                'Exception')
+              }}
+
+        - name: "Write host_group_status to no_data_file if Exception"
+          shell: echo "{{ inventory_hostname }}:{{ host_group_status }}" >> {{ no_data_file }}
+          delegate_to: localhost
+          when: "'Exception' in host_group_status"
+
+        - name: "Log missing group info in logger_file if Exception"
+          shell: echo "{{ inventory_hostname }} - Unable to find app group from CMDB" >> {{ logger_file }}
+          delegate_to: localhost
+          when: "'Exception' in host_group_status"
+
+
+        - name: Compute initial group_code for DB servers
+          set_fact:
+            group_code: "{{ host_group_status }}"
+          when: server_type == "DB Servers"
+
+        - name: Compute initial group_code_result for Non-DB servers
+          group_code:
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}" 
+            url: "{{WIN@PROACH_URL}}"
+            group: "{{ host_group_status }}"
+          delegate_to: localhost
+          register: group_code_result
+          when: server_type == "Non-DB Servers"
+
+
+        - name: Normalize group_code for Non-DB servers
+          set_fact:
+            group_code: "{{ group_code_result.status if group_code_result.status is defined else 'Exception' }}"
+          when: server_type == "Non-DB Servers"
+
+        - name: Override group_code when Exception for any server
+          set_fact:
+            group_code: "{{ requester_group }}"
+          when: "'Exception' in host_group_status or (group_code is defined and 'Exception' in group_code)"
+
+        - name: Debug final group_code
+          debug:
+            msg: "Final group_code={{ group_code }}"
+
+        - name: Write group_code to logger_file
+          shell: echo "{{ inventory_hostname }} - Found Ownergroup, Assigned ticket to {{ group_code }}" >> {{ logger_file }}
+          delegate_to: localhost
+
+        - name: Write group_code to owner_file
+          shell: echo "{{ inventory_hostname }} {{ group_code }}" >> {{ owner_file }}
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "DECO flow unable to fetch owner group for host {{ inventory_hostname}}"

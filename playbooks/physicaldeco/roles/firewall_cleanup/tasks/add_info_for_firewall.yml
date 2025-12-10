@@ -1,0 +1,110 @@
+--- 
+    - name: "Handling TR record_id"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck != ""       
+      
+        - name: Display the JSON file content
+          shell: cat record_for_firewall.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_for_firewall: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost        
+
+        - meta: end_host
+          when: record_for_firewall == ""
+
+        - name: phy_host list
+          shell: cat phy_list_firewall.yml
+          delegate_to: localhost
+          register: phy_result              
+
+        - name: save the phy list to a Variable as a Fact
+          set_fact:
+            phy_fw: "{{ phy_result.stdout }}" 
+          delegate_to: localhost
+            
+        - meta: end_host
+          when: phy_fw == ""
+        
+        - set_fact:
+            form1: "*******************************************************************************"
+            form2: "Incase there are active traffic flow, please reach out to the requester mentioned below:"
+            form3: "DECO Requester Name: {{requester_name}}"
+            form4: "DECO Requester Group: {{requester_group}}"
+            form5: "*******************************************************************************"
+            form6: "Below are the Physical Server's FQDN and IPs qualified for Firewall decomission"
+            form7: "Hostname -> FQDN - IP Address, Information"
+            form8: "*******************************************************************************"            
+        - set_fact:
+            content_firewall_success: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ form4 +'\n' + form5 + '\n' + form6 + '\n' + form7 + '\n' + form8 + '\n' + phy_fw }}"
+ 
+        
+      rescue:
+        - debug:
+            var: 'phy_fw'
+
+    - name: "Handling add message in TR"
+      block: 
+
+        - name: phy_host list
+          shell: cat phy_list_firewall.yml
+          delegate_to: localhost
+          register: phy_result              
+
+        - name: save the phy list to a Variable as a Fact
+          set_fact:
+            phy_fw: "{{ phy_result.stdout }}" 
+          delegate_to: localhost
+
+        - meta: end_host
+          when: phy_fw == ""
+
+        - name: Display the JSON file content
+          shell: cat record_for_firewall.json
+          delegate_to: localhost
+          register: TR_result
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_for_backup: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost       
+
+        - name: save the phy list to a Variable as a Fact
+          set_fact:
+            winaproach_user: "{{ winaproach_username }}"
+          delegate_to: localhost
+
+
+        - name: save the phy list to a Variable as a Fact
+          set_fact:
+            winaproach_password: "{{ winaproach_password }}"
+          delegate_to: localhost          
+        
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{record_for_firewall}}"
+            message: "{{ content_firewall_success }}"             
+            username: "{{ winaproach_user }}"     
+            password: "{{ winaproach_password }}" 
+          delegate_to: localhost
+          register: add_msg_output
+                                  
+
+      rescue:
+        - debug:
+            var: 'add_msg_output'

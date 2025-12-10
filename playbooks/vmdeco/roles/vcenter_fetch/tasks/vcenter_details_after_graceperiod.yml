@@ -1,0 +1,128 @@
+---
+        - name: handle the error for vcenter details in grace period module
+          throttle: 1
+          block:
+
+            - name: Display the JSON file content
+              shell: cat private_endpoint_connection_string.yml
+              delegate_to: localhost
+              register: result_private_endpoint_connection_string
+        
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+              delegate_to: localhost
+
+            - name: "Check entry for DECO server"
+              azure_update_ref:
+                connection_string: "{{ private_endpoint_connection_string }}"
+                hostname: "{{inventory_hostname}}"
+              register: idem_status
+              delegate_to: localhost
+
+            - set_fact: 
+                vmdelete: '{{idem_status.module_update.vm_delete}}'
+
+            - meta: end_host
+              when: vmdelete == "T" and vmdelete is defined
+
+            - set_fact:
+                vm_trail_add: "_to_be_deleted" 
+                file_failure_vc: "vc_hostname_failure_agp.yml"
+                file_nas_fail: "nas_hostname_failure.yml"
+                file_failure_del: "vm_hostname_failure_del.yml"
+                file_dns_fail: "vm_dns_failure.yml"
+                before_grace_period: false
+                graceperiod_flag: ""
+                v_center_gp: ""
+                v_center_gp_before: ""
+                v_center_msg_gp: ""
+                vm_deletion_name: ""
+                deco_automation: ""
+                            
+
+            - set_fact:    
+                vm_deletion_name: "{{ inventory_hostname ~ vm_trail_add }}"
+                
+            - name: "Test custom module fetch vcenter details after grace period"
+              fetch_vcenter_agp:
+                vmname: '{{ vm_deletion_name }}'     
+                synergon_api: '{{ synergon_url }}'
+                instance_id_vm: '{{ instanceid }}'
+              delegate_to: localhost
+              register: vcenter_output_gp
+              until: '"Successfully" in vcenter_output_gp.msg or "Unable to find" in vcenter_output_gp.msg or "duplicate entries" in vcenter_output_gp.msg'
+              retries: 3
+              delay: 30 
+
+
+            - name: Get timestamp from the system
+              shell: "date +%Y-%m-%d/%H:%M"
+              delegate_to: localhost
+              register: tstamp  
+                          
+            - set_fact:
+                time: "{{tstamp.stdout}}" 
+
+            - name: "VM host list failure to file before grace period"
+              shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{vcenter_output_gp.msg}}" >> {{file_failure_vc}}                    
+              delegate_to: localhost 
+              when: '"Successfully" not in vcenter_output_gp.msg'
+
+            - name: "VM host list failure to file before grace period"
+              shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{vcenter_output_gp.msg}}" >> {{file_nas_fail}}                    
+              delegate_to: localhost 
+              when: '"Successfully" not in vcenter_output_gp.msg' 
+
+            - name: "VM host list failure to file before grace period"
+              shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{vcenter_output_gp.msg}}" >> {{file_failure_del}}                    
+              delegate_to: localhost 
+              when: '"Successfully" not in vcenter_output_gp.msg' 
+
+
+            - name: "VM host list failure to file before grace period"
+              shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{vcenter_output_gp.msg}}" >> {{file_dns_fail}}                    
+              delegate_to: localhost 
+              when: '"Successfully" not in vcenter_output_gp.msg'                           
+
+            - meta: end_host
+              when: '"Successfully" not in vcenter_output_gp.msg' 
+
+            - set_fact:
+                v_center_gp_before: "{{vcenter_output_gp.vcenter}}" 
+                v_center_msg_gp: "{{vcenter_output_gp.msg}}"
+
+            - set_fact:
+                fqdn_vc: ""                
+
+            - set_fact:
+                fqdn_vc: .muc.msp.net
+              when: v_center_gp_before is not search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|MUCAMNAZ1|MUCAMNVCPA1|MUCAMNVCPA2|MUCAMNAZ2|MUCAMNVCPB1|MUCAMNVCPB2|MUCAMNAZ3|MUCAMNVCPC1|MUCAMNVCPC2") and v_center_gp_before is not search(".muc.msp.net")
+
+            - set_fact:
+                fqdn_vc: .vclassic.net
+              when: v_center_gp_before is search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|MUCAMNAZ1|MUCAMNVCPA1|MUCAMNVCPA2|MUCAMNAZ2|MUCAMNVCPB1|MUCAMNVCPB2|MUCAMNAZ3|MUCAMNVCPC1|MUCAMNVCPC2") and v_center_gp_before is not search(".vclassic.net")                 
+
+            - set_fact:
+                v_center_gp: "{{ v_center_gp_before ~ fqdn_vc }}"  
+                          
+
+          rescue: 
+            - name: when after grace period module throws error the below task should execute
+              debug:
+                msg: "Exception occurred but rescued - check errors for vcentre_details_grace period module"
+
+            - set_fact:
+                v_center_msg_gp: "Exception occurred but rescued for server ,not present in VCENTER or connection issue to the synergon" 
+
+            - name: Get timestamp from the system
+              shell: "date +%Y-%m-%d/%H:%M"
+              delegate_to: localhost
+              register: tstamp  
+                  
+            - set_fact:
+                time: "{{tstamp.stdout}}"                           
+
+            - name: "VM host list"
+              shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Vcentre module failed while fetching vcentre name kindly check vcentre details gp file."  >> {{file_failure_vc}}                    
+              delegate_to: localhost    

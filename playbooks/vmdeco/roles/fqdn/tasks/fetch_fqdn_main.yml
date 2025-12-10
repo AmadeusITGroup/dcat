@@ -1,0 +1,6 @@
+- include: fetch_fqdn.yml
+
+- include: create_tr_fqdn.yml
+  delegate_to: localhost
+  with_items: '{{ groups["vmdeco"] | default([]) }}'
+  run_once: yes

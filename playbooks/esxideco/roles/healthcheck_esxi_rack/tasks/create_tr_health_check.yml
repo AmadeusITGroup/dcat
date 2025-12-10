@@ -1,0 +1,40 @@
+---
+- name: Execute Create TR task
+  block:
+    - name: "Custom module [CREATE TR]"
+      create_tr:
+        record_type: "TR"
+        title: "CSTY:DECO:DCAT: ESXi RACK DECO : Service health check ESXi"
+        assignee_name: "DecoP112686"
+        assignee_group: "DINFDECO"
+        severity: "3"
+        overview: "CSTY:DECO:DCAT: ESXi RACK DECO - Service health check - Storage SAN - CMDB Remedy - Synergon"
+        parent_id: "{{ cr }}"
+        # username: "DecoP112686"
+        # password: "opFCtCpIMzmC"
+        username: "{{ winaproach_username }}"     
+        password: "{{ winaproach_password }}"
+      delegate_to: localhost
+      no_log: False
+      register: create_tr_output
+
+    - set_fact:
+        record_id: "{{ create_tr_output.record_id }}"
+
+    - copy:
+        content: '{{ record_id | to_json }}'
+        dest: record_healthcheck.json
+      delegate_to: localhost
+
+    - name: Adding documentation tag
+      tr_documentation:
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+        win_url: "{{win_url}}"
+        task_id: "{{ record_id }}"
+      register: add_document
+      delegate_to: localhost
+
+  rescue:
+    - debug:
+        msg: "Failed to Create ESXi healthcheck DECO - TR"

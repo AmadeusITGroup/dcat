@@ -1,0 +1,105 @@
+---
+- name: "clear file MODULE "
+  hosts: localhost
+  gather_facts: no
+ 
+
+  tasks:
+
+
+    - name: "Logger and Create/Update TR- Win@proach "
+      block: 
+
+ 
+        - name: "Set header"
+          shell: echo >  check_artifacts_success.yml      
+          run_once: true
+          delegate_to: localhost     
+
+        - name: "Set header"
+          shell: echo >  check_artifacts.yml       
+          run_once: true
+          delegate_to: localhost 
+
+        - name: "Set header"
+          shell: echo >  check_final_ssh.yml       
+          run_once: true
+          delegate_to: localhost                      
+
+        - name: "Set header"
+          shell: echo >  check_final_success.yml       
+          run_once: true
+          delegate_to: localhost 
+
+        - name: "Set header"
+          shell: echo > check_final.yml        
+          run_once: true
+          delegate_to: localhost       
+
+        - name: "Set header"
+          shell: echo > check_ipam_success.yml        
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > check_ipam.yml        
+          run_once: true
+          delegate_to: localhost      
+
+        - name: "Set header"
+          shell: echo > check_remedy_success.yml        
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > check_remedy.yml        
+          run_once: true
+          delegate_to: localhost       
+
+      ###############################  
+
+        - name: "Set header"
+          shell: echo > network_healthcheck_fail.yml        
+          run_once: true
+          delegate_to: localhost        
+
+        - name: "Set header"
+          shell: echo > network_healthcheck_success.yml       
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > phy_ssh_fail.yml       
+          run_once: true
+          delegate_to: localhost      
+
+        - name: "Set header"
+          shell: echo > phy_ssh_success.yml        
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > record_healthcheck_ssh.json        
+          run_once: true
+          delegate_to: localhost                
+
+        - name: "Set header"
+          shell: echo > record_healthcheck.json       
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > san_switches_fail.yml       
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > san_switches_success.yml      
+          run_once: true
+          delegate_to: localhost
+          
+
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check app logger "       

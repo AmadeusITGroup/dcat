@@ -1,0 +1,60 @@
+---
+# - name: "Success and Failure list of VM's"
+#   hosts: all
+#   throttle: 1
+#   serial: 5  
+#   gather_facts: no
+#   vars:
+#     graceperiod_flag: ""
+
+#   tasks:
+    - name: "Check entry for DECO server"
+      throttle: 1
+      block:
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server"
+          azure_update_ref_phy:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+       
+
+        - set_fact: 
+            shutdown_bgp: '{{idem_status.module_update.shutdown_bgp}}'
+
+        # - name: Display the JSON file content
+        #   shell: cat failure_vm_bgp.yml
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     vm_list: "{{ TR_result_healthcheck.stdout }}"
+        #   delegate_to: localhost                           
+
+
+        - name: "VM success list"
+          shell: echo "{{ inventory_hostname }}" >> success_vm_bgp.yml                    
+          delegate_to: localhost
+          when: shutdown_bgp == "T"
+
+        - name: "VM failure list"
+          shell: echo "{{ inventory_hostname }}" >> failure_vm_bgp.yml                   
+          delegate_to: localhost
+          when: shutdown_bgp == "F" #and ('"{{ inventory_hostname }}" not in vm_list')                 
+  
+            
+      rescue:
+        - debug:
+            msg: "Failed fetch data from Idempotency" 
+

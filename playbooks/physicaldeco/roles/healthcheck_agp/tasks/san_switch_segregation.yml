@@ -1,0 +1,67 @@
+---
+    - name: "handle the error before grace period vcenter search for vm"
+      throttle: 1
+      block:
+
+        - name: Display the JSON file content
+          shell: cat san_box.yml
+          delegate_to: localhost
+          register: result_state_file                   
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            san_input: "{{ result_state_file.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server and fetch wwpn information of host"
+          storage_state_value_fetch:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"                       
+          register: info_result_host
+          delegate_to: localhost     
+
+        - debug:
+            var: info_result_host 
+
+        - name: "SAN switch segregation"
+          shell: echo "{{ item }}," >> san_box_agp.yml
+          delegate_to: localhost 
+          loop: "{{ san_input }}"
+          when: info_result_host is search("{{ item }}") 
+
+        - name: Display the JSON file content
+          shell: cat san_box_agp.yml
+          delegate_to: localhost
+          register: result_state_file  
+          when: info_result_host is search("{{ item }}")                 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            san_box_agp_val: "{{ result_state_file.stdout }}" 
+          delegate_to: localhost
+          when: info_result_host is search("{{ item }}")
+
+        - set_fact:
+            san_box_agp: "{{ san_box_agp_val.split(',') | map('trim') | reject('match', '^$') | map('string') | unique | list }}"
+          when: info_result_host is search("{{ item }}")
+
+        - name: "SAN switch segregation"
+          shell: echo "{{ san_box_agp }}" >> san_box_agp_list.yml
+          delegate_to: localhost
+          when: info_result_host is search("{{ item }}")
+          run_once: True                       
+
+      rescue: 
+      - name: rescue on SAN switch segregation - Physical Deco
+        debug:
+          msg: "rescue SAN switch segregation - Physical deco" 

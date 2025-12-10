@@ -1,0 +1,70 @@
+---
+- name: "server information gather filtering hostlist"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: server information gather
+      ansible.builtin.import_role:
+        name: server_info_gather_rack
+        tasks_from: filter_hostlist_server_gather_info.yml
+
+- name: "Create TR for server information gather"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_server_info_gather: ""
+    graceperiod_flag: False
+    fqdn_info: ""
+    info: "F"
+  tasks:
+    - name: server information gather
+      ansible.builtin.import_role:
+        name: server_info_gather_rack
+        tasks_from: create_tr_server_gather_info.yml
+
+- name: "server information gather"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: server information gather
+      ansible.builtin.import_role:
+        name: server_info_gather_rack
+        tasks_from: server_gather_info.yml
+      when: info == "F" and cmdb_fetch =="T" 
+
+- name: "ADD info TR for server information gather"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_server_info_gather: ""
+    graceperiod_flag: False
+    info: "F"
+    fqdn_info: ""
+  tasks:
+    - name: server information gather
+      ansible.builtin.import_role:
+        name: server_info_gather_rack
+        tasks_from: add_info_server_info_gather.yml
+
+# - name: "server information gather"
+#   hosts: all:vmdeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: server information gather
+#       ansible.builtin.import_role:
+#         name: server_info_gather_rack
+#         tasks_from: cmdb_logging.yml
+
+# - name: "Logger for server information gather"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+    # record_server_info_gather: ""
+    # graceperiod_flag: False
+    # info: "F"
+    # fqdn_info: ""
+#   tasks:
+#     - name: server information gather
+#       ansible.builtin.import_role:
+#         name: server_info_gather_rack
+#         tasks_from: logger_cmdb.yml

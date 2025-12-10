@@ -1,0 +1,339 @@
+---
+
+    - name: "Handling Create TR- Win@proach for health check task "
+      block:
+
+# Success #########################
+#         - name: Display the JSON file content
+#           shell: cat san_switches_success.yml
+#           delegate_to: localhost
+#           register: result_check_san_suc
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_san_suc: "{{ result_check_san_suc.stdout }}" 
+#           delegate_to: localhost
+
+#         - name: Display the JSON file content
+#           shell: cat check_remedy_success.yml
+#           delegate_to: localhost
+#           register: result_check_remedy_suc
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_remedy_suc: "{{ result_check_remedy_suc.stdout }}" 
+#           delegate_to: localhost
+
+#         - name: Display the JSON file content
+#           shell: cat check_synergon_success.yml
+#           delegate_to: localhost
+#           register: result_check_synergon_suc
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_synergon_suc: "{{ result_check_synergon_suc.stdout }}" 
+#           delegate_to: localhost
+
+# # Failure #########################
+
+
+#         - name: Display the JSON file content
+#           shell: cat san_switches_fail.yml
+#           delegate_to: localhost
+#           register: result_check_san_fail
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_san_fail: "{{ result_check_san_fail.stdout }}" 
+#           delegate_to: localhost 
+
+#         - name: Display the JSON file content
+#           shell: cat check_remedy_fail.yml
+#           delegate_to: localhost
+#           register: result_check_remedy_fail
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_remedy_fail: "{{ result_check_remedy_fail.stdout }}" 
+#           delegate_to: localhost
+
+#         - name: Display the JSON file content
+#           shell: cat check_synergon_fail.yml
+#           delegate_to: localhost
+#           register: result_check_synergon_fail
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_synergon_fail: "{{ result_check_synergon_fail.stdout }}" 
+#           delegate_to: localhost
+
+                                                                                                  
+# # End when no data in either success or failure #########################
+
+#         - meta: end_host
+#           when: check_san_suc == "" and check_remedy_suc == "" and check_synergon_suc == "" and check_san_fail == "" and check_remedy_fail == "" and check_synergon_fail == ""
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "ESXi DECO : Service health check ESXi"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"            
+            severity: "3"
+            overview: "ESXi DECO - Service health check - Storage SAN - CMDB Remedy - Synergon"
+            parent_id: "{{ cr }}"             
+            username: "DecoP112686"     
+            password: "opFCtCpIMzmC"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output          
+
+        - set_fact:
+            record_id: "{{create_tr_output.record_id}}"
+ 
+    
+        - copy:
+            content: '{{ record_id|to_json }}'
+            dest: record_healthcheck.json
+          delegate_to: localhost
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "{{win_url}}"
+            task_id: "{{ record_id }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Failed to Create ESXi healthcheck DECO - TR"
+# ===========================================================================================
+
+
+    - name: "Handling Create TR- Win@proach for health check task - Retry 1"
+      block:
+
+# # Success #########################
+#         - name: Display the JSON file content
+#           shell: cat san_switches_success.yml
+#           delegate_to: localhost
+#           register: result_check_san_suc
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_san_suc: "{{ result_check_san_suc.stdout }}" 
+#           delegate_to: localhost
+
+#         - name: Display the JSON file content
+#           shell: cat check_remedy_success.yml
+#           delegate_to: localhost
+#           register: result_check_remedy_suc
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_remedy_suc: "{{ result_check_remedy_suc.stdout }}" 
+#           delegate_to: localhost
+
+#         - name: Display the JSON file content
+#           shell: cat check_synergon_success.yml
+#           delegate_to: localhost
+#           register: result_check_synergon_suc
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_synergon_suc: "{{ result_check_synergon_suc.stdout }}" 
+#           delegate_to: localhost
+
+# # Failure #########################
+
+
+#         - name: Display the JSON file content
+#           shell: cat san_switches_fail.yml
+#           delegate_to: localhost
+#           register: result_check_san_fail
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_san_fail: "{{ result_check_san_fail.stdout }}" 
+#           delegate_to: localhost 
+
+#         - name: Display the JSON file content
+#           shell: cat check_remedy_fail.yml
+#           delegate_to: localhost
+#           register: result_check_remedy_fail
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_remedy_fail: "{{ result_check_remedy_fail.stdout }}" 
+#           delegate_to: localhost
+
+#         - name: Display the JSON file content
+#           shell: cat check_synergon_fail.yml
+#           delegate_to: localhost
+#           register: result_check_synergon_fail
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_synergon_fail: "{{ result_check_synergon_fail.stdout }}" 
+#           delegate_to: localhost
+
+                                                                                                  
+# # End when no data in either success or failure #########################
+
+#         - meta: end_host
+#           when: check_san_suc == "" and check_remedy_suc == "" and check_synergon_suc == "" and check_san_fail == "" and check_remedy_fail == "" and check_synergon_fail == ""
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "ESXi DECO : Service health check ESXi"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"            
+            severity: "3"
+            overview: "ESXi DECO - Service health check - Storage SAN - CMDB Remedy - Synergon"
+            parent_id: "{{ cr }}"             
+            username: "DecoP112686"     
+            password: "opFCtCpIMzmC"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output          
+
+        - set_fact:
+            record_id: "{{create_tr_output.record_id}}"
+ 
+    
+        - copy:
+            content: '{{ record_id|to_json }}'
+            dest: record_healthcheck.json
+          delegate_to: localhost
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "{{win_url}}"
+            task_id: "{{ record_id }}"
+          register: add_document
+          delegate_to: localhost
+
+
+      rescue:
+        - debug:
+            msg: "Retried and Failed to Create Physical DECO - TR"
+
+    - name: "Handling Create TR- Win@proach for health check task-Retry 2 "
+      block:
+
+# # Success #########################
+#         - name: Display the JSON file content
+#           shell: cat san_switches_success.yml
+#           delegate_to: localhost
+#           register: result_check_san_suc
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_san_suc: "{{ result_check_san_suc.stdout }}" 
+#           delegate_to: localhost
+
+#         - name: Display the JSON file content
+#           shell: cat check_remedy_success.yml
+#           delegate_to: localhost
+#           register: result_check_remedy_suc
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_remedy_suc: "{{ result_check_remedy_suc.stdout }}" 
+#           delegate_to: localhost
+
+#         - name: Display the JSON file content
+#           shell: cat check_synergon_success.yml
+#           delegate_to: localhost
+#           register: result_check_synergon_suc
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_synergon_suc: "{{ result_check_synergon_suc.stdout }}" 
+#           delegate_to: localhost
+
+# # Failure #########################
+
+
+#         - name: Display the JSON file content
+#           shell: cat san_switches_fail.yml
+#           delegate_to: localhost
+#           register: result_check_san_fail
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_san_fail: "{{ result_check_san_fail.stdout }}" 
+#           delegate_to: localhost 
+
+#         - name: Display the JSON file content
+#           shell: cat check_remedy_fail.yml
+#           delegate_to: localhost
+#           register: result_check_remedy_fail
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_remedy_fail: "{{ result_check_remedy_fail.stdout }}" 
+#           delegate_to: localhost
+
+#         - name: Display the JSON file content
+#           shell: cat check_synergon_fail.yml
+#           delegate_to: localhost
+#           register: result_check_synergon_fail
+
+#         - name: save the Json data to a Variable as a Fact
+#           set_fact:
+#             check_synergon_fail: "{{ result_check_synergon_fail.stdout }}" 
+#           delegate_to: localhost
+
+                                                                                                  
+# # End when no data in either success or failure #########################
+
+#         - meta: end_host
+#           when: check_san_suc == "" and check_remedy_suc == "" and check_synergon_suc == "" and check_san_fail == "" and check_remedy_fail == "" and check_synergon_fail == ""
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "ESXi DECO : Service health check ESXi"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"            
+            severity: "3"
+            overview: "ESXi DECO - Service health check - Storage SAN - CMDB Remedy - Synergon"
+            parent_id: "{{ cr }}"             
+            username: "DecoP112686"     
+            password: "opFCtCpIMzmC"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output          
+
+        - set_fact:
+            record_id: "{{create_tr_output.record_id}}"
+ 
+    
+        - copy:
+            content: '{{ record_id|to_json }}'
+            dest: record_healthcheck.json
+          delegate_to: localhost
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "{{win_url}}"
+            task_id: "{{ record_id }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Failed to Create ESXi DECO - TR"
+
+      rescue:
+        - debug:
+            msg: "Retried and Failed to Create Physical DECO - TR"                             
+

@@ -1,0 +1,75 @@
+---
+- name: "healthcheck second trigger"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: san_switch_segregation.yml
+
+- name: "healthcheck second trigger"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: False   
+  tasks:
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: health_check.yml
+
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: health_check_network_validation.yml       
+
+    #- name: healthcheck second trigger
+    #  ansible.builtin.import_role:
+    #    name: healthcheck_agp
+    #    tasks_from: health_check_san_validation.yml        
+
+# - name: "healthcheck second trigger"
+#   hosts: physicaldeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: healthcheck second trigger
+#       ansible.builtin.import_role:
+#         name: healthcheck_agp
+#         tasks_from: physical_ssh.yml
+
+- name: "Create TR for healthcheck second trigger"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: False
+  tasks:
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: create_tr_health_check.yml
+
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: add_info_healthcheck.yml
+
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: create_ptr_health_check.yml
+
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: create_tr_health_check_ssh.yml
+
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: add_info_healthcheck_ssh.yml
+
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: create_ptr_health_check_ssh.yml 

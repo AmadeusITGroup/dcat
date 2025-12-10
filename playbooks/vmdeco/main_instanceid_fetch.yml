@@ -1,0 +1,52 @@
+---
+- name: "Fetch instanceid"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: fetch instance id
+      ansible.builtin.import_role:
+        name: instance_id_fetch
+        tasks_from: filter_hostlist_instanceid.yml
+
+- name: "Create TR for fetching instance id"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    instanceid: "F"
+    graceperiod_flag: False
+    fqdn: ""
+  tasks:
+    - name: instance id fetch
+      ansible.builtin.import_role:
+        name: instance_id_fetch
+        tasks_from: create_tr_instanceid.yml
+
+- name: "fetching instance id from synergon"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: fetch instance id 
+      ansible.builtin.import_role:
+        name: instance_id_fetch
+        tasks_from: instance_id_info_gather.yml
+      when: (instanceid == "F") and instanceid is defined and (fqdn != "F") and fqdn is defined
+
+- name: "Add info to the TR  for instance id fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    instanceid: "F"
+    graceperiod_flag: False
+    fqdn: ""
+  tasks:
+    - name: instance id fetch
+      ansible.builtin.import_role:
+        name: instance_id_fetch
+        tasks_from: add_info_instanceid.yml
+
+    - name: instance id fetch
+      ansible.builtin.import_role:
+        name: instance_id_fetch
+        tasks_from: logger_instanceid.yml

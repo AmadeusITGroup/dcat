@@ -1,0 +1,42 @@
+---             
+    - name: "Handling TR"
+      throttle: 1
+      block:
+
+        - name: grep FQDN content
+          shell: cat deco_results.yml
+          delegate_to: localhost
+          register: deco_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            deco_final: "{{ deco_result.stdout }}" 
+          delegate_to: localhost
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the Results for workflow approval process "
+            form3: "***********************************************************************"
+            form4: "***********************************************************************"            
+        - set_fact:
+            content_deco_success: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ deco_final +'\n'+ form4 }}"
+
+        - name: "Add message to Ownership approval workflow TR"
+          add_message_to_tr:
+            record_id: "{{ record_logger }}"
+            message: "{{ content_deco_success }}"             
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost
+          register: add_msg_output
+           
+        - name: "Test custome module [CLOSE TR]"
+          close_tr:
+            record_id: "{{ record_logger }}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+          register: close_tr_output
+
+      rescue:
+        - debug:
+            msg: "DECO flow unable to categorize group for host"

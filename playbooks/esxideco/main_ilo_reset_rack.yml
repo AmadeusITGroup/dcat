@@ -1,0 +1,45 @@
+---
+- name: "ilo_reset cleanup"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: ilo_reset_rack cleanup
+      ansible.builtin.import_role:
+        name: ilo_reset_rack
+        tasks_from: filter_hostlist_ilo_removal.yml
+
+- name: "Create TR for ilo_reset cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    ilo_reset: "F"
+    graceperiod_flag: True
+    storage_info: "T"
+  tasks:
+    - name: ilo_reset_rack cleanup
+      ansible.builtin.import_role:
+        name: ilo_reset_rack
+        tasks_from: create_tr_ilo.yml
+
+- name: "ilo_reset cleanup"
+  hosts: esxideco_rack
+  gather_facts: no   
+  tasks: 
+    - name: ilo_reset_rack cleanup
+      ansible.builtin.import_role:
+        name: ilo_reset_rack
+        tasks_from: ilo_reset_main.yml
+      when: (ilo_reset == "F") and ilo_reset is defined and (storage_info == "T") and storage_info is defined
+
+- name: "Add info TR for ilo_reset cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    graceperiod_flag: True
+    ilo_reset: "F"
+    storage_info: "T"
+  tasks:
+    - name: ilo_reset_rack cleanup
+      ansible.builtin.import_role:
+        name: ilo_reset_rack
+        tasks_from: add_info_ilo.yml

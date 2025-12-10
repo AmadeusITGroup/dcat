@@ -1,0 +1,57 @@
+---
+    - name: "CMDB Health check status"
+      block:
+
+        - name: Display CMDB URL JSON file content
+          shell: cat cmdb_url_update.yml
+          delegate_to: localhost
+          register: result_cmdb_url_update
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            cmdb_url_update: "{{ result_cmdb_url_update.stdout }}" 
+          delegate_to: localhost      
+
+        - name: Check if remedy api up or not
+          uri:
+            url: "{{ cmdb_url_update }}/api/arsys/v1/entry" # http://{{ cmdb_url_update }}:8008/api/arsys/v1/entry
+          register: result_remedy
+          until: "result_remedy.status == 200"
+          retries: 3
+          delay: 10
+          
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          
+
+        - name: "Remedy status"
+          shell: echo "#Remedy - {{ time }}, [INFO], {{ cmdb_url_update }} is up and running, good to proceed with ESXi Deco" >> check_remedy_success.yml   
+          delegate_to: localhost
+          
+
+
+      rescue:
+        - debug:
+            msg: "Remedy is unavaiable to update CMDB"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+         
+
+        - name: "Remedy status"
+          shell: echo "!Remedy - {{ time }}, [ERROR], {{ cmdb_url_update }} is down currently after 3 retries needs attention" >> check_remedy_fail.yml   
+          delegate_to: localhost
+          

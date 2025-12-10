@@ -1,0 +1,153 @@
+---
+- name: "Reconstruct and Execute iLO Command"
+  block:
+    - name: Debug vendor details
+      debug:
+        msg:
+          - "vendorModel: {{ vcenter_output.esxi_details.vendorModel }}"
+          - "vendorName: {{ vcenter_output.esxi_details.vendorName }}"
+          - "Model contains 'Flex System': {{ 'Flex System' in vcenter_output.esxi_details.vendorModel }}"
+          - "Name contains 'Lenovo': {{ 'Lenovo' in vcenter_output.esxi_details.vendorName }}"
+
+
+
+    - name: Identify server type (Blade, Rack, or Unidentified)
+      set_fact:
+        server_type: >-
+          {% if ('Synergy' in vcenter_output.esxi_details.vendorModel or
+                  'BL' in vcenter_output.esxi_details.vendorModel) and
+                'hp' in vcenter_output.esxi_details.vendorName|lower %}
+            HPBlade
+          {% elif 'DL' in vcenter_output.esxi_details.vendorModel and
+                'hp' in vcenter_output.esxi_details.vendorName|lower %}
+            HPRack
+          {% elif 'flex system' in vcenter_output.esxi_details.vendorModel|lower and
+                'lenovo' in vcenter_output.esxi_details.vendorName|lower %}
+            LenovoBlade
+          {% elif 'thinksystem' in vcenter_output.esxi_details.vendorModel|lower and
+                'lenovo' in vcenter_output.esxi_details.vendorName|lower %}
+            LenovoRack
+          {% else %}
+            Unidentified
+          {% endif %}
+
+
+    - name: Debug server type
+      debug:
+        msg: "The server type is: {{ server_type }}"
+
+    - name: Fail if the server type is Unidentified
+      fail:
+        msg: "Server type is Unidentified, skipping tasks"
+      # when: server_type | trim == "Unidentified"
+      when: server_type | trim == "Unidentified" or server_type | trim == "LenovoBlade" or server_type | trim == "LenovoRack"   # To be deleted once code added for Lenovo
+
+
+    - name: Reconstruct hostname for HP Rack server
+      set_fact:
+        esxi_ilo_hostname: "{{ inventory_hostname }}rib.muc.net"
+      when: server_type | trim == "HPRack" #or server_type | trim == "LenovoBlade"
+
+    - name: Debug reconstructed hostname for HP Rack server
+      debug:
+        msg: "The reconstructed hostname is: {{ esxi_ilo_hostname }}"
+      when: server_type | trim == "HPRack" #or server_type | trim == "LenovoBlade"
+
+    # - name: Extract serial number for HP Blade server
+    #   set_fact:
+    #     serial_number: "{{ vcenter_output.esxi_details.ci.serialNumber }}"
+    #   when: server_type | trim == "HPBlade" or server_type | trim == "LenovoRack" 
+
+    # - name: Reconstruct hostname for HP Blade server
+    #   set_fact:
+    #     esxi_ilo_hostname: "ilo{{ serial_number }}"
+    #   when: server_type | trim == "HPBlade" 
+
+    # - name: Debug reconstructed hostname for HP Blade server
+    #   debug:
+    #     msg: "The reconstructed hostname is: {{ esxi_ilo_hostname }}"
+    #   when: server_type | trim == "HPBlade"
+
+    # - name: Reconstruct hostname for HP Blade server
+    #   set_fact:
+    #     esxi_ilo_hostname: "xcc{{ serial_number }}"
+    #   when: server_type | trim == "LenovoRack" 
+
+    # - name: Debug reconstructed hostname for HP Blade server
+    #   debug:
+    #     msg: "The reconstructed hostname is: {{ esxi_ilo_hostname }}"
+    #   when: server_type | trim == "LenovoRack" 
+
+    - name: Execute ILO command and save output to temporary file
+      ilo_commands_esxi:
+        hostname: "{{ esxi_ilo_hostname }}"
+        username: "{{ user_iloadm }}"
+        password: "{{ password_iloadm }}"
+        command: "show /map1/snmp1"
+        temp_file: "/tmp/ilo_output.txt"
+      register: ilo_output
+      delegate_to: localhost
+      when: server_type | trim == "HPRack" or server_type | trim == "HPBlade"
+      # when: server_type | trim == "HPRack" or server_type | trim == "HPBlade" or server_type | trim == "LenovoRack" or server_type | trim == "LenovoBlade" 
+
+
+    - name: Extract the required information from the temp file
+      shell: "grep 'accessinfo1' /tmp/ilo_output.txt | awk -F '=' '{print $2}'"
+      register: extracted_info
+      delegate_to: localhost
+      when: server_type | trim == "HPRack" or server_type | trim == "HPBlade"
+
+    - name: Debug the result
+      debug:
+        msg: "iLO IP Address: {{ extracted_info.stdout }}"
+      when: server_type | trim == "HPRack" or server_type | trim == "HPBlade"
+
+    - name: Get timestamp from the system (success)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp_success
+      when: server_type | trim == "HPRack" or server_type | trim == "HPBlade"
+
+    - name: Set timestamp fact (success)
+      set_fact:
+        time: "{{ tstamp_success.stdout }}"
+      when: server_type | trim == "HPRack" or server_type | trim == "HPBlade"
+
+    - name: Log success to a file
+      shell: echo "#iLO Command Execution - {{ time }}, [INFO], ILO command executed successfully for {{ inventory_hostname }}, IP {{ extracted_info.stdout }}" >> ilo_command_success.yml
+      delegate_to: localhost
+      when: server_type | trim == "HPRack" or server_type | trim == "HPBlade"
+
+    - name: Set rescue_triggered to false (localhost context)
+      set_fact:
+        ilo_rescue_triggered: false
+      delegate_to: localhost 
+      when: server_type | trim == "HPRack" or server_type | trim == "HPBlade"
+
+  rescue:
+    - name: Log failure due to unidentified server type
+      shell: echo "!iLO Command Execution - [ERROR], Server type is Unidentified for {{ inventory_hostname }}" >> ilo_command_fail.yml
+      delegate_to: localhost
+      when: server_type | trim == "Unidentified" or server_type | trim == "LenovoBlade" or server_type | trim == "LenovoRack"   # To be deleted once code added for Lenovo
+
+    - name: Debug iLO Command Execution Failure
+      debug:
+        msg: "Failed to execute iLO command or process its output."
+
+    - name: Get timestamp from the system (rescue)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp_failure
+
+    - name: Set timestamp fact (rescue)
+      set_fact:
+        time: "{{ tstamp_failure.stdout }}"
+
+    - name: Log failure to a file
+      shell: echo "!iLO Command Execution - {{ time }}, [ERROR], Failed for {{ inventory_hostname }}" >> ilo_command_fail.yml
+      delegate_to: localhost
+
+    - name: Set rescue_triggered to true (localhost context)
+      set_fact:
+        ilo_rescue_triggered: true
+      delegate_to: localhost

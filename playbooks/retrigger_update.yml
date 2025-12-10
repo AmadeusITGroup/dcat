@@ -1,0 +1,82 @@
+---
+
+  - name: get PTR details from win@proach
+    get_ptr_info_win:
+      username: "{{ winaproach_username }}"
+      password: "{{ winaproach_password }}" 
+      win_target: "WIN@PROACH_URL"
+      ptr: "{{ item }}"
+    loop: "{{ item.7 }}"
+    register: ptr_status
+    delegate_to: localhost
+
+  - debug:
+      var: ptr_status 
+
+  - name: Display the JSON file content
+    shell: cat private_endpoint_connection_string.yml
+    delegate_to: localhost
+    register: result_private_endpoint_connection_string
+
+  - name: save the Json data to a Variable as a Fact
+    set_fact:
+      private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+    delegate_to: localhost
+
+  - name: Get host info from azure state file
+    azure_retrigger_fetch_data:
+      connection_string: "{{ private_endpoint_connection_string }}"
+      hostname: "{{item}}"
+    loop: "{{ item.1 }}"
+    delegate_to: localhost  
+    register: host_info_fetch
+    when: ptr_status is search("CI|CS") 
+
+  - debug:
+      var: host_info_fetch
+    when: ptr_status is search("CI|CS")
+
+  - name: Check snow api call back
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ item.0 }}"
+      status: Running
+      comments: All the PTRs have been resolved. The automation will be re-triggered.
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost  
+    register: api_result
+    when: ptr_status is search("CI|CS")  
+
+  - name: Check snow api call back
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ item.0 }}"
+      status: Running
+      comments: All the PTRs have not been resolved. The automation will be re-triggered once all the PTRs are resolved.
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost  
+    register: api_result
+    when: ptr_status is not search("CI|CS")   
+
+  - name: Run DECO pre-req template
+    trigger_deco_retrigger:
+      cr: "{{ item.2 }}"
+      ci: "{{ item.1 }}"
+      graceperiod_flag: "{{ host_info_fetch.results[0].module_update }}"
+      requester_name: "{{ item.3 }}"
+      requester_group: "{{ item.4 }}"
+      retention_days: "{{ item.5 }}"
+      ritm_number: "{{ item.0 }}"
+      pillar: "{{ item.6 }}"
+      template_id: "23614"
+      awx: "{{AWX_URL}}"
+      user_name: "{{ auth_username }}"
+      pass_word: "{{ auth_password }}"      
+    register: trigger_log
+    delegate_to: localhost
+    when: ptr_status is search("CI|CS")
+
+  - debug:
+      var: trigger_log

@@ -1,0 +1,217 @@
+---
+    - name: handle the error before grace period vcenter search for vm
+      throttle: 1 
+      block:
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server"
+          azure_update_ref:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status
+          delegate_to: localhost
+
+        - set_fact: 
+            vm_poweroff_before_gp_check: '{{idem_status.module_update.vm_poweroff_before_gp}}'
+                                 
+        - meta: end_host
+          when: vm_poweroff_before_gp_check == "F" and vm_poweroff_before_gp_check is defined
+
+        - set_fact:
+            vmdelete: '{{idem_status.module_update.vm_delete}}'
+
+        - meta: end_host
+          when: vmdelete == "T" and vmdelete is defined
+
+      rescue: 
+        - name: after graceperiod check
+          debug:
+            msg: "after graceperiod check"
+
+
+    - name: handle the error before grace period vcenter search for vm 
+      block:
+
+        - name: Display the JSON file content
+          shell: cat check_synergon.yml
+          delegate_to: localhost
+          register: result_check_synergon
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_synergon: "{{ result_check_synergon.stdout }}" 
+          delegate_to: localhost      
+
+        - meta: end_host
+          when: check_synergon != ""
+
+        - set_fact:
+            v_center_gp: ""            
+
+        - set_fact:
+            vm_trail_add: "_to_be_deleted"  
+
+        - set_fact:    
+            vm_deletion_name: "{{ inventory_hostname ~ vm_trail_add }}"
+                                 
+
+        - name: "Test custom module fetch vcenter details after grace period"
+          fetch_vcenter_agp:
+            vmname: '{{ vm_deletion_name }}'     
+            synergon_api: '{{ synergon_url }}'
+            instance_id_vm: '{{ instanceid }}'
+          delegate_to: localhost
+          register: vcenter_output_gp
+          until:  '"Successfully" in vcenter_output_gp.msg or "Unable to find" in vcenter_output_gp.msg or "duplicate entries" in vcenter_output_gp.msg'
+          retries: 3
+          delay: 10
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                          
+        - set_fact:
+            time: "{{tstamp.stdout}}" 
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{vcenter_output_gp.msg}}" >> check_vcenter.yml                    
+          delegate_to: localhost 
+          when: '"Successfully" not in vcenter_output_gp.msg'
+
+        - name: "VM failure list"
+          shell: echo "{{ inventory_hostname }}" >> failure_vm_agp.yml                   
+          delegate_to: localhost
+          when: '"Successfully" not in vcenter_output_gp.msg'         
+
+        - meta: end_host
+          when: '"Successfully" not in vcenter_output_gp.msg'          
+
+        - set_fact:
+            v_center_gp: "{{vcenter_output_gp.vcenter}}" 
+            v_center_msg_gp: "{{vcenter_output_gp.msg}}"
+
+        - set_fact:
+            fqdn_vc: ""                
+           
+        - set_fact:
+            fqdn_vc: .muc.msp.net
+          when: v_center_gp is not search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|MUCAMNAZ1|MUCAMNVCPA1|MUCAMNVCPA2|MUCAMNAZ2|MUCAMNVCPB1|MUCAMNVCPB2|MUCAMNAZ3|MUCAMNVCPC1|MUCAMNVCPC2") and v_center_before is not search(".muc.msp.net")
+
+        - set_fact:
+            fqdn_vc: .vclassic.net
+          when: v_center_gp is search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|MUCAMNAZ1|MUCAMNVCPA1|MUCAMNVCPA2|MUCAMNAZ2|MUCAMNVCPB1|MUCAMNVCPB2|MUCAMNAZ3|MUCAMNVCPC1|MUCAMNVCPC2") and v_center_before is not search(".vclassic.net") 
+
+        - set_fact:
+            proto: https://
+
+        - set_fact:
+            v_center: "{{ proto ~ v_center_gp ~ fqdn_vc }}"
+
+        - set_fact:
+            v_center_fqdn: "{{ v_center_gp ~ fqdn_vc }}"            
+
+        - name: Check if api up or not
+          uri:
+            url: "{{ v_center }}"
+            validate_certs: no
+          delegate_to: localhost                 
+          register: result
+          until: "result.status == 200"
+          retries: 3
+          delay: 10
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"             
+
+        - name: "vcenter status"
+          shell: echo "#{{ inventory_hostname }}, {{ time }}, [INFO], vcenter - {{ v_center_fqdn }} is up and runing for the VM {{ inventory_hostname }} good to proceed for VM deco trigger 2" >> check_vcenter_success.yml   
+          delegate_to: localhost  
+
+         
+
+      rescue: 
+        - name: when the after grace period module throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for vcentre_details module in after grace period "
+
+        - name: handle the error after grace period vcenter search for vm 
+          block:    
+
+            - name: Display the JSON file content
+              shell: cat private_endpoint_connection_string.yml
+              delegate_to: localhost
+              register: result_private_endpoint_connection_string
+        
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+              delegate_to: localhost        
+   
+            - name: "Check entry for DECO server"
+              azure_update_ref:
+                connection_string: "{{ private_endpoint_connection_string }}"
+                hostname: "{{inventory_hostname}}"
+              register: idem_status
+              delegate_to: localhost
+
+            - set_fact: 
+                vm_poweroff_before_gp_check: '{{idem_status.module_update.vm_poweroff_before_gp}}'
+                                    
+            - meta: end_host
+              when: vm_poweroff_before_gp_check == "F" and vm_poweroff_before_gp_check is defined              
+
+            - set_fact: 
+                vmdelete: '{{idem_status.module_update.vm_delete}}'
+
+            - meta: end_host
+              when: vmdelete == "T" and vmdelete is defined            
+
+          rescue: 
+            - name: before graceperiod check
+              debug:
+                msg: "before graceperiod check"
+
+##################################################################################
+
+        - name: handle the error after grace period vcenter search for vm 
+          block:
+
+            - name: Get timestamp from the system
+              shell: "date +%Y-%m-%d/%H:%M"
+              delegate_to: localhost
+              register: tstamp  
+                          
+            - set_fact:
+                time: "{{tstamp.stdout}}"                
+
+            - name: "VM host list failure to file before grace period"
+              shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], {{vcenter_output_gp.msg}}" >> check_vcenter.yml                    
+              delegate_to: localhost            
+              when: '"Exception" in vcenter_output_gp.msg'
+
+                
+            - name: "vcenter status"
+              shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], vcenter - {{ v_center_fqdn }} is down currently for the VM {{ inventory_hostname }} after 3 retries needs attention" >> check_vcenter.yml   
+              delegate_to: localhost
+              when: v_center_gp != ""
+
+
+          rescue: 
+            - name: vcenter status
+              debug:
+                msg: "vcenter status"

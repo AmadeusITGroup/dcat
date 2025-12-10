@@ -1,0 +1,114 @@
+
+---
+
+
+- name: Run SHOW SERVER LIST on HP OA with error handling
+  throttle: 1
+  block:
+
+    - name: Run SHOW SERVER LIST on HP OA
+      ssh_check_esxi_with_pass:
+        hostname: "{{ inventory_hostname }}.muc.net"
+        username: "{{ remote_username }}"
+        password: "{{ remote_password }}"
+        command: "SHOW SERVER LIST"
+      register: server_list_result
+      delegate_to: localhost  # Ensure it runs from localhost
+      retries: 3
+      delay: 5
+      until: server_list_result is succeeded
+      ignore_errors: true
+
+    - name: "Debug: Display Server List Output"
+      debug:
+        var: server_list_result
+      when: "'Successfully' in server_list_result.msg"
+
+    - name: Write failure details to log file if server list fetch failed
+      shell: echo "{{ inventory_hostname }}, [ERROR], Failed to fetch server list or connect to bays" >> hp_oa_failure.log
+      delegate_to: localhost
+      when: "'Successfully' not in server_list_result.msg"
+
+
+    # - name: "Debug: Display Server List Output"
+    #   debug:
+    #     var: server_list_result.results[0].output
+
+    - name: "Debug: Display Server List Output"
+      debug:
+        var: server_list_result.output
+
+    # - name: Extract bay numbers correctly
+    #   set_fact:
+    #     bay_list: "{{ server_list_result.results[0].output | regex_findall('^\\s*(\\d+)\\s+ILOCZ\\S+', multiline=True) | map('int') | list }}"
+
+    - name: Extract bay numbers correctly
+      set_fact:
+        bay_list: "{{ server_list_result.output | regex_findall('^\\s*(\\d+)\\s+ILOCZ\\S+', multiline=True) | map('int') | list }}"
+      when: "'Successfully' in server_list_result.msg"
+
+
+    # - name: Debug extracted bay numbers
+    #   debug:
+    #     var: bay_list
+
+    # - name: Debug extracted bay numbers per enclosure
+    #   debug:
+    #     msg: "Enclosure {{ item.key }} has bay numbers: {{ item.value }}"
+    #   loop: "{{ enclosure_bay_map | dict2items }}"
+    #   loop_control:
+    #     label: "{{ item.key }}"
+
+
+    - name: Attempt to connect to each bay from HP OA
+      ssh_check_esxi_with_pass:
+        hostname: "{{ inventory_hostname }}.muc.net"
+        username: "{{ remote_username }}"
+        password: "{{ remote_password }}"
+        command: "CONNECT SERVER {{ item }}"
+      loop: "{{ bay_list }}"
+      register: connection_status
+      delegate_to: localhost
+      ignore_errors: true
+      when: "'Successfully' in server_list_result.msg"
+
+
+    - name: "Debug connection status results"
+      debug:
+        var: connection_status
+
+
+    # - name: Write successful connections to log file
+    #   shell: "echo '{{ result.combined_item.0 }}, Bay: {{ result.combined_item.1 }}, [INFO], Connection successful' >> hp_oa_success.log"
+    #   delegate_to: localhost
+    #   when: result.failed is not defined or not result.failed
+    #   loop: "{{ connection_status.results }}"
+    #   loop_control:
+    #     loop_var: result
+
+    - name: Write successful connections to log file
+      shell: "echo '{{ inventory_hostname }}, Bay: {{ result.item }}, [INFO], Connection successful' >> hp_oa_success.log"
+      delegate_to: localhost
+      when: result.failed is not defined or not result.failed
+      loop: "{{ connection_status.results }}"
+      loop_control:
+        loop_var: result
+
+    - name: Write failed connections to log file
+      shell: "echo '{{ inventory_hostname }}, Bay: {{ result.item }}, [ERROR], Connection failed' >> hp_oa_failure.log"
+      delegate_to: localhost
+      when: result.failed is defined and result.failed
+      loop: "{{ connection_status.results }}"
+      loop_control:
+        loop_var: result
+
+
+  rescue:
+    - name: Capture failure details
+      debug:
+        msg: "Error occurred while fetching server list or connecting to servers."
+
+    - name: Write failure details to log file
+      shell: echo "{{ inventory_hostname }}, [ERROR], Failed to fetch server list or connect to bays" >> hp_oa_failure.log
+      delegate_to: localhost
+

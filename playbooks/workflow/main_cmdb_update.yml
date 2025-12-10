@@ -1,0 +1,168 @@
+---
+- name: "Create TR for cmdb update"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: False
+    azure_client_id: '{{ az_client_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+  tasks:
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update
+        tasks_from: create_tr_cmdb_update.yml
+
+    - set_fact:
+        env_data: "{{ hostvars.localhost.env_data }}"
+
+    - set_fact:
+        storage_account_name: "awxdcatdev"
+      when: env_data == "dev"  
+
+    - set_fact:
+        resource_group: "dcat"
+
+    - set_fact:
+        azure_subscription_id: "c7fe37a6-85d1-4afc-b695-13a64f545042"
+
+    - set_fact:
+        storage_account_name: "awxdcatprod"
+      when: env_data == "prod"                             
+
+
+    - name: Retrieve Storage Account Key
+      azure_rm_storageaccount_info:
+        resource_group: "{{ resource_group }}"
+        name: "{{ storage_account_name }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_client_secret }}"
+        tenant: "{{ azure_tenant_id }}"
+        subscription_id: '{{ azure_subscription_id }}'
+        show_connection_string: true
+      register: storage_account_info
+
+    - debug:
+        msg: "{{storage_account_info}}"
+
+    - name: Set Storage Account Key
+      set_fact:
+        storage_account_key: "{{ storage_account_info.storageaccounts[0].primary_endpoints.key }}"
+
+    - name: Get Private Endpoint Connection String
+      set_fact:
+        private_endpoint_connection_string: "DefaultEndpointsProtocol=https;AccountName={{ storage_account_name }};AccountKey={{ storage_account_key }};EndpointSuffix=core.windows.net"
+
+    - name: "data check"
+      shell: echo "{{ private_endpoint_connection_string }}" >> private_endpoint_connection_string.yml   
+      delegate_to: localhost
+
+- name: "cmdb update"
+  hosts: all:deco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  vars:
+    env_data: "{{ env_data }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update
+        tasks_from: cmdb_update.yml
+
+- name: "ADD info TR for cmdb update"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: False
+  tasks:
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update
+        tasks_from: add_info_cmdb_update.yml
+
+- name: "Generate DECO / SSH Call"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+  - name: check host data
+    shell: cat deco_hosts.txt
+    register: target_host
+
+  - set_fact:
+      data: "{{ target_host.stdout_lines}}"
+
+  - debug:
+      var: data    
+
+  - name: Generate DECO content
+    create_content:
+      filepath: "run_data.json"
+      cr: "{{ cr }}"
+      ci: "{{ target_host.stdout_lines }}"
+      requester_name: "{{ requester_name }}"
+      requester_group: "{{ requester_group }}"
+      retention_days: "{{ retention_days }}"
+      ritm_number: "{{ ritm_number }}"
+      #pillar: "{{ pillar }}"
+      #mit_ticket: "{{ mit_ticket }}"
+    register: content_log
+    delegate_to: localhost
+    when: data != []
+
+  - debug:
+      var: target_host
+    when: data != []
+
+  - name: Display the JSON file content
+    shell: cat run_data.json
+    delegate_to: localhost
+    register: TR_result_cmdb_dup_info_fetch 
+
+  - name: save the Json data to a Variable as a Fact
+    set_fact:
+      record_id_cmdb_dup_info_fetch: "{{ TR_result_cmdb_dup_info_fetch.stdout[1:-1] }}"
+    delegate_to: localhost   
+
+  - debug:
+      var: record_id_cmdb_dup_info_fetch     
+
+  - name: Trigger DECO MASTER
+    trigger_deco_cmdb:
+      filepath: "run_data.json"
+      template_id: "28609"
+      awx: "{{AWX_URL}}"
+      user_name: "{{ auth_username }}"
+      pass_word: "{{ auth_password }}"
+    register: trigger_log
+    delegate_to: localhost
+    when: data != []
+
+  - debug:
+      var: trigger_log
+    when: data != []
+
+  #########################################
+
+# - name: "cmdb update"
+#   hosts: all:deco
+#   serial: "{{ hostvars.localhost.serial_number.msg }}"
+#   gather_facts: no    
+#   tasks: 
+#     - name: cmdb update
+#       ansible.builtin.import_role:
+#         name: cmdb_update
+#         tasks_from: cmdb_logging.yml
+
+# - name: "Logger for cmdb update"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+#     record_id_cmdb_up: ""
+#     graceperiod_flag: True
+#     cmdb_check: "F"
+#     vmdelete: "T"
+#   tasks:
+#     - name: cmdb update
+#       ansible.builtin.import_role:
+#         name: cmdb_update
+#         tasks_from: logger_cmdb.yml

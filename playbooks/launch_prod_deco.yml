@@ -1,0 +1,13 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: "{{ graceperiod_flag }}"  
+
+  tasks: 
+  - set_fact:
+      env_config: prod
+
+- import_playbook: "{{ graceperiod_flag | lower }}.yml"
+  vars:
+    env: "{{ env_config }}"

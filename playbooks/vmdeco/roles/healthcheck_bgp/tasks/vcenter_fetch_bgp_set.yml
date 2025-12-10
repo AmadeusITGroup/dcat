@@ -1,0 +1,65 @@
+---
+    - name: "Deco Health check status -set"
+      block: 
+
+        - name: Display the JSON file content
+          shell: cat s_list.yml
+          delegate_to: localhost
+          register: res_s_list 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            s_list: "{{ res_s_list.stdout_lines }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat serv_list.yml
+          delegate_to: localhost
+          register: res_serv_list 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            serv_list: "{{ res_serv_list.stdout_lines }}"
+          delegate_to: localhost                            
+
+        - set_fact:
+            down_win: "{{ s_list|difference(serv_list) }}"
+
+        - set_fact:
+            down_win: "{{ down_win | join(', \n') }}"      
+         
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                          
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+                                
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "{{ down_win }}" >> check_ssh_windows.yml                   
+          delegate_to: localhost
+          when: down_win != "" and down_win != [] 
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> ssh_windows_failure.txt                    
+          delegate_to: localhost
+          when: down_win != "" and down_win != []
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "!{{ time }}, [ERROR], For the above Windows VM Unable to WinRM to the VM {{ inventory_hostname }} from AWX using svc-deco-app-windows either connection or credential issue" >> check_ssh_windows.yml                   
+          delegate_to: localhost
+          when: down_win != "" and down_win != []           
+          
+
+        - name: "VM failure list"
+          shell: echo "{{ down_win }}" >> failure_vm_bgp.yml                   
+          delegate_to: localhost
+          when: down_win != "" and down_win != []
+               
+
+      rescue:
+        - debug:
+            msg: "rescue on WinRM connection validation - Windows"

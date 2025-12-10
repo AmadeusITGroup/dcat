@@ -1,0 +1,69 @@
+---
+- name: "Check output files"
+  hosts: all
+  gather_facts: no    
+  tasks:
+
+    - name: generate output files for every module
+      file:
+        path: "{{ 'net_fail_arista_' + inventory_hostname }}.yml"
+        state: touch
+        mode: 0644
+      delegate_to: localhost
+
+    - name: generate output files for every module
+      file:
+        path: "{{ 'network_tr_arista_connect_' + inventory_hostname }}.yml"
+        state: touch
+        mode: 0644
+      delegate_to: localhost
+          
+
+    - name: generate output files for every module
+      file:
+        path: "{{ 'network_tr_arista_' + inventory_hostname }}.yml"
+        state: touch
+        mode: 0644
+      delegate_to: localhost
+
+    - name: generate output files for every module
+      file:
+        path: "{{ 'network_tr_cisco_final_' + inventory_hostname }}.yml"
+        state: touch
+        mode: 0644
+      delegate_to: localhost 
+
+    - name: generate output files for every module
+      file:
+        path: "{{ 'network_tr_cisco_fail_' + inventory_hostname }}.yml"    
+        state: touch
+        mode: 0644
+      delegate_to: localhost 
+
+    - name: generate output files for every module
+      file:
+        path: "{{ 'network_tr_cisco_connect_'+ inventory_hostname }}.yml"    
+        state: touch
+        mode: 0644
+      delegate_to: localhost            
+      
+
+
+    - name: generate output files for every module
+      file:
+        path: "{{ 'net_fail_cisco_' + inventory_hostname }}.yml"
+        state: touch
+        mode: 0644
+      delegate_to: localhost 
+
+
+    - name: generate output files for every module
+      file:
+        path: "{{ 'sw_cisco_' + inventory_hostname }}.csv"
+        state: touch
+        mode: 0644
+      delegate_to: localhost
+
+    - name: "Pass vm data's"
+      shell: echo 'port,sw_name,server_name,tr' >> "{{ 'sw_cisco_' + inventory_hostname }}.csv"
+      delegate_to: localhost        

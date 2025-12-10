@@ -1,0 +1,104 @@
+--- 
+
+  - name: get owner TR details from win@proach
+    get_tr_data:
+      username: "{{ winaproach_username }}"
+      password: "{{ winaproach_password }}" 
+      win_target: "WIN@PROACH_URL"
+      tr: "{{ item.0 }}"
+    register: owner_tr_result
+    delegate_to: localhost
+
+  - set_fact:
+      owner_tr_result: "{{ owner_tr_result.status }}"
+
+  - name: "Test custome module [CLOSE TR]"
+    close_tr:
+      record_id: "{{ item.0 }}"
+      username: "{{ winaproach_username }}"
+      password: "{{ winaproach_password }}" 
+    register: close_tr_output
+    when: owner_tr_result is search("Pending Validation") 
+
+  - name: Get timestamp from the system
+    shell: "date +%Y-%m-%d/%H:%M"
+    delegate_to: localhost
+    register: tstamp  
+
+  - set_fact:
+      time: "{{tstamp.stdout}}" 
+
+  - debug:
+      msg: "{{ item.0 }}"  
+
+  - debug:
+      msg: "{{ item.1 }}"   
+
+  - debug:
+      msg: "{{ item.2 }}" 
+         
+  - name: Display the JSON file content
+    shell: cat private_endpoint_connection_string.yml
+    delegate_to: localhost
+    register: result_private_endpoint_connection_string
+
+  - name: save the Json data to a Variable as a Fact
+    set_fact:
+      private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+    delegate_to: localhost  
+
+  - name: "Check entry for DECO server"
+    final_owner_tr:
+      ci: "{{ ci }}"
+      cr: "{{ item.2 }}"
+      event_number: "{{ item.0 }}"
+      event_status: "closed"
+      created_on: "{{ time }}"
+      last_update: "{{ time }}"
+      connection_string: "{{ private_endpoint_connection_string }}"
+    loop: "{{ item.1 }}"
+    loop_control:
+      loop_var: ci  
+    register: owner_tr_add
+    delegate_to: localhost
+    when: owner_tr_result is search("Closed as Fully Implemented|Fully Implemented Pending Validation") 
+
+  - name: "Check entry for DECO server"
+    final_owner_tr:
+      ci: "{{ ci }}"
+      cr: "{{ item.2 }}"
+      event_number: "{{ item.0 }}"
+      event_status: "cancelled"
+      created_on: "{{ time }}"
+      last_update: "{{ time }}"
+      connection_string: "{{ private_endpoint_connection_string }}"  
+    loop: "{{ item.1 }}"
+    loop_control:
+      loop_var: ci
+    register: owner_tr_add
+    delegate_to: localhost
+    when: owner_tr_result is search("Closed as Cancelled")     
+
+  - debug:
+      var: owner_tr_add      
+
+
+  - name: get owner TR details from win@proach
+    get_tr_data:
+      username: "{{ winaproach_username }}"
+      password: "{{ winaproach_password }}" 
+      win_target: "WIN@PROACH_URL"
+      tr: "{{ item.0 }}"
+    register: owner_tr_result
+    delegate_to: localhost
+
+  - set_fact:
+      owner_tr_result: "{{ owner_tr_result.status }}"
+
+
+  - debug:
+      msg: "DECO terminated!!! still approvals pending - DECO will validate after 1hr "
+    when: owner_tr_result is not search("Closed")
+
+  # - meta: end_play
+  #   when: app_tr_result is not search("Closed") or owner_tr_result is not search("Closed")

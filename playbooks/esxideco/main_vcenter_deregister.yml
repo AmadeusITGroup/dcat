@@ -1,0 +1,60 @@
+---
+- name: "Filter hostlist for vcenter deregister"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: vcenter deregister
+      ansible.builtin.import_role:
+        name: vcenter_deregister
+        tasks_from: filter_hostlist_vcenter_deregister.yml
+
+- name: "Create TR for vcenter deregister"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    bird_api: "{{ hostvars['localhost']['config_data']['bird_api'] }}"
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        bird_api: "{{ config_data.bird_api }}"
+        win_category: "{{ config_data.winaproach_category }}"
+        
+    - name: TR creation for vcenter deregister
+      ansible.builtin.import_role:
+        name: vcenter_deregister
+        tasks_from: create_tr_vcenter_deregister.yml
+
+- name: "deregister server from vcenter"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  # vars:
+  vars:
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+    domain_username: "{{ pAccount_username }}"
+    domain_password: "{{ pAccount_password }}"
+  tasks: 
+    - name: vcenter deregister
+      ansible.builtin.import_role:
+        name: vcenter_deregister
+        tasks_from: vcenter_deregister_main.yml
+           
+
+
+- name: "Add info to TR for vcenter deregister"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_system: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+    - name: vcenter deregister
+      ansible.builtin.import_role:
+        name: vcenter_deregister
+        tasks_from: add_info_vcenter_deregister.yml

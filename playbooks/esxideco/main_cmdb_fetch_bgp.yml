@@ -1,0 +1,67 @@
+---
+# - name: "Filter hostlist for cmdb fetch bgp"
+#   hosts: physicaldeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: cmdb fetch
+#       ansible.builtin.import_role:
+#         name: cmdb_fetch_bgp
+#         tasks_from: filter_hostlist_cmdb_check_status.yml
+
+- name: "Create TR for cmdb fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    cmdb_fetch_bgp: "F"
+    graceperiod_flag: False
+    info: ""
+  tasks:
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_bgp
+        tasks_from: create_tr_cmdb_status_check.yml
+
+- name: "CMDB FETCH"
+  hosts: esxideco
+  gather_facts: no    
+  tasks: 
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_bgp
+        tasks_from: cmdb_status_check.yml
+      #when: cmdb_fetch_bgp == "F" and info == "T" 
+
+- name: "Add info to TR for cmdb fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    cmdb_fetch_bgp: "F"
+    graceperiod_flag: False
+    info: ""
+  tasks:
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_bgp
+        tasks_from: add_info_cmdb_status_check.yml
+
+# - name: "CMDB FETCH"
+#   hosts: all:vmdeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: cmdb fetch
+#       ansible.builtin.import_role:
+#         name: cmdb_fetch_bgp
+#         tasks_from: cmdb_stat_logging.yml
+
+# - name: "Logger for CMDB Fetch"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+    # cmdb_fetch_bgp: "F"
+    # graceperiod_flag: False
+    # info: ""
+#   tasks:
+#     - name: cmdb fetch
+#       ansible.builtin.import_role:
+#         name: cmdb_fetch_bgp
+#         tasks_from: logger_cmdb_stat.yml

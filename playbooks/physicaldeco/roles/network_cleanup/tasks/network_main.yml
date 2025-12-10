@@ -1,0 +1,28 @@
+---
+
+  - import_playbook: switch_filter.yml
+
+  - import_playbook: create_tr_network_cisco.yml 
+
+
+  - import_playbook: network_switch_port.yml
+
+
+  - import_playbook: sw_arista_formation.yml  
+
+
+  - import_playbook: add_info_network_cisco.yml    
+
+    
+  - import_playbook: create_tr_network_arista.yml
+
+
+  - import_playbook: add_info_network_arista.yml
+  
+  
+
+  - import_playbook: network_logging.yml
+  
+
+  - import_playbook: logger_network.yml
+      

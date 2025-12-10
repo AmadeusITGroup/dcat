@@ -1,0 +1,180 @@
+--- 
+    - name: "Handling TR record_id"
+      block:
+
+        - set_fact:
+            csv: "nodes.csv"
+            record_for_backup: ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck != ""       
+      
+
+        - name: Display the JSON file content
+          shell: cat record_for_backup.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_for_backup: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost        
+
+        - meta: end_host
+          when: record_for_backup == ""
+
+        - name: VM_host list
+          shell: cat vm_list.yml
+          delegate_to: localhost
+          register: vm_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_back: "{{ vm_result.stdout }}" 
+          delegate_to: localhost
+            
+        - meta: end_host
+          when: vm_back == ""
+        
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the VMs qualified for Backup node decomission"
+            form3: "***********************************************************************"            
+        - set_fact:
+            content_backup_success: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ vm_back }}"
+          
+ 
+        
+      rescue:
+        - debug:
+            var: 'vm_back'
+
+    - name: "Handling add message in TR"
+      block: 
+
+        - name: VM_host list
+          shell: cat vm_list.yml
+          delegate_to: localhost
+          register: vm_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_back: "{{ vm_result.stdout }}" 
+          delegate_to: localhost
+
+        - meta: end_host
+          when: vm_back == ""
+
+        - name: Display the JSON file content
+          shell: cat record_for_backup.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_for_backup: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost       
+               
+
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            winaproach_user: "{{ winaproach_username }}"
+          delegate_to: localhost
+
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            winaproach_password: "{{ winaproach_password }}"
+          delegate_to: localhost          
+        
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{record_for_backup}}"
+            message: "{{ content_backup_success }}"             
+            username: "{{ winaproach_user }}"     
+            password: "{{ winaproach_password }}" 
+          delegate_to: localhost
+          register: add_msg_output
+                                  
+
+      rescue:
+        - debug:
+            var: 'add_msg_output'
+
+    - name: "Add attachments to TR"
+      block: 
+
+        - name: VM_host list
+          shell: cat vm_list.yml
+          delegate_to: localhost
+          register: vm_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_back: "{{ vm_result.stdout }}" 
+          delegate_to: localhost
+
+        - meta: end_host
+          when: vm_back == ""
+
+        - name: Display the JSON file content
+          shell: cat record_for_backup.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_for_backup: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost       
+
+        - name: read csv
+          read_csv:
+            path: "{{ csv }}"
+            key: nodename
+          register: csv_content     
+        
+        - meta: end_host
+          when: csv_content == ""
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            winaproach_user: "{{ winaproach_username }}"
+          delegate_to: localhost
+
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            winaproach_password: "{{ winaproach_password }}"
+          delegate_to: localhost   
+          
+        
+        - name: "Add message to TR"
+          add_attachment_to_tr:
+            record_id: "{{record_for_backup}}"
+            attachments: "{{ csv }}"            
+            username: "{{ winaproach_user }}"     
+            password: "{{ winaproach_password }}" 
+          delegate_to: localhost
+          register: add_attachment_output
+                                   
+
+      rescue:
+        - debug:
+            var: add_attachment_output       
+
+
+            
+        
+            
+             

@@ -1,0 +1,328 @@
+---   
+    - name: "Handling Create TR- Win@proach "
+      block:
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck != ""
+
+
+        # - name: Display the JSON file content
+        #   shell: cat idem_cmdb_stat_check_agp_pre.json
+        #   delegate_to: localhost
+        #   register: result_app_bkp
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     cmdb_check_agp_pre: "{{ result_app_bkp.stdout[1:-1] }}" 
+        #   delegate_to: localhost
+
+
+        # - meta: end_host
+        #   when: cmdb_check_agp_pre == "F"          
+     
+
+        # - name: Display the JSON file content
+        #   shell: cat idem_backup.json
+        #   delegate_to: localhost
+        #   register: result_app_cmdb
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     backup_flag: "{{ result_app_cmdb.stdout[1:-1] }}" 
+        #   delegate_to: localhost
+
+            
+        # - meta: end_host
+        #   when: backup_flag == "T" 
+
+        - name: VM_host list
+          shell: cat host_list_backup.yml
+          delegate_to: localhost
+          register: hostlist_vm              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_hostlist: "{{ hostlist_vm.stdout[:-1] }}" 
+          delegate_to: localhost  
+
+        - meta: end_host
+          when: vm_hostlist == ""           
+        
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: Physical DECO - Physical Backup Deletion"
+            assignee_name: "DecoP112686"
+            assignee_group: "OCISSFS"            
+            severity: "4"
+            overview: "Physical DECO - Physical Backup Deletion"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+        
+        - set_fact:
+            record_backup: "{{create_tr_output.record_id}}"
+             
+
+        - copy:
+            content: '{{ record_backup|to_json }}'
+            dest: record_for_backup.json
+          delegate_to: localhost
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_backup }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Failed to Create VM DECO - Backup Agent Removal TR"
+
+    - name: "Handling Create TR- Win@proach -1 "
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck != ""      
+
+        # - name: Display the JSON file content
+        #   shell: cat idem_cmdb_stat_check_agp_pre.json
+        #   delegate_to: localhost
+        #   register: result_app_bkp
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     cmdb_check_agp_pre: "{{ result_app_bkp.stdout[1:-1] }}" 
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: cmdb_check_agp_pre == "F"          
+      
+
+        # - name: Display the JSON file content
+        #   shell: cat idem_backup.json
+        #   delegate_to: localhost
+        #   register: result_app_cmdb
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     backup_flag: "{{ result_app_cmdb.stdout[1:-1] }}" 
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: backup_flag == "T"
+
+        - name: VM_host list
+          shell: cat host_list_backup.yml
+          delegate_to: localhost
+          register: hostlist_vm              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_hostlist: "{{ hostlist_vm.stdout[:-1] }}" 
+          delegate_to: localhost  
+
+        - meta: end_host
+          when: vm_hostlist == ""            
+
+        - name: Display the JSON file content
+          shell: cat record_for_backup.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_for_backup: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost          
+
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: record_for_backup == ""           
+        
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: Physical DECO - Physical Backup Deletion"
+            assignee_name: "DecoP112686"
+            assignee_group: "OCISSFS"           
+            severity: "4"
+            overview: "Physical DECO - Physical Backup Deletion"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+          when: record_for_backup == "" 
+        
+        - set_fact:
+            record_backup: "{{create_tr_output.record_id}}"
+          when: record_for_backup == ""
+              
+
+        - copy:
+            content: '{{ record_backup|to_json }}'
+            dest: record_for_backup.json
+          delegate_to: localhost
+          when: record_for_backup == "" 
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_backup }}"
+          register: add_document
+          delegate_to: localhost
+          when: record_for_backup == ""
+
+      rescue:
+        - debug:
+            msg: "Failed to Create VM DECO - Backup Agent Removal TR"
+
+    - name: "Handling Create TR- Win@proach -2"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck != ""      
+
+        # - name: Display the JSON file content
+        #   shell: cat idem_cmdb_stat_check_agp_pre.json
+        #   delegate_to: localhost
+        #   register: result_app_bkp
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     cmdb_check_agp_pre: "{{ result_app_bkp.stdout[1:-1] }}" 
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: cmdb_check_agp_pre == "F"          
+    
+
+        # - name: Display the JSON file content
+        #   shell: cat idem_backup.json
+        #   delegate_to: localhost
+        #   register: result_app_cmdb
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     backup_flag: "{{ result_app_cmdb.stdout[1:-1] }}" 
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: backup_flag == "T"
+
+        - name: VM_host list
+          shell: cat host_list_backup.yml
+          delegate_to: localhost
+          register: hostlist_vm              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_hostlist: "{{ hostlist_vm.stdout[:-1] }}" 
+          delegate_to: localhost  
+
+        - meta: end_host
+          when: vm_hostlist == ""           
+
+
+        - name: Display the JSON file content
+          shell: cat record_for_backup.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_for_backup: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost          
+
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: record_for_backup == ""           
+        
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: Physical DECO - Physical Backup Deletion"
+            assignee_name: "DecoP112686"
+            assignee_group: "OCISSFS"            
+            severity: "4"
+            overview: "Physical DECO - Physical Backup Deletion"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+          when: record_for_backup == "" 
+        
+        - set_fact:
+            record_backup: "{{create_tr_output.record_id}}"
+          when: record_for_backup == ""   
+            
+
+        - copy:
+            content: '{{ record_backup|to_json }}'
+            dest: record_for_backup.json
+          delegate_to: localhost
+          when: record_for_backup == "" 
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_backup }}"
+          register: add_document
+          delegate_to: localhost
+          when: record_for_backup == ""
+
+      rescue:
+        - debug:
+            msg: "Failed to Create VM DECO - Backup Agent Removal TR"                        
+

@@ -1,0 +1,39 @@
+---
+- name: "Filter hostlist for vcenter deregister"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: vcenter deregister
+      ansible.builtin.import_role:
+        name: vcenter_deregister_rack
+        tasks_from: filter_hostlist_vcenter_deregister.yml
+
+- name: "Create TR for vcenter deregister"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+        
+    - name: TR creation for vcenter deregister
+      ansible.builtin.import_role:
+        name: vcenter_deregister_rack
+        tasks_from: create_tr_vcenter_deregister.yml
+
+- name: "deregister server from vcenter"
+  hosts: esxideco_rack
+  gather_facts: no    
+  # vars:
+  tasks: 
+    - name: vcenter deregister
+      ansible.builtin.import_role:
+        name: vcenter_deregister_rack
+        tasks_from: vcenter_deregister_main.yml
+      when: vcenter_cleanup == "F" and dcm == "T"         
+
+- name: "Add info to TR for vcenter deregister"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: vcenter deregister
+      ansible.builtin.import_role:
+        name: vcenter_deregister_rack
+        tasks_from: add_info_vcenter_deregister.yml

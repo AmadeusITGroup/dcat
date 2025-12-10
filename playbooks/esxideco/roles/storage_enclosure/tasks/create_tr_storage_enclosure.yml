@@ -1,0 +1,284 @@
+---
+- name: Execute Create TR task
+  block:
+
+    - name: esxi_host list
+      shell: cat host_list_enclosure_storage.yml
+      delegate_to: localhost
+      register: hostlist_esxi             
+
+    - name: save the esxi list to a Variable as a Fact
+      set_fact:
+        esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+      delegate_to: localhost 
+
+    - meta: end_host
+      when: esxi_hostlist == ""    
+      
+
+    - name: "Custom module [CREATE TR]"
+      create_tr:
+        record_type: "TR"
+        title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO  - Storage Cleanup - Enclosure"
+        assignee_name: "DecoP112686"
+        assignee_group: "OSX04SMG"  
+        severity: "3"
+        overview: "CSTY:DECO:DCAT: ESXi DECO - Storage info"
+        parent_id: "{{ cr }}"
+        username: "{{ winaproach_username }}"     
+        password: "{{ winaproach_password }}"
+      delegate_to: localhost
+      no_log: False
+      register: create_tr_output
+
+    - set_fact:
+        record_id: "{{ create_tr_output.record_id }}"
+
+    - copy:
+        content: '{{ record_id | to_json }}'
+        dest: record_encl_stg.json
+      delegate_to: localhost
+
+    - name: Adding documentation tag
+      tr_documentation:
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+        win_url: "{{win_url}}"
+        task_id: "{{ record_id }}"
+      register: add_document
+      delegate_to: localhost
+
+  rescue:
+    - debug:
+        msg: "Failed to Create ESXi Enclosure Storage DECO - TR"
+
+
+
+- name: Retry Create TR for ESXi Enclosure Storage - Attempt 1
+  block:
+    - name: esxi_host list
+      shell: cat host_list_enclosure_storage.yml
+      delegate_to: localhost
+      register: hostlist_esxi             
+
+    - name: save the esxi list to a Variable as a Fact
+      set_fact:
+        esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+      delegate_to: localhost 
+
+    - meta: end_host
+      when: esxi_hostlist == ""
+
+    - name: Display the JSON file content
+      shell: cat record_encl_stg.json
+      delegate_to: localhost
+      register: TR_result
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        storage_record_id: "{{ TR_result.stdout[1:-1] }}" 
+      delegate_to: localhost
+
+    - name: Sleep for 20 seconds and continue with play
+      ansible.builtin.wait_for:
+        timeout: 20
+      delegate_to: localhost
+      when: storage_record_id == "" 
+
+    - name: "Custom module [CREATE TR]"
+      create_tr:
+        record_type: "TR"
+        title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO  - Storage Cleanup - Enclosure"
+        assignee_name: "DecoP112686"
+        assignee_group: "OSX04SMG"  
+        severity: "3"
+        overview: "CSTY:DECO:DCAT: ESXi DECO - Storage info"
+        parent_id: "{{ cr }}"
+        username: "{{ winaproach_username }}"     
+        password: "{{ winaproach_password }}"
+      delegate_to: localhost
+      no_log: False
+      register: create_tr_output
+      when: storage_record_id == "" 
+
+    - set_fact:
+        record_id: "{{ create_tr_output.record_id }}"
+      when: storage_record_id == "" 
+
+    - copy:
+        content: '{{ record_id | to_json }}'
+        dest: record_encl_stg.json
+      delegate_to: localhost
+      when: create_tr_output is defined
+
+
+    - name: Adding documentation tag
+      tr_documentation:
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+        win_url: "{{win_url}}"
+        task_id: "{{ record_id }}"
+      register: add_document
+      delegate_to: localhost
+
+  rescue:
+    - debug:
+        msg: "Retry 1 Failed - ESXi storage enclosure DECO TR"
+
+
+- name: Retry Create TR for ESXi blades healthcheck - Attempt 2
+  block:
+
+    - name: esxi_host list
+      shell: cat host_list_enclosure_storage.yml
+      delegate_to: localhost
+      register: hostlist_esxi             
+
+    - name: save the esxi list to a Variable as a Fact
+      set_fact:
+        esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+      delegate_to: localhost 
+
+    - meta: end_host
+      when: esxi_hostlist == ""
+
+    - name: Display the JSON file content
+      shell: cat record_encl_stg.json
+      delegate_to: localhost
+      register: TR_result
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        storage_record_id: "{{ TR_result.stdout[1:-1] }}" 
+      delegate_to: localhost
+
+    - name: Sleep for 20 seconds and continue with play
+      ansible.builtin.wait_for:
+        timeout: 20
+      delegate_to: localhost
+      when: storage_record_id == "" 
+
+    - name: "Custom module [CREATE TR]"
+      create_tr:
+        record_type: "TR"
+        title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO  - Storage Cleanup - Enclosure"
+        assignee_name: "DecoP112686"
+        assignee_group: "OSX04SMG"  
+        severity: "3"
+        overview: "CSTY:DECO:DCAT: ESXi DECO - Storage info"
+        parent_id: "{{ cr }}"
+        username: "{{ winaproach_username }}"     
+        password: "{{ winaproach_password }}"
+      delegate_to: localhost
+      no_log: False
+      register: create_tr_output
+      when: storage_record_id == "" 
+
+    - set_fact:
+        record_id: "{{ create_tr_output.record_id }}"
+      when: storage_record_id == "" 
+
+    - copy:
+        content: '{{ record_id | to_json }}'
+        dest: record_encl_stg.json
+      delegate_to: localhost
+      when: create_tr_output is defined
+
+    - name: Adding documentation tag
+      tr_documentation:
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+        win_url: "{{win_url}}"
+        task_id: "{{ record_id }}"
+      register: add_document
+      delegate_to: localhost
+
+
+  rescue:
+    - debug:
+        msg: "Retry 2 Failed - ESXi Enclosure Storage DECO TR"
+
+- block:
+
+    # ------------------------
+    # Set cleaned ESXi host list
+    # ------------------------
+    - name: Set cleaned ESXi host list
+      set_fact:
+        esxi_host_list: "{{ hostlist_esxi.stdout_lines | map('regex_replace', ',', '') | list }}"
+      when: storage_record_id != ""
+
+    # ------------------------
+    # Build TR message content
+    # ------------------------
+    - name: Build TR message content
+      set_fact:
+        form1: "***********************************************************************"
+        form2: |
+          For DCAT ESXi host requests
+
+          Dear Storage teams.
+
+            TR for
+
+            1) Enclosure Storage Cleanup
+
+            2) Storage cleanup for all blades inside the enclosure
+
+        form3: "***********************************************************************"
+        form4: "All blades in the below Enclosure have been successfully decommissioned; please proceed with Storage cleanup of the Enclosure and its Blades"
+        form5: "***********************************************************************"
+        form6: "***********************************************************************"
+
+    # ------------------------
+    # Combine content into single fact
+    # ------------------------
+    - name: Combine all content into one fact
+      set_fact:
+        content_storage_succ: "{{ form1 + '\n' + form2 + '\n' + form3 + '\n' + form4 + '\n' + form5 + '\n' + form6 + '\n' + (esxi_host_list | join('\n')) }}"
+      when: esxi_host_list | length > 0
+
+    # ------------------------
+    # Update WinAproach task
+    # ------------------------
+    - name: Update WinAproach task
+      winaproach:
+        system: prod
+        type: task_record
+        operation: update_overview
+        username: "{{ winaproach_username }}"
+        password: "{{ winAproach_password }}"
+        fields:
+          task_id: "{{ record_id }}"
+          text: "{{ content_storage_succ }}"
+      register: update
+
+
+    - name: Read private endpoint JSON
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      run_once: true
+      register: result_private_endpoint_connection_string
+      when: update.json.status == "SUCCESS"
+
+    - name: Set private endpoint connection string
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      run_once: true
+      delegate_to: localhost
+      when: update.json.status == "SUCCESS"
+
+    - name: Update DECO server entries for Enclosure storage
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{ item }}"
+        module_name: "san_info_fetch"
+        status: "T"
+      register: update_status
+      loop: "{{ esxi_host_list }}"
+      delegate_to: localhost
+      when: update.json.status == "SUCCESS" and esxi_host_list | length > 0
+
+  rescue:
+    - debug:
+        msg: "Failed in TR creation for enclosure storage"

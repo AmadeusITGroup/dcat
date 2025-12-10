@@ -1,0 +1,24 @@
+---
+- name: "VM master playbook"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    # - name: "Check entry for DECO server"
+    #   update_ref:
+    #     hostname: "{{inventory_hostname}}"
+    #     artifacts_user: "{{ artifacts_user }}"
+    #     artifacts_password: "{{ artifacts_password }}"
+    #     state_file_url: "{{ state_file }}"
+    #     lookup_file: "{{ lookup_file }}"
+    #   register: idem_status
+    #   delegate_to: localhost
+      
+    # - set_fact: 
+    #     backup_remove: '{{idem_status.module_update.backup}}'
+ 
+    - name: Get Vcenter Information
+      ansible.builtin.import_role:
+        name: vcenter_fetch
+        tasks_from: vcenter_details_after_graceperiod.yml
+      when: (backup_remove == "T") and backup_remove is defined

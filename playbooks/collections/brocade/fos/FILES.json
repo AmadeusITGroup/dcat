@@ -1,0 +1,1139 @@
+{
+ "files": [
+  {
+   "name": ".",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "README.md",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ff778a7b56e3fc6abc457856b093d76b02fdf32563d55c14c0faf063d0e3b5dd",
+   "format": 1
+  },
+  {
+   "name": ".gitattributes",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "621e92f04511dfc1ee1b5db85b908a00e8a5a3a9804be129c153092aa45b5e1e",
+   "format": 1
+  },
+  {
+   "name": "roles",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "roles/.keep",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "format": 1
+  },
+  {
+   "name": "test_version_matrix.rst",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "c68631c5e86669c6a1f51dd13808656f6b4c0711bafe9110e51431adb2ba9da9",
+   "format": 1
+  },
+  {
+   "name": "CONTRIBUTING.rst",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ba11f58faae8a31e241e4b5766b0c8bd38d93c293893b3b85d5c0785742c072a",
+   "format": 1
+  },
+  {
+   "name": "docs",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "docs/requirements.txt",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "f1547dca418b71b6769cd8f95f13bcecaa82e7cabd5c860c009747d800d9720b",
+   "format": 1
+  },
+  {
+   "name": "docs/index.rst",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "f342367774be5f4d55bed6a8be9dd405a1fdae5fca5c6979608e570144775eae",
+   "format": 1
+  },
+  {
+   "name": "docs/conf.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "8ece457b8bf5e7f7cb49c1f04e1fdfcdd9e5e4545c932f30cacd394650030eca",
+   "format": 1
+  },
+  {
+   "name": "docs/_static",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "docs/_static/test_version_matrix.rst",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "c68631c5e86669c6a1f51dd13808656f6b4c0711bafe9110e51431adb2ba9da9",
+   "format": 1
+  },
+  {
+   "name": "docs/_static/CONTRIBUTING.rst",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ba11f58faae8a31e241e4b5766b0c8bd38d93c293893b3b85d5c0785742c072a",
+   "format": 1
+  },
+  {
+   "name": "docs/_static/README.rst",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "163e3f420339f1a6bef53ee708ad1b97bfe065ebe89b7ec12e9b936fdee0d399",
+   "format": 1
+  },
+  {
+   "name": "docs/fos-ansible.rst.j2",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "9096e2a442dff3f2808011a1a5c8ee36ba43fcd1d7f89116f196bb714a7e9447",
+   "format": 1
+  },
+  {
+   "name": "docs/Makefile",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "8b6587b859607f200f116e2cb043fc358e1c3a26c326b563bf348453cfc68307",
+   "format": 1
+  },
+  {
+   "name": "docs/.gitignore",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "bddb72c59ff1696e441688d1a1d861a74e128980d28c8803e2f4ff4aeab1b15c",
+   "format": 1
+  },
+  {
+   "name": "README.rst",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "163e3f420339f1a6bef53ee708ad1b97bfe065ebe89b7ec12e9b936fdee0d399",
+   "format": 1
+  },
+  {
+   "name": "meta",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "meta/.keep",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "format": 1
+  },
+  {
+   "name": "meta/runtime.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "df18179bb2f5447a56ac92261a911649b96821c0b2c08eea62d5cc6b0195203f",
+   "format": 1
+  },
+  {
+   "name": "playbooks",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_copy.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ce6a2bf5e82ea3bd05f050e648b46339cfb2e3c4c792a8d13df406a1ed2a1459",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/snmp_reset.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "3e755b9cf028b882604175419bcd1661539930e1b43edd103a5d7c8310e54e51",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/maps_policy.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "5a5bc73c70ef4b8a5ba1f820587c5e8b70b07b1d4367aee78f876ad8c3c4b455",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_to_yml.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "cb36977f217880742badb3fe12499aba877945960584465e6e5ef2a9b384e56d",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_migrate.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "4cd7acccd98aa6d44d83998e29358fb060ab959e495a421ea3e6d2a45a9e9336",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/facts_ldap.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "33a5e65cf9c189602c314413c9bde43010849c583c0d4c0a6d38d19d5ff012fc",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/ag_port_config_load_bal_off.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "725ae265076325ae395aafbf56a4bfe5ac3446aafdcf31578a038dcb90ad32c4",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/password.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "3d615a87ab8247cda063df4e2d64254da720eb1b64a7204fe751e039403522e5",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/ag_n_port_settings.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "cc26b25d4213990cde147ecda1a8e3df2f8001c6459816d1c7cc4156e65a835b",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_act.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "f108ddef07d66f9399abedf45be4cca2d79910ef4f0cdb5b23ccf46d2dc2fdb1",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/maps_policy_delete.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "2fe2d9cdc567f2bc401ca28712a9446315f5a4d00a00f98839469334304f5128",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/ag_enable.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "81f536846fff0157afb13c7289a360dfa1d2642bfaedb627eff8cca43e723731",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/switch_change_all.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "63a23f09ebe0f6b1fc844183e00cb0606f7ccaac3c767d79eec9d3175271acfc",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/sshutil_public_key_delete.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "b6a133414513655cfa5bbfb50e286fd84244220f9f06cd745fa9ea4048282931",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/maps_rule_policy.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "338636f2d47615b1a85ed5de0ad1ab30be717fe2837fee43bbac1999ae90c94a",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/snmp.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "170e7097702a6f8a0ccda3585d319d8689f21e10e1f819c621d83e390914defe",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/portname.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "99766ea6ada0ddd6c9bbcbdd6c8054e263cf5117652d14804bb52ecc0d90525d",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/ag_disable.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "6e7530a72233ea7ace094ad4b9d43c483b17b9e2b5cef6a20626f14e8b581add",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/ldap_server.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "64f95284594fd3f57552e4185778e8d187d5b9ed99bb0280af9e256a5b2848cc",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zonedb.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "c735df30317eadfcf1749e4e9a3e7be05145271fa0e62bc11db116ac08e1b08b",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/ag_policy.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "21ff3acdcc8cc76d1b03a4318beba02123bc9fe3cb8c567d951ad974f9b06f68",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/cert_install.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "81b9fa1214e86b47f1de4fcb0a4f6469e061469e13eb6201fa8c4f984d9dccc9",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/find_ns_by_pwwn.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "6d19f4c5142bef2de40827fc03d77fbd47245f70aa726cb8048fb5aeb2ee5f58",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/logical_switch.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "9bd1988490aaef404164faaebd7f465e25450fcfe871402f6103828c625a370e",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_zone.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "31b659ed6c1c16c608b92ac8a38ee56b3d6bb6485a01eb4e4f3172b75972e375",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/ldap_role_map.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "c003ce414d5a30b5f677d8fa83949663763f69a0e4b3f717603cd672c5f893b0",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/firmwaredownload.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "4006a4a36bf3cddf2c37c22393a11d3c517457d4c2a5890505fac9f1ff8f1a36",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/template_switch_change_all.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "4bf9ceb549e1c4bd10d7ccc747f9b8ab381b1cfbf4b0dbdc5acd7337efc20f94",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_zone_add.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "337dc241914e8000fd3ed2186baf920e9d162f1b2c842b098309963cb244a707",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_cfg_disable.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "a362ef7e65afac6751bf502b462628af4a7b4399bde7d730653b43b26efb8add",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/facts_relay_server.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "768122d350fd006d8a821b2e1eb9b3e9b0f0b8e99508dd12a567bd9e5afae6cb",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/sec_crypto_cfg_template_export.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "9d566a3b185d344e4ea0f11c01902a8579c45ad7e1c98e7ce23387a3be8c6562",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/switch_initial_config.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "91f9750f5b4e3a2fddfe879e3ea098186202b14237c7889cda5ed1f263ec559c",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/find_fc_by_name.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "50c1927d695024f0b460bc883affe70fe2f62dcc0f209383e4ddbb3e731e3dba",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/facts_maps.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "63e1c06ec125ef8d516538b3340e9b692a401afe792de7f9708140c38256604d",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_zone_add_remove.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "6bb8f725e691d96cfe61163066daf356999b880868ae46ec9634827e9e9e9da7",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_zone_members_add_only.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "5cdad81d201fd1bff1fd99b73135726c5a90b4a237610eabcaa643b17cb9f310",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/facts_logical_switch.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ea89ec7ee4f85c3c43ca24c4b8aa8991aacb0175dcd98daaf6ffae197e8161de",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/facts_snmp.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "9bf7a349db0b9c4a9dd27ffc86eaeba256099fef77eb44fb173267db5a3719d0",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/facts.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "3558582756d5916b346ff6e2b236a16cbe135d5ef9906e971600660951a1aaca",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/facts_security_certificate.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "6d86a225ddc79875d4cfbc3468e754edf90c3a9d5cd6ffcf74ae29ac26653fc5",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/sec_crypto_cfg_template_import.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "485a49cb71f057fffb383c16af2e0be01f13adf8973d7714d9fb1101f326718b",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/relay_server.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "71f9f6b6d8539d8e56a1df0150d1d4a458e979c4d4fa74dee9f589d0362a8864",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/sshutil_public_key_import.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "996adc27d41d3c194352d55b34c85d421d6676fad75c9e071f772bbd1628817a",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_zone_remove.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "97af3efc259f47239ed47a963d1e6f972293585e9818f73b929a0ad2c0b8224a",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/facts_ag.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "b9933c7d28fcd9eb232a4f47a641710965ec1f2c3cd054c2c941cf6c0e060d34",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/maps_rule.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "db56c2bf238f2711afb363270a6962b575e5195c722e257cd8152df1b3782d1d",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/supportsave.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "6897706b20f33f744cfaea329f6a39c97b41fb1349e6deb7dfe507a73296ab3f",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/facts_sec_crypto_cfg_template.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "5ba7782a555e667b08d372313da846c40f3f2086af5327b1b7e6e8d76f922e11",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/ag_port_config_load_bal_on.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "d78c5d6bb5231e026cc2176d20a7fe08eb94074c8762431ae7bbbee0109ebf41",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_zone_members_remove_only.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "476cd6cb6fd2c85651643e1dd89c0aabde49df687230992abe75c6a387bba39d",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/showstatus.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "4fe3a5bcb3fd6df23d78a84a023b2b8b0747faf7856692ad21957454b8c5bd5c",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/template_facts.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "f3ccb99a866078c5fc21a74086752020b8f2de6a813f2672b39091efdebf5747",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/zoning_zone_delete.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "bc10de4918d150c01e5b94405d07646670988142683550f722de077924b0ff11",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/snmp_access_control.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "6e7e6e366a70ae1a40f5dd5952103f8c641e7be727291c16a5adf1d2ab6e922e",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/template_facts_all.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "fb38e17b263ce1514ae77c1612b218f223dd29fe3cd4448a43f0676beec15678",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/sec_crypto_cfg_template_apply.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ab35a0460d58a8909a7b7e399dfde963806e95ef97dac723ac9a6e586fdb0f43",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/find_ns_by_ptype.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "c471fbbf6c648afa5581ee14ac71ff2e5b68fa23c55f979faceb9b326eb0c104",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/csr_gen_export.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "cdd6b251c8f6e6bdaf557fb621f273f2e62f5dc789abb39381979cc4eb628fe7",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/ansible.cfg",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "bfebe1797026bde2865e975cad065c72ec9cbce85de2b6ffce989c5214657092",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/facts_sshutil_public_key.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e74fd65df8eb46902b54bc948823f492b787ab972e115e52d4705def1d704c96",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/template_switch_initial_config.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "312eb5a28d86e587d0769d81f762807d4229d1159a2d0adf23976cf17b46c7b0",
+   "format": 1
+  },
+  {
+   "name": "playbooks/tasks/find_ns_by_pid.yml",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "6551498be95a6eb51d68373450fa35cecfc2782259cba43d96f5780a874312d4",
+   "format": 1
+  },
+  {
+   "name": "playbooks/vars",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "playbooks/vars/.keep",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "format": 1
+  },
+  {
+   "name": "playbooks/files",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "playbooks/files/.keep",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "format": 1
+  },
+  {
+   "name": "playbooks/roles",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "playbooks/roles/.keep",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "format": 1
+  },
+  {
+   "name": "playbooks/san-inventory",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "b11a3325d6e2172e27f2ec3ee5d0411cf901f75f62f3c29962bf9e82b1646f93",
+   "format": 1
+  },
+  {
+   "name": "playbooks/templates",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "playbooks/templates/.keep",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "format": 1
+  },
+  {
+   "name": ".gitignore",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "d225ac980442bc843f7725635221eed0358a72cab4e73895fe6bf02e6adb942f",
+   "format": 1
+  },
+  {
+   "name": "plugins",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "plugins/modules",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_zoning_default_zone.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "9294ffd82d6d6a152fcdc3af1162d9054af2d458e7c657bb829cce960e6670ab",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_list_obj.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "6d7e0a2986679fc0c9a4ebb48a2f821fb4c22a1d31f7b529c2e6a7db7514f76e",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_snmp_v1_account.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "c1c5bf40f3588c4a3ab6f7d032626072d323b84d64c45734a53b684d1b52e84e",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_fibrechannel_logical_switch_fibrechannel_logical_switch.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "8be50b43583e9c1136d7914550e4652ab76aa4e646f187c4278d1b0c60de1be5",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_time_time_zone.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ffb926a0985736e9cb9683d650443cee44c0e8b2a550c3b6f0f9fbd6cb0207e1",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_singleton_obj.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "5825189de3a11c2dcbff06c7906a9c3a6f86682eb5b27fa0548288ea23336cc3",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_maps_maps_policy.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "a65f500f00d2ad11fadc4792c35214e3682df8a79257485e0c8547584e7a36fb",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_security_ipfilter_rule.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "8890b35ef89fac3df34e280bb8c4f0ccfd532a91179a865f99bc0224b9dd6eb2",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_security_security_certificate_generate.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "fd6491bd2b550d0b444b9d6a53931c71314d647e5a679c4ea053990bb9a9e07f",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_snmp_v3_trap.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ba2f1383f7678d2195ef13f768812f7fb47aa4e034ebbd9c3fd0c630b20694a7",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_fibrechannel_configuration_fabric.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e755705b05929f41923001e7ebf6c28997b8f2901c2e15d9999cfd1455cc851b",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_security_user_config.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "c89c6cbcf9110e54d325fe9f854a5954e8027215774e8c802c39dc1358df529f",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_time_clock_server.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "69ac6c052cc1c46a0b39b6c1679284496e55de0e36f585b2cf80523bb68f6b7c",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_fabric_switch_facts_by_pid.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "78ccdebdba03db4722aa8f3a3f8048374bbe214d66f86c3ccd9436332020b419",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_security_ldap_role_map.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e1e467a692c937f96e9cb7002c33d7624e38aba3c6ebefd4d6119adba5c19d15",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_snmp_system.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "714fc8c7af5ff5d70b3a5f586b1746888e083dfec5a20df420cdde54de823085",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_snmp_v3_account.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "f38e681986ed39d7619bf9e63511e5d9c1372353844d280556029617127f7f44",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_access_gateway_n_port_map.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "6ac5fe21be84243890b2fa54bc34fd4fb81815396ae93a5752a0486ef5b728b1",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_security_sshutil_public_key_action.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e53be2acd43b28363d92363e0d64366b0de8ab4ca1a221f3a6b7c93bb25d9a18",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_zoning_zone.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "602f85567e3518cdf59f420a02d77bb18e48332501e5e20aeba798233032d2c6",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_operation_supportsave.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "9db8f43987c34832b0383ea2846f9c56bb59de79645feb232b62c3c6fbc4e23b",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_logging_syslog_server.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "c09633e7ae25a2e84b045e07fb64625bdf29453c3ff11ffa7227b95717346763",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_access_gateway_n_port_settings.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "72aeacc0692910151ea61f0996a5b25974d96624a30253fd94fecaa07edeffff",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_interface_fibrechannel.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "2979241c178510822afcf800d0f3145b97ea1a59a6bd7473690eb65e6491e6dd",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_zoning_alias_facts_by_wwn.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "3f1ca4973c39e5dbf03cbd6a69e73c3fefa3a3854f03b94418345f1f734dc5f8",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_access_gateway_port_group.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "f2596226e7721c37a06797fb5ed87f869d8930be1e8fbf95717ab6633216f76a",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_zoning_alias.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "90fa5da00a63c438ef108fd4ae26685f0174330009cf2cc0b06afccd8610e514",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_security_security_certificate_action.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "44a15c4741a268e5dada907da4d03e6235bdfdc1526caaaa7c8a224964e711ca",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_snmp_v1_trap.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "c774fe06b3473b6732bce0a6e9c23954e7aff63d37272077f70b5d5e4f3a88d6",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_chassis.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "7557c347261d7709218dc84db93a9516f424c297330eb09a35410365b1ff51f8",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_singleton_obj_facts.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "04eaf19366fd0253d044cf992547765a966b129877dacdb1b7ee91eb4a526739",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_maps_maps_config.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "bf31bd3cabd10da29e459b2189e60193420ff482328d39095f9a441f689ac1d0",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_zoning_cfg.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e48f2d3426d5c1d33dcb7acfbd49672cc993e63b7bcb705449853878f561ca20",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_zoning_cfg_disable.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "16df49b334939e3928f8adcee124c68598e785582fc7f5af7a56cfdfd4605b79",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_facts.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "b4dfb41ab4e835f0e76d237242c17618cccdbad506f6e2c26b863ffb11ea8961",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_security_ipfilter_policy.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "eda2c951c41bca7e49e5d09a664de7cbcc5c629cab68dd3307c6796eb19133b7",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_fibrechannel_switch.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ea8db0a6b6b465f2fdff5dd45a1c4240160d30872e8b8bbe3117041375c659cc",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_security_password.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "3be5a1e52c9fa3d47bfe889e5a34128face823bc1258398ae6e58c41bbab1b6a",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_logging_audit.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "4ba476ef3003c94e0f2869cc23a34138f88a7c6cda4c4b94770d4257b3c66baf",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_maps_rule.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "1120e797e6782ba17b0cd7dc7e732fbf8423c542804917c7cb51aa68cce39276",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_operation_show_status.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "45bbed02f806a3a58bd90c2878c168e278534e8e7c8df431d713ad08f8d5647e",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_access_gateway_policy.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "48c5e4cdad0322affe7a4d4d6f107b7c2191cbe2b7be6361250195ed93c162d3",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_fibrechannel_configuration_port_configuration.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "b09260e2ba3f85ab936bfce41196a4965976abc4fe2ee23eed12680aea1daa28",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_security_sshutil_public_key.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "29a04839cb6883643961a9aa538ee3d2f5b29803d0389a4c37e15edc3d1ab3d6",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_zoning_copy.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "09c519a25b3f7719795536170a7b9cb92285a0eac39afd357414801e1a046d2d",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_list_obj_facts.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "641b32a1b3a7cf45554af6a9369ad330fec7d592104c0187b00f5e8c91677e28",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_operation_firmwaredownload.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ebd82e7f4b4621babe8ed11e8b3f778b60f6173f4ba96ef28ad371ec01bc694e",
+   "format": 1
+  },
+  {
+   "name": "plugins/modules/brocade_security_sec_crypto_cfg_template_action.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "25d3dbcd307d38225efc13c2ab44358d09d931428cbf345a8dbc3397b2945a74",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils",
+   "ftype": "dir",
+   "chksum_type": null,
+   "chksum_sha256": null,
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_zoning.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "05ada044278a5e7e1abf36f699d2ba56b97eb5eb6a9f7e5310b10c22975b56f6",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_objects.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "54baf565151ce8d90bd863057377ea621f1e9680e7d0c4ef57e7c0aea4a61237",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_url.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "8557c8189836cc147381efd28c22051d9e241d30aa3b9adf16b391e1d028baf4",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_fibrechannel_configuration.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "da4d635cec7002433c692e4b9c64e8651b2aa00433153c77d832baa807ba0d2f",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_access_gateway.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "268fca26bd8685ca10e9fc1b4d289f2b94873bc827eeafedfbfc8873a97e5a77",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_security.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "57e0822abd7c9d15c06904e344ef34e16b8ce7566f15add8c85575818df03f60",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_xml.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "ff54ab6c52ba20b35829dea7206e625a15886d9e45afe6de619c11e8a625152d",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_connection.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "bf4f8973ff99b2b960b5f98732ab34eaeb22185f7c0dc98f92a82913a78d10f2",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_interface.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "dda3517d622a0886a845fefd9879af71a151d21e5fe77b772f2f1e9114c08410",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_snmp.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "80800acebaac4fd42cde40970542ecf89809fb1f7f6167dce474cb23ca1ef761",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_ssh.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "3c7bbd26b1e89981fcfc8584fca307f962c004ac08de1df1453db0a60d19ca0b",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_chassis.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "e474e0f8281f748476d7f910e278a063086840b29a91455fb395b4f84e90ff8a",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_yang.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "33513aecb03d994848cb8078c13f8b521886634f96d5503de0723aa636309ac9",
+   "format": 1
+  },
+  {
+   "name": "plugins/module_utils/brocade_fibrechannel_switch.py",
+   "ftype": "file",
+   "chksum_type": "sha256",
+   "chksum_sha256": "b3dc1ee3af1bd9ab7f4dcbce0786d016c60079caed55b200137273c16b60c698",
+   "format": 1
+  }
+ ],
+ "format": 1
+}

@@ -1,0 +1,54 @@
+---
+- name: "DTS cleanup"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: dts cleanup
+      ansible.builtin.import_role:
+        name: dts_cleanup
+        tasks_from: filter_hostlist_dts_cleanup.yml       
+
+- name: "Create TR for dts cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: True
+    nas_check: "F"
+    filter_domain: "DTS"
+    backup: "T"
+  tasks:
+    - name:  Create TR for dts cleanup
+      ansible.builtin.import_role:
+        name: dts_cleanup
+        tasks_from: create_tr_dts_cleanup.yml
+
+- name: "dts cleanup"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no
+  tasks:
+    - name: dts cleanup
+      ansible.builtin.import_role:
+        name: dts_cleanup
+        tasks_from: nas_dts_server_info.yml
+      when: (filter_domain == "DTS") and filter_domain is defined and (nas_check == "F") and nas_check is defined and (backup_remove == "T") and backup_remove is defined
+
+- name: "Update TR for dts cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: True
+    nas_check: "F"
+    filter_domain: "DTS"
+    backup: "T"
+  tasks:
+    - name: dts cleanup
+      ansible.builtin.import_role:
+        name: dts_cleanup
+        tasks_from: add_info_dts_cleanup.yml
+
+    - name: dts cleanup
+      ansible.builtin.import_role:
+        name: dts_cleanup
+        tasks_from: logger_dts_cleanup.yml

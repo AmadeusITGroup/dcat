@@ -1,0 +1,486 @@
+    - block:
+
+        - set_fact:
+            oview_lxca_success: "oview_lxca_success.yml"
+            oview_lxca_failure: "oview_lxca_failure.yml"
+
+        - name: Fetch ESXi details if HP Blade
+          enclosure_synergon_data_fetch:
+            enclosure: "{{ inventory_hostname }}"
+            synergon_api: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+          delegate_to: localhost
+          register: esxi_data   
+          # when: esxi_type == 'HPBlade'
+
+        # - name: Set fact for ESXi cluster
+        #   set_fact:
+        #     serial_number: "{{ esxi_data.esxi_details[0].serialNumber }}"
+
+        - name: Set fact for ESXi cluster
+          set_fact:
+            serial_number: "{{ esxi_data.esxi_details[0].serialNumber | trim }}"
+
+
+        - name: Set domain based on vcenter
+          set_fact:
+            domain: "{{ '.clfra1.net' if esxi_data.esxi_details[0].vcenter == 'fracol1vcsa1' else '.muc.net' }}"
+
+
+
+        - name: Set fact for iLO hostname for HP blades
+          set_fact:
+            ilo_hostname: "ilo{{ serial_number }}{{ domain }}"
+
+
+        # - name: Execute iLO snmp command and save output to temporary file
+        #   ilo_commands_esxi:
+        #     hostname: "{{ ilo_hostname }}"
+        #     username: "{{ domain_username }}"
+        #     password: "{{ domain_password }}"
+        #     command: "show /map1/snmp1"
+        #     temp_file: "/tmp/ilo_output.txt"
+        #   register: ilo_output
+        #   delegate_to: localhost
+        #   # when: esxi_type == 'HPBlade'
+
+        - name: Execute iLO snmp command and get output
+          ilo_commands_esxi:
+            hostname: "{{ ilo_hostname }}"
+            username: "{{ domain_username }}"
+            password: "{{ domain_password }}"
+            command: "show /map1/snmp1"
+            temp_file: "/tmp/ilo_output_{{ inventory_hostname }}.txt"
+          register: ilo_output
+          ignore_errors: true   # ensure play continues even on failure
+          delegate_to: localhost
+
+        - name: Get timestamp for failure logging
+          shell: "date +%Y-%m-%d/%H:%M"
+          register: tstamp
+          delegate_to: localhost
+          when: 
+            - ilo_output is defined
+            - >
+              (
+                (ilo_output.msg is defined and 'failed' in ilo_output.msg.lower()) 
+                or 
+                (ilo_output.status is defined and 'failed' in ilo_output.status.lower())
+              )
+
+        - name: Log iLO command failure
+          shell: |
+            echo "{{ inventory_hostname }}, {{ tstamp.stdout }}, [ERROR] - [ILO] -{{ ilo_output.msg | default(ilo_output.status | default('ILO error')) }}" >> {{ oview_lxca_failure }}
+          delegate_to: localhost
+          when: 
+            - ilo_output is defined
+            - >
+              (
+                (ilo_output.msg is defined and 'failed' in ilo_output.msg.lower()) 
+                or 
+                (ilo_output.status is defined and 'failed' in ilo_output.status.lower())
+              )
+
+        - meta: end_host
+          when: 
+            - ilo_output is defined
+            - >
+              (
+                (ilo_output.msg is defined and 'failed' in ilo_output.msg.lower()) 
+                or 
+                (ilo_output.status is defined and 'failed' in ilo_output.status.lower())
+              )
+
+
+
+
+        # - name: Extract OneView address from temp file
+        #   set_fact:
+        #     oneview_address: "{{ lookup('file', '/tmp/ilo_output_' + inventory_hostname + '.txt') | regex_search('accessinfo1=(.*)', '\\1') }}"
+
+        # - name: Extract OneView address from temp file
+        #   set_fact:
+        #     oneview_address: >-
+        #       {{ lookup('file', '/tmp/ilo_output_' + inventory_hostname + '.txt')
+        #         | regex_search('accessinfo1=(.*)', '\1')
+        #         | trim }}
+
+        - name: Extract OneView address from temp file
+          set_fact:
+            oneview_address: >-
+              {{ (lookup('file', '/tmp/ilo_output_' + inventory_hostname + '.txt')
+                | regex_findall('accessinfo1=(.*)'))[0] | trim }}
+
+
+
+
+        # - name: Extract the required information from the temp file
+        #   shell: "grep 'accessinfo1' /tmp/ilo_output.txt | awk -F '=' '{print $2}'"
+        #   register: extracted_info
+        #   delegate_to: localhost
+          # when: esxi_type == 'HPBlade'
+
+        # - name: Debug the result
+        #   debug:
+        #     msg: "OneView Address: {{ extracted_info.stdout }}"
+
+
+        - debug:
+            msg: "OneView Address: {{ oneview_address }}"
+
+        - name: Update DECO entry if oneview not found
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{ inventory_hostname }}"
+            module_name: "oneview_xclarity_removal"
+            status: "T"
+          register: update_status_info_state
+          delegate_to: localhost
+          when: oneview_address | string == "0"
+
+        - name: Update DECO entry if oneview not found
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{ inventory_hostname[:-3] }}"
+            module_name: "oneview_xclarity_removal"
+            status: "T"
+          register: update_status_info_state
+          delegate_to: localhost
+          when: oneview_address | string == "0"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          run_once: true
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          run_once: true
+
+        - name: Log Success for Server Profile Deletion
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Server profile has been deleted manually." >> {{ oview_lxca_success }}
+          delegate_to: localhost
+          when: oneview_address | string == "0"
+
+
+        - meta: end_host
+          when: oneview_address | string == "0"
+
+
+        # - name: Set OneView address fact
+        #   set_fact:
+        #     oneview_address: "{{ extracted_info.stdout }}"
+          # when: esxi_type == 'HPBlade'
+
+        - name: "update entry for DECO server for oneview"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "oneview_xclarity_info"
+            status: "{{ oneview_address }}"            
+          register: update_status_info_state
+          delegate_to: localhost
+
+        - name: "Update entry for Enclosure for OneView"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{ inventory_hostname[:-3] }}"
+            module_name: "oneview_xclarity_info"
+            status: "{{ oneview_address }}"
+          register: update_status_info_state
+          delegate_to: localhost
+
+
+# Powering it off  from ILO
+        - name: Power off server using iLO command
+          ilo_commands_esxi:
+            hostname: "{{ ilo_hostname }}"
+            username: "{{ domain_username }}"
+            password: "{{ domain_password }}"
+            command: "power off"
+            temp_file: "/tmp/ilo_poweroff_output.txt"
+          register: ilo_poweroff_output
+          delegate_to: localhost
+
+        - name: Get OneView session token (with retries)
+          uri:
+            url: "https://{{ oneview_address }}/rest/login-sessions"
+            method: POST
+            body_format: json
+            body:
+              userName: "{{ domain_username }}"
+              password: "{{ domain_password }}"
+              authLoginDomain: "msp.net"
+            headers:
+              Content-Type: application/json
+            return_content: yes
+            validate_certs: false
+            status_code: 200
+            timeout: 60
+          register: login_response
+          retries: 5
+          delay: 10
+          until: login_response.status == 200
+          delegate_to: localhost
+          # when: esxi_type == 'HPBlade'
+
+
+        - name: Extract session token
+          set_fact:
+            oneview_auth_token: "{{ login_response.json.sessionID }}"
+          # when: esxi_type == 'HPBlade'
+
+
+        - name: Get blade by serial number
+          uri:
+            url: "https://{{ oneview_address }}/rest/server-hardware?filter=serialNumber='{{ serial_number }}'"
+            method: GET
+            headers:
+              auth: "{{ oneview_auth_token }}"
+            validate_certs: false
+            return_content: yes
+            status_code: 200
+            timeout: 30
+          register: filtered_blade_response
+          delegate_to: localhost
+          # when: esxi_type == 'HPBlade'
+
+        # - name: Fail if no blade found with given serial number
+        #   fail:
+        #     msg: "No blade found in OneView with serial number '{{ serial_number }}'."
+        #   when:
+        #     - filtered_blade_response.json.members is not defined or
+        #       filtered_blade_response.json.members | length == 0
+
+
+        - name: Extract blade URI
+          set_fact:
+            target_blade_uri: "{{ filtered_blade_response.json.members[0].uri }}"
+          when:
+            - filtered_blade_response.json.members is defined
+            - filtered_blade_response.json.members | length > 0
+
+        - name: Update DECO entry if no server profile exists
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "oneview_xclarity_removal"
+            status: "T"           
+          register: update_status_info_state
+          delegate_to: localhost
+          when:
+            - filtered_blade_response.json.members is not defined
+              or filtered_blade_response.json.members | length == 0
+              or filtered_blade_response.json.members[0].serverProfileUri in [None, ""]
+
+
+
+        - name: Trigger OneView refresh of server hardware
+          uri:
+            url: "https://{{ oneview_address }}{{ target_blade_uri }}/refreshState"
+            method: PUT
+            headers:
+              auth: "{{ oneview_auth_token }}"
+            body:
+              refreshState: "RefreshPending"
+            body_format: json
+            status_code: [200, 202]
+            validate_certs: false
+            return_content: true
+          register: refresh_response
+          delegate_to: localhost
+          when:
+            - filtered_blade_response.json.members is defined
+            - filtered_blade_response.json.members | length > 0
+            - filtered_blade_response.json.members[0].serverProfileUri not in [None, ""]
+
+        # - name: Wait for refresh task to complete
+        #   uri:
+        #     url: "https://{{ oneview_address }}{{ refresh_response.json.uri }}"
+        #     method: GET
+        #     headers:
+        #       auth: "{{ oneview_auth_token }}"
+        #     validate_certs: false
+        #     return_content: true
+        #     status_code: [200, 202]
+        #   register: refresh_task_status
+        #   until: refresh_task_status.json.taskStatus != "Waiting"
+        #   retries: 60
+        #   delay: 10
+        #   delegate_to: localhost
+        #   when:
+        #     - filtered_blade_response.json.members is defined
+        #     - filtered_blade_response.json.members | length > 0
+        #     - filtered_blade_response.json.members[0].serverProfileUri is defined
+        #     - filtered_blade_response.json.members[0].serverProfileUri != ""
+
+        - name: Wait for refresh task to complete
+          uri:
+            url: "https://{{ oneview_address }}{{ refresh_response.json.uri }}"
+            method: GET
+            headers:
+              auth: "{{ oneview_auth_token }}"
+            validate_certs: false
+            return_content: true
+            status_code: [200, 202]
+          register: refresh_task_status
+          failed_when: false   # don’t fail early if JSON missing
+          until: refresh_task_status.json is defined and
+                refresh_task_status.json.taskStatus is defined and
+                refresh_task_status.json.taskStatus not in ["Waiting", "Running", "New"]
+          retries: 60
+          delay: 10
+          delegate_to: localhost
+          when:
+            - filtered_blade_response.json.members is defined
+            - filtered_blade_response.json.members | length > 0
+            - filtered_blade_response.json.members[0].serverProfileUri not in [None, ""]
+
+        - name: Wait for OneView to detect that server is powered off
+          uri:
+            url: "https://{{ oneview_address }}{{ target_blade_uri }}"
+            method: GET
+            headers:
+              auth: "{{ oneview_auth_token }}"
+            validate_certs: false
+            return_content: true
+            status_code: 200
+          register: oneview_blade_status
+          until: oneview_blade_status.json.powerState == "Off"
+          retries: 10   # Try up to ~1 minute
+          delay: 6
+          delegate_to: localhost
+          when:
+            - filtered_blade_response.json.members is defined
+            - filtered_blade_response.json.members | length > 0
+            - filtered_blade_response.json.members[0].serverProfileUri not in [None, ""]
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          run_once: true
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          run_once: true
+
+
+
+        - name: Log Failure for Server Profile Deletion
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Server profile deletion FAILED. Status: {{ delete_server_profile_result.json.status | default('UNKNOWN') }}, RefreshState: {{ delete_server_profile_result.json.refreshState | default('UNKNOWN') }}" >> {{ oview_lxca_failure }}
+          delegate_to: localhost
+          when: delete_server_profile_result.json.refreshState is defined and
+                delete_server_profile_result.json.refreshState == "RefreshFailed"
+
+        - meta: end_host
+          when: delete_server_profile_result.json.refreshState is defined and
+                delete_server_profile_result.json.refreshState == "RefreshFailed"
+
+        - name: Remove server profile from blade (if present)
+          uri:
+            url: "https://{{ oneview_address }}{{ filtered_blade_response.json.members[0].serverProfileUri }}"
+            method: DELETE
+            headers:
+              auth: "{{ oneview_auth_token }}"
+            validate_certs: false
+            status_code: [200, 202]
+            return_content: true
+          register: profile_delete_response
+          delegate_to: localhost
+          when:
+            - filtered_blade_response.json.members is defined
+            - filtered_blade_response.json.members | length > 0
+            - filtered_blade_response.json.members[0].serverProfileUri not in [None, ""]
+
+        - name: Extract profile delete task URI
+          set_fact:
+            profile_delete_task_uri: "{{ profile_delete_response.json.uri }}"
+          when:
+            - profile_delete_response.status == 202
+            - profile_delete_response.json is defined
+            - profile_delete_response.json.uri is defined
+
+
+
+        - name: Wait for server profile deletion to complete
+          uri:
+            url: "https://{{ oneview_address }}{{ profile_delete_task_uri }}"
+            method: GET
+            headers:
+              auth: "{{ oneview_auth_token }}"
+            validate_certs: false
+            return_content: true
+            status_code: 200
+          register: delete_task_result
+          delegate_to: localhost
+          until: delete_task_result.json.taskState is defined and
+                delete_task_result.json.taskState in ['Completed', 'Warning', 'Error']
+          # until: delete_task_result.json.taskState in ['Completed', 'Warning', 'Error']
+          retries: 180  # Up to 30 minutes
+          delay: 10
+          when: profile_delete_task_uri is defined
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          run_once: true
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          run_once: true
+
+
+        - name: Log Failure for Server Profile Deletion
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Server profile deletion FAILED." >> {{ oview_lxca_failure }}
+          delegate_to: localhost
+          when:
+            - delete_task_result.json.taskState is defined
+            - delete_task_result.json.taskState != 'Completed'
+
+        - meta: end_host
+          when:
+            - delete_task_result.json.taskState is defined
+            - delete_task_result.json.taskState != 'Completed'
+
+        - name: Log Success for Server Profile Deletion
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Server profile deletion completed successfully." >> {{ oview_lxca_success }}
+          delegate_to: localhost
+          when:
+            - delete_task_result.json.taskState is defined
+            - delete_task_result.json.taskState == 'Completed'
+
+
+        - name: "update entry for DECO server for Oneview LXCA Deregister"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "oneview_xclarity_removal"
+            status: "T"           
+          register: update_status_info_state
+          delegate_to: localhost
+          when:
+            - delete_task_result.json.taskState is defined
+            - delete_task_result.json.taskState == 'Completed'
+
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for Oneview LXCA module"  
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Failure information to file in rescue block"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Kindly check Oneview Xclarity module for esxi servers" >> {{ oview_lxca_failure }}                    
+          delegate_to: localhost

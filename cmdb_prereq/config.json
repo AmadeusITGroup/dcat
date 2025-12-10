@@ -1,0 +1,41 @@
+{
+    "dev":{
+    "winaproach_category": "DEV_CATEGORY",
+    "ptr_system": "DEV_SYSTEM",  
+    "ipam_grid":"DEV_IPAM_GRID",
+    "ipam_network_view": "DEV_IPAM_NETWORK_VIEW",
+    "dns_grid":"DEV_DNS_GRID",
+    "dns_network_view": "DEV_DNS_NETWORK_VIEW",
+    "cmdb_url_update": "CMDB_URL",
+    "synergon_url": "SYNERGON_URL",
+    "nas_box": "NAS_BOXES_FQDN",
+    "dev_box_a": "DEV_SAN_BOX_FQDN_1",
+    "dev_box_b": "DEV_SAN_BOX_FQDN_2",
+    "bird_api": "WIN@PROACH_BIRD_API_URL",
+    "storage_account_name": "DEV_STORAGE_ACCOUNT_NAME",
+    "resource_group": "DEV_RESOURCE_GROUP",
+    "azure_subscription_id": "DEV_AZURE_SUBSCRIPTION_ID",
+    "awx_instance":"AWX_INSTANCE_FQDN"
+    },
+    "prod":{
+    "winaproach_category": "PROD_CATEGORY",
+    "ptr_system": "PROD_SYSTEM",    
+    "ipam_grid":"PROD_IPAM_GRID",
+    "ipam_network_view": "PROD_IPAM_NETWORK_VIEW",
+    "dns_grid":"PROD_DNS_GRID",
+    "dns_network_view": "PROD_DNS_NETWORK_VIEW",
+    "cmdb_url_update": "CMDB_URL",
+    "synergon_url": "SYNERGON_URL",
+    "nas_box": "NAS_BOXES_FQDN",
+    "prod_box_c": "PROD_SAN_BOX_FQDN_1",
+    "prod_box_d": "PROD_SAN_BOX_FQDN_2",
+    "prod_box_e": "PROD_SAN_BOX_FQDN_3",
+    "prod_box_f": "PROD_SAN_BOX_FQDN_4",
+    "prod_box_g": "PROD_SAN_BOX_FQDN_5",
+    "bird_api": "WIN@PROACH_BIRD_API_URL",
+    "storage_account_name": "PROD_STORAGE_ACCOUNT_NAME",
+    "resource_group": "PROD_RESOURCE_GROUP",
+    "azure_subscription_id": "PROD_AZURE_SUBSCRIPTION_ID",
+    "awx_instance":"AWX_INSTANCE_FQDN"
+    }
+}

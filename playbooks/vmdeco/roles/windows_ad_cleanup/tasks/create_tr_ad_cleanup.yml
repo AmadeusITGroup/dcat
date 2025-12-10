@@ -1,0 +1,71 @@
+---
+    - name: Create TR and Add Content
+      block:
+
+        - name: "Setting TR Content"
+          set_fact: 
+            form1: "***************************************************************************"
+            form2: "The following VMs have been decommisioned and are eligible for AD Cleanup:"
+            form3: "***************************************************************************"
+        
+        - name: Display Result file
+          shell: cat win_ad_server_list.yml
+          delegate_to: localhost
+          register: final_win_servers
+
+        - name: Saving result to var
+          set_fact:
+             final_servers: "{{ final_win_servers.stdout }}"
+        
+        - name: "TR Final Content"
+          set_fact:
+             content_win: "{{ form1 + '\n' + form2  + '\n' + final_servers + '\n' + form3 }}"
+          when: final_servers != ""
+          
+        - debug:
+            var: update      
+        
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: VM DECO - Windows AD Cleanup" 
+            assignee_name: "DecoP112686"
+            assignee_group: "OSX02WIN"
+            severity: "4"
+            overview: "VM DECO - Windows AD Cleanup"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+          when: final_servers != ""
+
+        - set_fact: 
+            record_windows: "{{create_tr_output.record_id}}"
+          delegate_to: localhost
+          when: create_tr_output is defined and final_servers != ""
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_windows }}"
+          register: add_document
+          delegate_to: localhost
+          when: record_windows is defined and final_servers != ""
+
+        - name: Update Task
+          winaproach:
+            system: prod
+            type: task_record
+            operation: update_overview
+            username: "{{ winaproach_username }}"     
+            password: "{{ winAproach_password }}"
+            fields:
+               task_id: "{{ record_windows }}"
+               text: "{{ content_win }}"
+          register: update
+          delegate_to: localhost
+          when: record_windows is defined and final_servers != ""

@@ -1,0 +1,121 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    sshusr: "{{ auth_username }}"
+    sshpass: "{{ auth_password }}"
+
+  tasks:
+    - meta: end_play
+      when: graceperiod_flag == "True"
+
+    - name: generate output files for every module
+      file:
+        path: "{{ item }}"
+        state: touch
+        mode: 0644
+      with_items:
+        - record_winrm.json
+        - winrm_key_success.yml
+        - winrm_key_failure.yml
+        - winrm_key_final.yml
+
+    - name: Display input JSON
+      set_fact:
+        jsondata: "{{ associated_cis }}"
+
+    - name: display json
+      debug:
+        var: jsondata
+        
+    - name: fetch host details
+      gather_host:
+        host_info: "{{ jsondata| to_json }}"
+      register: host_list
+
+    - name: printing the host list 
+      debug:
+        var: host_list.host_list
+
+    - name: all machines
+      set_fact:
+        allmachines: "{{ host_list.host_list }}"
+
+    - name: printing all machines 
+      debug:
+        var: allmachines
+
+    - name: fetch host details
+      diff_os:
+        hosts: "{{ allmachines }}"
+        cmdb_rtu: "{{CMDB_URL}}"
+      register: osoutput
+
+    - set_fact:
+        windowsmachines: "{{ osoutput.status.windows_machines }}"
+
+    - name: printing the windows machines
+      debug:
+        var: windowsmachines
+
+    - meta: end_host
+      when: windowsmachines == []
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      register: result_private_endpoint_connection_string
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      delegate_to: localhost
+
+    - name: Fetch FQDN for each host
+      fqdn_fetch_cmdb:
+        conn_str: "{{ private_endpoint_connection_string }}"
+        server_name: "{{ item }}"
+        cmdb_server: "{{CMDB_URL}}"
+        user_name: "{{ emdb_username }}"
+        pass_word: "{{ emdb_password }}"
+      loop: "{{ windowsmachines }}"
+      register: fqdn_results
+      delegate_to: localhost
+ 
+    - name: Concatenate server name with fetched FQDN
+      set_fact:
+        fqdn_with_server_name: "{{ fqdn_with_server_name | default([]) + [item.item + '.' + item.cmdb_result_fqdn] }}"
+      loop: "{{ fqdn_results.results }}"
+      when: item.cmdb_result_fqdn is defined
+ 
+    - name: Debug FQDN with server name
+      debug:
+        msg: "{{ fqdn_with_server_name }}"
+
+    - name: Display input JSON
+      set_fact:
+        hostdata: "{{ host_list.host_list }}"
+      register: host_list_data
+
+    - name: Add hosts to group
+      add_host:
+        hostname: "{{ item }}"
+        groups: winrmkey
+      loop: '{{ fqdn_with_server_name }}'
+
+    - name: Display hosts in winrmkey group
+      debug:
+        msg: "{{ groups['winrmkey'] }}"
+ 
+- import_playbook: vmdeco/main_winrm_setup.yml
+  vars:
+    cr: "{{ cr }}"
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"
+    btmp_user: "{{ si_username }}"
+    btmp_password: "{{ si_password }}"
+    phy_ssh_username: "{{ username }}"
+    phy_ssh_password: "{{ password }}"
+  no_log: true
+  run_once: True
+  when: graceperiod_flag == "False"

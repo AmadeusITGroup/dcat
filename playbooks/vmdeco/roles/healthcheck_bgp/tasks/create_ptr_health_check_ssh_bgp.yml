@@ -1,0 +1,283 @@
+---
+    - name: "Handling PTR record_id for vm deco"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck_ssh.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_healthcheck_ssh: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_healthcheck_ssh == ""       
+
+        - name: Display the JSON file content
+          shell: cat check_ssh_linux.yml
+          delegate_to: localhost
+          register: result_check_linux
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ssh_linux: "{{ result_check_linux.stdout }}" 
+          delegate_to: localhost 
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the ssh connectivity(linux) issue details which needs support"
+            form3: "Please contact sys administrator to provision SSH and re-submit the request"
+            form4: "***********************************************************************"
+        - set_fact:
+            content_check_ssh_linux: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ form4 +'\n'+ check_ssh_linux }}"
+          when: check_ssh_linux != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck_ssh.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_healthcheck_ssh: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost                    
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "VM DECO: Service health check on SSH connectivity(linux) referring to failed TR - {{ record_healthcheck_ssh }}"
+            tr_map: "{{ record_healthcheck_ssh }}"
+            assignee_group: "OLINUX1"  
+            ptr_logs: "{{ content_check_ssh_linux }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_check_ssh_linux
+          until: '"Successfully" in ptr_check_ssh_linux.msg'
+          retries: 3
+          delay: 10
+          when: check_ssh_linux != ""
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: filter owner group
+          categorize_servers:
+            path: ssh_linux_failure.txt
+          delegate_to: localhost
+          register: failure_servers_list
+          when: check_ssh_linux != ""
+
+        - debug:
+            var: failure_servers_list
+          when: check_ssh_linux != ""
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_check_ssh_linux.id }}"
+            event: "VM DECO: SSH connectivity(linux) failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}" 
+          loop: "{{ failure_servers_list.Status.Failure }}"
+          register: ptr_add
+          when: check_ssh_linux != ""
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_healthcheck_ssh }}"
+            prob_id: "{{ ptr_check_ssh_linux.id }}"                   
+          register: update_overview  
+          when: check_ssh_linux != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - SSH connectivity(linux)"                               
+############################################################################################################
+
+    - name: "Handling PTR record_id for vm deco"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck_ssh.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_healthcheck_ssh: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_healthcheck_ssh == ""       
+
+        - name: Display the JSON file content
+          shell: cat check_ssh_windows.yml
+          delegate_to: localhost
+          register: result_check_windows
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ssh_windows: "{{ result_check_windows.stdout }}" 
+          delegate_to: localhost
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the WINRM connectivity(windows) issue details which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_check_ssh_windows: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_ssh_windows }}"
+          when: check_ssh_windows != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck_ssh.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_healthcheck_ssh: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost                    
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "VM DECO: Service health check on WINRM connectivity(windows) referring to failed TR - {{ record_healthcheck_ssh }}"
+            tr_map: "{{ record_healthcheck_ssh }}"
+            assignee_group: "OSX02WIN"  
+            ptr_logs: "{{ content_check_ssh_windows }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_check_ssh_windows
+          until: '"Successfully" in ptr_check_ssh_windows.msg'
+          retries: 3
+          delay: 10
+          when: check_ssh_windows != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: filter owner group
+          categorize_servers:
+            path: ssh_windows_failure.txt
+          delegate_to: localhost
+          register: failure_servers_list
+          when: check_ssh_windows != ""
+
+        - debug:
+            var: failure_servers_list
+          when: check_ssh_windows != ""
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_check_ssh_windows.id }}"
+            event: "VM DECO: WINRM connectivity(windows) failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}" 
+          loop: "{{ failure_servers_list.Status.Failure }}"
+          register: ptr_add
+          when: check_ssh_windows != ""
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_healthcheck_ssh }}"
+            prob_id: "{{ ptr_check_ssh_windows.id }}"                   
+          register: update_overview  
+          when: check_ssh_windows != "" 
+
+        - name: "Test custome module [CLOSE TR]"
+          close_tr:
+            record_id: "{{ record_healthcheck_ssh }}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+          register: close_tr_output
+                               
+
+      rescue:
+        - debug:
+            var: close_tr_output
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - SSH connectivity(windows)"                               
+############################################################################################################

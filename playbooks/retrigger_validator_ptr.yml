@@ -1,0 +1,86 @@
+---
+
+  - name: get PTR details from win@proach
+    get_ptr_info_win:
+      username: "{{ winaproach_username }}"
+      password: "{{ winaproach_password }}" 
+      win_target: "WIN@PROACH_URL"
+      ptr: "{{ item.2 }}"
+    register: app_ptr_result
+    delegate_to: localhost
+
+  - set_fact:
+      app_ptr_result: "{{ app_ptr_result.status }}"
+
+  - debug:
+      var: app_ptr_result                    
+
+  - name: "Test custome module [CLOSE PTR]"
+    close_ptr:
+      record_id: "{{ item.2 }}"
+      win_target: "WIN@PROACH_URL"
+      username: "{{ winaproach_username }}"
+      password: "{{ winaproach_password }}" 
+    register: close_ptr_output
+    when: app_ptr_result is search("AX|AD|CI|SL|SV")   
+
+  - name: get PTR details from win@proach
+    get_ptr_info_win:
+      username: "{{ winaproach_username }}"
+      password: "{{ winaproach_password }}" 
+      win_target: "WIN@PROACH_URL"
+      ptr: "{{ item.2 }}"
+    register: app_ptr_result
+    delegate_to: localhost
+
+  - set_fact:
+      app_ptr_result: "{{ app_ptr_result.status }}" 
+
+  - name: Get timestamp from the system
+    shell: "date +%Y-%m-%d/%H:%M"
+    delegate_to: localhost
+    register: tstamp  
+
+  - set_fact:
+      time: "{{tstamp.stdout}}"
+
+  - debug:
+      var: time  
+
+  - name: Display the JSON file content
+    shell: cat private_endpoint_connection_string.yml
+    delegate_to: localhost
+    register: result_private_endpoint_connection_string
+
+  - name: save the Json data to a Variable as a Fact
+    set_fact:
+      private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+    delegate_to: localhost                      
+
+  - name: "Check entry for DECO server"
+    send_ptr_info_to_azure:
+      ci: "{{ item.0 }}"
+      cr: "{{ item.1 }}"
+      event_number: "{{ item.2 }}"
+      event_status: "closed"
+      created_on: "{{ time }}"
+      last_update: "{{ time }}"
+      connection_string: "{{ private_endpoint_connection_string }}"  
+    register: app_ptr_add
+    delegate_to: localhost
+    when: app_ptr_result is search("AX|AQ|AN|AD|AU|AT|CS|CI")    
+
+  - debug:
+      var: app_ptr_add 
+
+  - name: "fetch ci's"
+    shell: echo "{{ item.0 }}" >> app_ci.yml                 
+    delegate_to: localhost                    
+    when: app_ptr_result is search("AX|AQ|AN|AD|AU|AT|CS|CI")
+
+  - debug:
+      msg: "DECO terminated!!! still approvals pending - DECO will validate after 1hr "
+    when: app_ptr_result is not search("CI|CS")
+
+  # - meta: end_play
+  #   when: app_ptr_result is not search("Closed") or owner_tr_result is not search("Closed")

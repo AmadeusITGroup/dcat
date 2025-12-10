@@ -1,0 +1,113 @@
+---
+
+#   tasks:
+    - name: "handle the error before grace period vcenter search for vm"
+      throttle: 1
+      block:
+        - name: get fqdn from CMDB RTU
+          get_fqdn:
+            host: "{{ inventory_hostname }}"
+            cmdb_rtu: "{{RTU_INSTANCE}}"
+          register: fqdn_name
+          delegate_to: localhost
+
+        - set_fact:
+            rtu_fqdn: "{{ fqdn_name.status }}"
+
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"        
+
+        - name: "Unable to fetch FQDN"
+          shell: echo "#{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to fetch FQDN for {{ inventory_hostname }}" >> phy_fqdn_fail.yml   
+          delegate_to: localhost         
+          when: rtu_fqdn == "NA"
+
+        - meta: end_host
+          when: rtu_fqdn == "NA"
+      
+        - name: Check that you can connect (GET) to a page and it returns a status 200
+          uri:
+            url: https://{{ inventory_hostname +'rib.muc.net' }}
+            validate_certs: False
+          register: rib_status
+          delegate_to: localhost
+          ignore_errors: yes
+      
+        - set_fact:
+            rib_result: "{{ rib_status.status }}"
+      
+        - set_fact:
+            username: "root" #"{{ user_iloadm }}"
+          when: rib_result == '200'
+      
+        - set_fact:
+            password: "password" #"{{ password_iloadm }}"
+          when: rib_result == '200'
+
+        - set_fact:
+            ilohost: "{{ inventory_hostname +'rib.muc.net' }}"
+          when: rib_result == '200'          
+                                
+
+        - name: Power on server from ILO
+          poweron_ilo:
+            hostname: "{{ ilohost }}"
+            username: "{{ username }}"
+            password: "{{ password }}"
+          register: poweron_info
+          delegate_to: localhost 
+
+        - set_fact:
+            result: "{{ poweron_info.Status }}"
+
+        - debug:
+            var: result       
+
+        - set_fact:
+             poweron_status: "Success"
+          when: result is search("power already|powering on")
+          
+        - name: "Pass phy data's"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], Successfully poweredon" >> esxi_ssh_success.yml   
+          delegate_to: localhost 
+          when: result is search("power already|powering on")
+
+        - name: "Pass phy data's"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to power on" >> esxi_ssh_failed.yml   
+          delegate_to: localhost 
+          when: result is not search("power already|powering on")     
+
+      rescue: 
+      - name: rescue on SSH connection issue - esxi Linux
+        debug:
+          msg: "rescue SSH connection issue - esxi Linux" 
+
+
+      - name: Get timestamp from the system
+        shell: "date +%Y-%m-%d/%H:%M"
+        delegate_to: localhost
+        register: tstamp  
+                        
+      - set_fact:
+          time: "{{tstamp.stdout}}"
+
+      - name: Display the JSON file content
+        shell: cat phy_ssh_success.yml
+        delegate_to: localhost
+        register: result_phy_ssh_success
+
+      - name: save the Json data to a Variable as a Fact
+        set_fact:
+          phy_ssh_success: "{{ result_phy_ssh_success.stdout }}" 
+        delegate_to: localhost                   
+
+      - name: "VM host list failure to file before grace period"
+        shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to SSH esxi server {{ inventory_hostname }}, either connection or credential issue" >> esxi_ssh_fail.yml                   
+        delegate_to: localhost
+        when: phy_ssh_success is not search("{{ inventory_hostname }}")    

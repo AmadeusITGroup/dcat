@@ -1,0 +1,63 @@
+---
+- name: "healthcheck first trigger"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: False   
+  tasks:
+    - name: healthcheck first trigger
+      ansible.builtin.import_role:
+        name: healthcheck_bgp
+        tasks_from: health_check.yml
+
+    # - name: healthcheck first trigger
+    #   ansible.builtin.import_role:
+    #     name: healthcheck_bgp
+    #     tasks_from: health_check_san_validation.yml        
+
+- name: "healthcheck first trigger"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: healthcheck first trigger
+      ansible.builtin.import_role:
+        name: healthcheck_bgp
+        tasks_from: physical_ssh.yml
+
+- name: "Create TR for healthcheck first trigger"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: False
+  tasks:
+    - name: healthcheck first trigger
+      ansible.builtin.import_role:
+        name: healthcheck_bgp
+        tasks_from: create_tr_health_check.yml
+
+    - name: healthcheck first trigger
+      ansible.builtin.import_role:
+        name: healthcheck_bgp
+        tasks_from: create_ptr_health_check.yml
+
+    - name: healthcheck first trigger
+      ansible.builtin.import_role:
+        name: healthcheck_bgp
+        tasks_from: add_info_healthcheck.yml
+
+    - name: healthcheck first trigger
+      ansible.builtin.import_role:
+        name: healthcheck_bgp
+        tasks_from: create_tr_health_check_ssh.yml
+
+    - name: healthcheck first trigger
+      ansible.builtin.import_role:
+        name: healthcheck_bgp
+        tasks_from: create_ptr_health_check_ssh.yml 
+
+    - name: healthcheck first trigger
+      ansible.builtin.import_role:
+        name: healthcheck_bgp
+        tasks_from: add_info_healthcheck_ssh.yml
+
+    

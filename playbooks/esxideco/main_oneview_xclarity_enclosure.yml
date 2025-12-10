@@ -1,0 +1,71 @@
+---
+
+# Enclosure Level OneView LXCA
+
+- name: "OneView/Xclarity filter host Enclosure"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: OneView Xclarity filter host
+      ansible.builtin.import_role:
+        name: oneview_xclarity_enclosure
+        tasks_from: filter_hostlist_oneview_xclarity_enclosure.yml
+
+- name: "Create TR for OneView/Xclarity Enclosure"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    bird_api: "{{ hostvars['localhost']['config_data']['bird_api'] }}"
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+  tasks:
+
+    - name: Set local variables from config_data
+      set_fact:
+        bird_api: "{{ config_data.bird_api }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+        
+    - name: TR for OneView/Xclarity
+      ansible.builtin.import_role:
+        name: oneview_xclarity_enclosure
+        tasks_from: create_tr_oneview_xclarity_enclosure.yml
+
+# ======================================================================================================
+# Oneview Xclarity deregister
+# ======================================================================================================
+
+- name: "OneView/xclarity Deregister Enclosure"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no
+  vars:
+    domain_username: "{{ pAccount_username }}"
+    domain_password: "{{ pAccount_password }}"
+  tasks: 
+    - name: "OneView/xclarity Deregister"
+      ansible.builtin.import_role:
+        name: oneview_xclarity_enclosure
+        tasks_from: oview_lxca_segregator_enclosure.yml
+
+
+
+# ======================================================================================================
+
+
+
+
+- name: "Add info to TR for OneView/xclarity Deregister Enclosure"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+        
+    - name: oneview/xclarity add info
+      ansible.builtin.import_role:
+        name: oneview_xclarity_enclosure
+        tasks_from: add_info_oneview_xclarity_enclosure.yml

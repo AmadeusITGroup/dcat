@@ -1,0 +1,82 @@
+---
+- name: "Replicating Azure Table Data to Azure Blob Storage"
+  hosts: localhost
+  gather_facts: no
+  vars: 
+    input: "{{ lookup('file','azure_configs.json') | from_json }}"
+    env_data: "{{ env_data }}"
+    azure_client_id: '{{ az_client_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+  
+
+  tasks:
+
+  - name: "Setting Enviorment"
+    set_fact:
+      env_data: "{{ env_data }}"
+      # env_data: "{{ hostvars.localhost.env_data.msg }}"
+  
+  - debug:
+      var: env_data
+  
+  - name: "Setting DEVELOPER ENV variables"
+    set_fact:
+      storage_account_name: "{{ input.dev.storage_account_name }}"
+      resource_group: "{{ input.dev.resource_group }}"
+      azure_subscription_id: "{{ input.dev.azure_subscription_id }}"
+      awx_instance: "{{ input.dev.awx_instance }}"
+      blob_account_url: "{{ input.dev.tsi_blob_account_url }}"
+      blob_container_name: "{{ input.dev.tsi_blob_container_name }}"
+      pbi_blob_name: "{{ input.dev.pbi_blob_name }}"
+    run_once: True
+    delegate_to: localhost
+    when: env_data == "dev"
+  
+  - name: "Setting PROD ENV variables"
+    set_fact:
+      storage_account_name: "{{ input.prod.storage_account_name }}"
+      resource_group: "{{ input.prod.resource_group }}"
+      azure_subscription_id: "{{ input.prod.azure_subscription_id }}"
+      awx_instance: "{{ input.prod.awx_instance }}"
+      blob_account_url: "{{ input.prod.tsi_blob_account_url }}"
+      blob_container_name: "{{ input.prod.tsi_blob_container_name }}"
+      pbi_blob_name: "{{ input.prod.pbi_blob_name }}"
+    run_once: True
+    delegate_to: localhost                                       
+    when: env_data == "prod"
+
+  - name: "Retrieving Storage Account Key"
+    azure_rm_storageaccount_info:
+      resource_group: "{{ resource_group }}"
+      name: "{{ storage_account_name }}"
+      client_id: "{{ azure_client_id }}"
+      secret: "{{ azure_client_secret }}"
+      tenant: "{{ azure_tenant_id }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      show_connection_string: true
+    register: storage_account_info
+
+  - debug:
+      var: storage_account_info
+  - name: Set Storage Account Key
+    set_fact:
+      storage_account_key: "{{ storage_account_info.storageaccounts[0].primary_endpoints.key }}"
+
+  - name: Get Private Endpoint Connection String
+    set_fact:
+      private_endpoint_connection_string: "DefaultEndpointsProtocol=https;AccountName={{ storage_account_name }};AccountKey={{ storage_account_key }};EndpointSuffix=core.windows.net"
+
+  - name: "Reading from Azure Table Storage and Writing in Blobstorage"
+    read_and_store_data_from_azure:
+      connection_string: "{{ private_endpoint_connection_string }}"
+      sas_token: "{{ secret }}"
+      account_url: "{{ blob_account_url }}"
+      container_name: "{{ blob_container_name }}"
+      blob_name: "{{ pbi_blob_name }}"
+      env_name: "{{ env_data }}"  
+    delegate_to: localhost
+    register: output_gather_info
+
+  - debug:
+      var: output_gather_info 

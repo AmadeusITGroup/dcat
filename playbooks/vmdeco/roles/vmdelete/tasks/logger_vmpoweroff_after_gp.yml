@@ -1,0 +1,224 @@
+---
+# - name: "LOGGER MODULE VMPOWEROFF AFTER GP"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+#     poweroff_logg_gp: "vm_log_gp.yml"
+#     graceperiod_flag: true
+#     vmdelete: False
+#     dns_check: true     
+
+#   tasks:    
+    - name: "Logger and Create/Update TR- Win@proach "
+      block:
+
+        - set_fact:
+            poweroff_logg_gp: "vm_log_gp.yml"
+
+        - name: Display the JSON file content
+          shell: cat record_vm_del.json
+          delegate_to: localhost
+          register: TR_result_del  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_vm_del: "{{ TR_result_del.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: record_id_vm_del == ""           
+
+        - name: VM_host list
+          shell: cat vm_log_gp.yml
+          delegate_to: localhost
+          register: vm_result_log              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_log: "{{ vm_result_log.stdout }}" 
+          delegate_to: localhost
+           
+
+        - meta: end_host
+          when: vm_log == ""
+
+        - name: VM_host list
+          shell: cat record_id_logger.json
+          delegate_to: localhost
+          register: record_result              
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id: "{{ record_result.stdout }}" 
+          delegate_to: localhost          
+
+
+################# CREATE TR ################
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "VM DECO -LOGGER"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"            
+            severity: "4"
+            overview: "VM DECO -LOGGER (NETWORK - BACKUP - NAS_STORAGE - IP_DNS - VM_POWEROFF_DELETION)"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+          when: record_id == ""
+        
+        - set_fact:
+            record_id_logger: "{{create_tr_output.record_id}}"
+          when: record_id == ""  
+
+
+        - copy:
+            content: '{{ record_id_logger|to_json }}'
+            dest: record_id_logger.json
+          delegate_to: localhost 
+          when: record_id == ""                       
+
+################# LOGGER ###################
+        - name: VM_host list
+          shell: cat record_id_logger.json
+          delegate_to: localhost
+          register: vm_result             
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            record_id_logger: "{{ vm_result.stdout[1:-1] }}"  
+          delegate_to: localhost
+
+
+        - name: logger data
+          shell: cat vm_log_gp.yml
+          delegate_to: localhost
+          register: vmpoweroff_log_gp
+                    
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            log_vm_gp: "{{ vmpoweroff_log_gp.stdout }}" 
+          delegate_to: localhost        
+
+        # - name: "Test custom module Logger."
+        #   logger_data:
+        #     Logdata: "{{ item }}"
+        #   loop: "{{log_vm_gp}}"   
+        #   register: logger_output_gp
+        #   delegate_to: localhost 
+        #   ignore_errors: True
+        
+        # - name: "Debugging previous module's output"
+        #   debug:
+        #     var: logger_output_gp
+        # - set_fact:
+        #     output_logger_gp: "{{ logger_output_gp }}"
+
+        # - name: "success log list"
+        #   shell: echo "{{ item.output }}" >> output_vm_log_gp.yml 
+        #   loop: "{{output_logger_gp.results}}"                    
+        #   delegate_to: localhost  
+        
+
+        # - name: VM_host list
+        #   shell: cat output_vm_log_gp.yml
+        #   delegate_to: localhost
+        #   register: vmpowof_log_gp             
+
+        # - name: save the vm list to a Variable as a Fact
+        #   set_fact:
+        #     final_vm_logger_gp: "{{ vmpowof_log_gp.stdout_lines }}" 
+        #   delegate_to: localhost   
+
+
+
+################# LOGGER UPDATE TO TR ###################
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{record_id_logger}}"
+            message: "{{ log_vm_gp }}"  #"{{final_vm_logger_gp}}"             
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"          
+          delegate_to: localhost
+          register: add_msg_output_log
+
+
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check VM logger vm poweroff afer gp"
+
+    - name: clearing the files and json
+      block:              
+
+        - name: "Set header"
+          shell: echo > vm_hostname_failure_gp.yml         
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > vm_log_gp.yml          
+          run_once: true
+          delegate_to: localhost 
+
+        - name: "Set header"
+          shell: echo > output_vm_log_gp.yml           
+          run_once: true
+          delegate_to: localhost
+              
+        - name: "Set header"
+          shell: echo > vm_hostname_failure_poweron.yml         
+          run_once: true
+          delegate_to: localhost                      
+
+        - name: "Set header"
+          shell: echo > vm_hostname_failure_del.yml         
+          run_once: true
+          delegate_to: localhost 
+
+        - name: "Set header"
+          shell: echo > final_vm_gp.yml          
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > final_vm_tr_gp.yml           
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > vm_tr_log_gp.yml          
+          run_once: true
+          delegate_to: localhost
+
+        
+        - name: "Set header"
+          shell: echo > record_vm_del.json         
+          run_once: true
+          delegate_to: localhost 
+          
+        - name: "Set header"
+          shell: echo > vm_hostname_success_del.yml         
+          run_once: true
+          delegate_to: localhost     
+
+             
+        - name: "Set header"
+          shell: echo > vm_del_final_fail.yml         
+          run_once: true
+          delegate_to: localhost 
+
+        - name: "Set header"
+          shell: echo > vm_del_final.yml         
+          run_once: true
+          delegate_to: localhost                                                   
+                    
+
+      rescue:
+        - debug:
+            msg: " exception occured while clearing the files and json in logger,Rescued in logger_nas file"        
+

@@ -1,0 +1,463 @@
+---
+# =========================================================================================================
+# vCenter Api Status
+# =========================================================================================================
+
+- name: "Check vCenter API Status"
+  block:
+
+    - name: Display the JSON file content
+      shell: cat record_healthcheck.json
+      delegate_to: localhost
+      register: TR_result_healthcheck_esxi
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        record_id_healthcheck_esxi: "{{ TR_result_healthcheck_esxi.stdout[1:-1] }}"
+      delegate_to: localhost         
+
+    - meta: end_host
+      when: record_id_healthcheck_esxi == ""   
+
+    - name: "Construct vCenter FQDN for standard cases"
+      set_fact:
+        fqdn_vc: ".muc.msp.net"
+      when: 
+        - vcenter is not search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|mucamnaz1|mucamnvcpa1|mucamnvcpa2|mucamnaz2|mucamnvcpb1|mucamnvcpb2|mucamnaz3|mucamnvcpc1|mucamnvcpc2")
+        - vcenter is not search(".muc.msp.net")
+
+    - name: "Construct vCenter FQDN for specific cases"
+      set_fact:
+        fqdn_vc: ".vclassic.net"
+      when:
+        - vcenter is search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|mucamnaz1|mucamnvcpa1|mucamnvcpa2|mucamnaz2|mucamnvcpb1|mucamnvcpb2|mucamnaz3|mucamnvcpc1|mucamnvcpc2")
+        - vcenter is not search(".vclassic.net")
+
+    - name: "Ensure fqdn_vc is set"
+      set_fact:
+        fqdn_vc: "{{ fqdn_vc | default('.muc.msp.net') }}"
+
+    - name: "Define protocol for vCenter URL"
+      set_fact:
+        proto: "https://"
+
+    - name: "Construct the complete vCenter URL"
+      set_fact:
+        vcenter_url: "{{ proto ~ vcenter ~ fqdn_vc }}"
+
+    - name: Debug vCenter URL
+      debug:
+        msg: "Checking vCenter API at {{ vcenter_url }}"
+
+    - name: Perform vCenter API Health Check
+      uri:
+        url: "{{ vcenter_url }}"
+        validate_certs: no
+      delegate_to: localhost
+      register: vcenter_result
+      until: "vcenter_result.status == 200"
+      retries: 3
+      delay: 10
+
+    - name: Debug API status
+      debug:
+        msg: >
+          API connectivity check:
+          - URL: {{ vcenter_url }}
+          - Status Code: {{ vcenter_result.status }}
+          - Response Time: {{ vcenter_result.elapsed }}
+          - Content: {{ vcenter_result.content | default('No content returned') }}
+
+    - name: Get timestamp from the system (success)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp_success
+
+    - name: Set timestamp fact (success)
+      set_fact:
+        time: "{{ tstamp_success.stdout }}"
+
+    - name: Log API connectivity success to a file
+      shell: echo "#vCenter API - {{ time }}, [INFO], Successfully connected to {{ vcenter_url }}" >> vcenter_api_success.yml
+      delegate_to: localhost
+
+    - name: Unset rescue_triggered fact
+      set_fact:
+        api_rescue_triggered: false
+
+  rescue:
+
+    - name: Set rescue_triggered fact
+      set_fact:
+        api_rescue_triggered: true
+
+    - name: Debug API connectivity failure
+      debug:
+        msg: "Failed to connect to the vCenter API after 3 retries."
+
+    - name: Get timestamp from the system (rescue)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp_failure
+
+    - name: Set timestamp fact (rescue)
+      set_fact:
+        time: "{{ tstamp_failure.stdout }}"
+
+    - name: Log API connectivity failure to a file
+      shell: echo "!vCenter API - {{ time }}, [ERROR], Unable to connect to {{ vcenter_url }} after 3 retries" >> vcenter_api_fail.yml
+      delegate_to: localhost
+
+
+# - name: "Gather and Process vCenter Host Facts"
+#   block:
+
+#     - name: Debug variables before running vCenter host facts
+#       debug:
+#         msg:
+#           - "vCenter FQDN: {{ v_center_fqdn }}"
+#           - "vCenter Username: {{ vcenter_username }}"
+#           - "vCenter Password: {{ vcenter_password | default('Not shown', true) }}"
+#           - "ESXi Hostname: {{ esxi_fqdn }}"
+
+#     - name: Gather vCenter host facts
+#       community.vmware.vmware_host_facts:
+#         hostname: "{{ v_center_fqdn }}"
+#         username: "{{ vcenter_username }}"
+#         password: "{{ vcenter_password }}"
+#         esxi_hostname: "{{ esxi_fqdn }}"
+#         # esxi_hostname: "{{ inventory_hostname }}"
+#         validate_certs: no
+#       register: vcenter_facts
+
+#     - name: Debug ESXi facts
+#       debug:
+#         var: vcenter_facts
+
+#     - name: Extract ESXi host maintenance mode status
+#       set_fact:
+#         maintenance_mode: "{{ vcenter_facts.ansible_facts.ansible_in_maintenance_mode }}"
+#         esxi_hostname: "{{ esxi_fqdn }}"
+
+#     - name: Check maintenance mode and proceed or fail
+#       # when: maintenance_mode is defined and maintenance_mode | string == "true"
+#       when: maintenance_mode is defined and maintenance_mode == true
+
+
+#       block:
+#         - name: Debug success message
+#           debug:
+#             msg: "The ESXi host {{ esxi_hostname }} is in maintenance mode. Proceeding."
+
+#         - name: Get timestamp from the system (success)
+#           shell: "date +%Y-%m-%d/%H:%M"
+#           delegate_to: localhost
+#           register: tstamp_success
+
+#         - name: Set timestamp fact (success)
+#           set_fact:
+#             time: "{{ tstamp_success.stdout }}"
+
+#         - name: Log maintenance mode success
+#           shell: echo "#vCenter Host Facts - {{ time }}, [INFO], ESXi host {{ esxi_hostname }} is in Maintenance Mode. Proceeding with tasks." >> vcenter_host_facts_success.yml
+#           delegate_to: localhost
+
+#         # Unset rescue_triggered fact in the success case
+#         - name: Unset rescue_triggered fact
+#           set_fact:
+#             maint_rescue_triggered: false
+
+#   rescue:
+#     - name: Set rescue_triggered fact
+#       set_fact:
+#         maint_rescue_triggered: true
+
+#     - name: Debug failure message
+#       debug:
+#         msg: "The ESXi host {{ esxi_hostname }} is NOT in maintenance mode or status is undefined."
+
+#     - name: Get timestamp from the system (failure)
+#       shell: "date +%Y-%m-%d/%H:%M"
+#       delegate_to: localhost
+#       register: tstamp_failure
+
+#     - name: Set timestamp fact (failure)
+#       set_fact:
+#         time: "{{ tstamp_failure.stdout }}"
+
+#     - name: Log failure to retrieve ESXi facts
+#       shell: echo "!vCenter Host Facts - {{ time }}, [ERROR], ESXi host {{ esxi_hostname }} is NOT in Maintenance Mode or status is undefined." >> vcenter_host_facts_fail.yml
+#       delegate_to: localhost
+
+
+# =======================================================================================================
+
+- name: "Gather and Process vCenter Host Facts"
+  block:
+
+    - name: Ensure vCenter FQDN does not contain protocol
+      set_fact:
+        v_center_fqdn: "{{ vcenter_url | regex_replace('^https?://', '') }}"
+
+    - name: Debug variables before running vCenter host facts
+      debug:
+        msg:
+          - "vCenter FQDN: {{ v_center_fqdn }}"
+          - "ESXi Hostname: {{ esxi_fqdn }}"
+
+    - name: Gather vCenter host facts
+      community.vmware.vmware_host_facts:
+        hostname: "{{ v_center_fqdn }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        esxi_hostname: "{{ esxi_fqdn }}"
+        # esxi_hostname: "{{ inventory_hostname }}"
+        validate_certs: no
+      delegate_to: localhost
+      register: vcenter_facts
+
+    - name: Debug ESXi facts
+      debug:
+        var: vcenter_facts
+
+    - name: Extract ESXi host maintenance mode status
+      set_fact:
+        maintenance_mode: "{{ vcenter_facts.ansible_facts.ansible_in_maintenance_mode }}"
+        esxi_hostname: "{{ esxi_fqdn }}"
+
+    - name: Get timestamp from the system (success)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp_success
+
+    - name: Set timestamp fact (success)
+      set_fact:
+        time: "{{ tstamp_success.stdout }}"
+
+    # - name: Fail if not in maintenance mode
+    #   fail:
+    #     msg: "The ESXi host {{ esxi_hostname }} is NOT in maintenance mode or status is undefined."
+    #   when: maintenance_mode is not defined or maintenance_mode != true
+
+
+    - name: Log failure to file
+      shell: |
+        echo "#vCenter Host Facts - {{ time }}, [ERROR], ESXi host {{ esxi_hostname }} is NOT in Maintenance Mode. Skipping host." >> vcenter_host_facts_fail.yml
+      delegate_to: localhost
+      when: maintenance_mode is not defined or maintenance_mode != true
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      register: result_private_endpoint_connection_string
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      delegate_to: localhost
+
+    - name: "update entry for DECO server for Healthy status"
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+        module_name: "healthy"
+        status: "F"           
+      register: update_status_info_state
+      delegate_to: localhost
+      when: maintenance_mode is not defined or maintenance_mode != true
+
+    - name: End host execution
+      meta: end_host
+      when: maintenance_mode is not defined or maintenance_mode != true
+
+    - name: Debug success message
+      debug:
+        msg: "The ESXi host {{ esxi_hostname }} is in maintenance mode. Proceeding."
+
+    - name: Log maintenance mode success
+      shell: echo "#vCenter Host Facts - {{ time }}, [INFO], ESXi host {{ esxi_hostname }} is in Maintenance Mode. Proceeding with tasks." >> vcenter_host_facts_success.yml
+      delegate_to: localhost
+      when: maintenance_mode is defined and maintenance_mode == true
+
+    - name: "update entry for DECO server for Healthy status"
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+        module_name: "healthy"
+        status: "T"           
+      register: update_status_info_state
+      delegate_to: localhost
+      when: maintenance_mode is defined and maintenance_mode == true
+
+
+
+    - name: Unset rescue_triggered fact
+      set_fact:
+        maint_rescue_triggered: false
+
+
+
+    # - name: Check maintenance mode and proceed or fail
+    #   when: maintenance_mode is defined and maintenance_mode == true
+
+    #   block:
+    #     - name: Debug success message
+    #       debug:
+    #         msg: "The ESXi host {{ esxi_hostname }} is in maintenance mode. Proceeding."
+
+    #     - name: Get timestamp from the system (success)
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp_success
+
+    #     - name: Set timestamp fact (success)
+    #       set_fact:
+    #         time: "{{ tstamp_success.stdout }}"
+
+    #     - name: Log maintenance mode success
+    #       shell: echo "#vCenter Host Facts - {{ time }}, [INFO], ESXi host {{ esxi_hostname }} is in Maintenance Mode. Proceeding with tasks." >> vcenter_host_facts_success.yml
+    #       delegate_to: localhost
+
+    #     - name: Unset rescue_triggered fact
+    #       set_fact:
+    #         maint_rescue_triggered: false
+
+  rescue:
+    - name: Set rescue_triggered fact
+      set_fact:
+        maint_rescue_triggered: true
+
+    - name: Debug failure message
+      debug:
+        msg: "The ESXi host {{ esxi_fqdn }} is NOT in maintenance mode or status is undefined."
+
+    - name: Get timestamp from the system (failure)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp_failure
+
+    - name: Set timestamp fact (failure)
+      set_fact:
+        time: "{{ tstamp_failure.stdout }}"
+
+    - name: Log failure to retrieve ESXi facts
+      shell: echo "!vCenter Host Facts - {{ time }}, [ERROR], ESXi host {{ esxi_hostname }} is NOT in Maintenance Mode or status is undefined." >> vcenter_host_facts_fail.yml
+      delegate_to: localhost
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      register: result_private_endpoint_connection_string
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      delegate_to: localhost
+
+    - name: "update entry for DECO server for Healthy status"
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+        module_name: "healthy"
+        status: "F"           
+      register: update_status_info_state
+      delegate_to: localhost
+      when: maintenance_mode is not defined or maintenance_mode != true
+
+# =======================================================================================================================
+
+- name: Manage SSH and Shell Settings on ESXi Hosts
+  block:
+
+
+
+    # - name: Debug SSH service status result
+    #   debug:
+    #     var: esxi_services
+
+    - name: Disable ESXi Shell Interactive Timeout
+      community.vmware.vmware_host_config_manager:
+        hostname: "{{ v_center_fqdn }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_fqdn }}"
+        options:
+          UserVars.ESXiShellInteractiveTimeOut: "0"
+      delegate_to: localhost
+      # loop: "{{ associated_cis }}"
+      register: interactive_timeout_status
+
+    - name: Debug Interactive Timeout Result
+      debug:
+        var: interactive_timeout_status
+
+    - name: Set ESXi Shell Auto-Disable Timeout
+      community.vmware.vmware_host_config_manager:
+        hostname: "{{ v_center_fqdn }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_fqdn }}"
+        options:
+          UserVars.ESXiShellTimeOut: "0"
+      delegate_to: localhost
+      # loop: "{{ associated_cis }}"
+      register: shell_timeout_status
+
+    - name: Debug Shell Auto-Disable Timeout Result
+      debug:
+        var: shell_timeout_status
+
+    - name: Start SSH service on ESXi host
+      community.vmware.vmware_host_service_manager:
+        hostname: "{{ v_center_fqdn }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: false
+        esxi_hostname: "{{ esxi_fqdn }}"
+        service_name: TSM-SSH
+        state: restart
+      delegate_to: localhost
+      # loop: "{{ associated_cis }}"
+      register: ssh_service_status
+
+    - name: Debug SSH service start result
+      debug:
+        var: ssh_service_status
+
+    - name: Get SSH (TSM-SSH) Service Status
+      community.vmware.vmware_host_service_info:
+        hostname: "{{ v_center_fqdn }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: false
+        esxi_hostname: "{{ esxi_fqdn }}"
+      delegate_to: localhost
+      register: esxi_services
+      # loop: "{{ associated_cis }}"
+
+
+  rescue:
+    - name: Log failure to retrieve ESXi SSH/Shell settings
+      shell: echo '!ESXi SSH/Shell Config - [ERROR], Failed to update SSH/Shell settings on "{{ esxi_fqdn }}"' >> esxi_ssh_shell_fail.yml
+      delegate_to: localhost
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      register: result_private_endpoint_connection_string
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      delegate_to: localhost
+
+    - name: "update entry for DECO server for Healthy status"
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+        module_name: "healthy"
+        status: "F"           
+      register: update_status_info_state
+      delegate_to: localhost

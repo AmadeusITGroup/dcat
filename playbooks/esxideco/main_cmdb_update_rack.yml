@@ -1,0 +1,37 @@
+---
+- name: "cmdb update"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update_esxi_rack
+        tasks_from: filter_hostlist_cmdb_update.yml
+
+- name: "Create TR for cmdb update"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update_esxi_rack
+        tasks_from: create_tr_cmdb_update.yml
+
+- name: "cmdb update"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update_esxi_rack
+        tasks_from: cmdb_update.yml
+      when: cmdb_update == "F" and vcenter_cleanup == "T" 
+
+- name: "ADD info TR for cmdb update"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update_esxi_rack
+        tasks_from: add_info_cmdb_update.yml

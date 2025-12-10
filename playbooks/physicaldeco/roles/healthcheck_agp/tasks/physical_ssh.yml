@@ -1,0 +1,90 @@
+---
+    - name: "handle the error before grace period vcenter search for vm"
+      throttle: 1
+      block:
+
+        - name: get fqdn from CMDB RTU
+          get_fqdn:
+            host: "{{ inventory_hostname }}"
+            cmdb_rtu: "{{CMDB_URL}}"
+          register: fqdn_name
+          delegate_to: localhost
+
+        - set_fact:
+            rtu_fqdn: "{{ fqdn_name.status }}" 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"        
+
+        - name: "Pass vm data's"
+          shell: echo "#{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to fetch FQDN for {{ inventory_hostname }}" >> phy_fqdn_fail.yml   
+          delegate_to: localhost         
+          when: rtu_fqdn == "NA"
+
+        - meta: end_host
+          when: rtu_fqdn == "NA"
+
+        - name: "Test custom module for server information gathering"
+          gather_info_hc:
+            hostname: "{{ rtu_fqdn }}"
+            username: "{{ phy_ssh_username }}"
+            password: "{{ phy_ssh_password }}"                        
+          delegate_to: localhost
+          register: output_gather_info
+
+        - set_fact:
+            vmname: "{{ output_gather_info.host_result }}"
+         
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"        
+
+
+        - name: "Pass vm data's"
+          shell: echo "#{{ inventory_hostname }}, {{ time }}, [INFO], :SSH connectivity is enabled for {{ inventory_hostname }}" >> phy_ssh_success.yml   
+          delegate_to: localhost         
+          when: vmname is search("{{ inventory_hostname }}")
+
+        - name: "SSH fail"
+          shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to SSH Physical server {{ inventory_hostname }}, either connection or credential issue" >> phy_ssh_fail.yml                   
+          delegate_to: localhost         
+          when: vmname is search("ERROR")           
+
+      rescue: 
+      - name: rescue on SSH connection issue - Physical Linux
+        debug:
+          msg: "rescue SSH connection issue - Physical Linux" 
+
+
+      - name: Get timestamp from the system
+        shell: "date +%Y-%m-%d/%H:%M"
+        delegate_to: localhost
+        register: tstamp  
+                        
+      - set_fact:
+          time: "{{tstamp.stdout}}"
+
+      - name: Display the JSON file content
+        shell: cat phy_ssh_success.yml
+        delegate_to: localhost
+        register: result_phy_ssh_success
+
+      - name: save the Json data to a Variable as a Fact
+        set_fact:
+          phy_ssh_success: "{{ result_phy_ssh_success.stdout }}" 
+        delegate_to: localhost                   
+
+      - name: "VM host list failure to file before grace period"
+        shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to SSH Physical server {{ inventory_hostname }}, either connection or credential issue" >> phy_ssh_fail.yml                   
+        delegate_to: localhost
+        when: phy_ssh_success is not search("{{ inventory_hostname }}") 

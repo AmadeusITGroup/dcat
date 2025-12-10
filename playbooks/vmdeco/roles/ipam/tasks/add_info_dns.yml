@@ -1,0 +1,470 @@
+---
+# - name: "This playbook is to update the implementation,validation result and close the TR for IPAM VALIDATION TASK"
+#   hosts: localhost
+#   gather_facts: no  
+#   vars:
+#     json_dns_fail: "record_dns_fail.json"
+#     file_dns_fail: "vm_dns_failure.yml"
+#     json_dns_suc: "record_dns_suc.json"
+#     file_dns_suc: "vm_dns_success.yml"
+#     file_dns_fin : "vm_dns_final.yml"    
+#     graceperiod_flag: true
+#     dns_check: False
+#     nas_check: true
+#     #- winaproach_vars.yml  
+        
+#   tasks:      
+        
+    - name: "Handling TR record_id for implementation and validation result"
+      block: 
+  ####################### Failure info gathering ########################## 
+        - name : handling error in the success block
+          block:
+
+            - set_fact:
+                json_dns_fail: "record_dns_fail.json"
+                file_dns_fail: "vm_dns_failure.yml"
+                json_dns_suc: "record_dns_suc.json"
+                file_dns_suc: "vm_dns_success.yml"
+                file_dns_fin : "vm_dns_final.yml"   
+                
+            - name: Display the JSON file content
+              shell: cat record_healthcheck.json
+              delegate_to: localhost
+              register: TR_result_healthcheck  
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+              delegate_to: localhost
+
+            - meta: end_host
+              when: record_id_healthcheck != ""         
+
+            - name: Display the JSON file content
+              shell: cat record_healthcheck.json
+              delegate_to: localhost
+              register: TR_result_healthcheck  
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+              delegate_to: localhost
+
+            - meta: end_host
+              when: record_id_healthcheck != ""         
+
+            - name: Display the JSON file content
+              shell: cat record_dns.json
+              delegate_to: localhost
+              register: TR_result
+        
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                dns_record_id: "{{ TR_result.stdout[1:-1] }}" 
+              delegate_to: localhost         
+
+            - meta: end_host
+              when: dns_record_id == ""           
+
+            - name: Display the JSON file content
+              shell: cat vm_dns_failure.yml
+              delegate_to: localhost
+              register: result_dns_fail
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_dns_fail_v: "{{ result_dns_fail.stdout }}" 
+              delegate_to: localhost  
+               
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are the DECO results for IPAM Update - VMs"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_dns_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_dns_fail_v }}"
+              when:  result_dns_fail_v != ""
+          
+            - name: " Merge Failure information to to single final file"
+              shell: echo "{{ content_dns_fail }}" >> vm_dns_final.yml                    
+              delegate_to: localhost
+              when:  result_dns_fail_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no failure file found and continue"
+
+#############  success info gathering ##########################
+        - name : handling error in the success block
+          block:
+            - name: Display the JSON file content
+              shell: cat vm_dns_success.yml
+              delegate_to: localhost
+              register: result_dns_suc
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_dns_suc_v: "{{ result_dns_suc.stdout }}" 
+              delegate_to: localhost  
+    
+            
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are the DECO results for IPAM Update - VMs"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_dns_suc: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_dns_suc_v }}" 
+              when: result_dns_suc_v != ""
+
+
+            - name: " Merge Success information to single final file "
+              shell: echo "{{content_dns_suc}}" >> vm_dns_final.yml                    
+              delegate_to: localhost
+              when: result_dns_suc_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no success file found and continue"
+
+##########################  merging both failure and success results ###########################
+
+        - name: Display the JSON file content
+          shell: cat vm_dns_final.yml
+          delegate_to: localhost
+          register: result_dns_fin
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            result_dns_fin_v: "{{ result_dns_fin.stdout }}" 
+          delegate_to: localhost  
+
+
+        - name: Display the JSON file content
+          shell: cat record_dns.json
+          delegate_to: localhost
+          register: TR_result
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_dns: "{{ TR_result.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost          
+
+        - name: Split content_dns_fail into lines and filter specific IPAM error
+          set_fact:
+            specific_ipam_errors: >-
+              {{
+                content_dns_fail.splitlines()
+                | select('search', '\[ERROR\],IPAM entry not matching for NAME')
+                | list
+              }}
+          when: content_dns_fail is defined and content_dns_fail | length > 0
+
+
+        - name: Split content_dns_fail into other errors
+          set_fact:
+            other_errors: >-
+              {{
+                content_dns_fail.splitlines()
+                | select('search', '\[ERROR\]')
+                | reject('search', '\[ERROR\],IPAM entry not matching for NAME')
+                | list
+              }}
+          when: content_dns_fail is defined and content_dns_fail | length > 0
+
+
+        - name: Assemble specific IPAM error PTR content
+          set_fact:
+            support_groups_ipam: >-
+              {{
+                (
+                  specific_ipam_errors +
+                  [
+                    '\nThe IPs mentioned above were fetched directly from the servers. However, they do not match the expected host mapping in the IPAM system.',
+                    'Please verify and map the correct IP-host relationships in the IPAM console:',
+                    'IPAM Console URL:{{IPAM_URL}}',
+                    'IPAM Support group: OCISNEAC'
+                  ]
+                ) | join('\n')
+              }}
+          # when: specific_ipam_errors | length > 0
+          when: specific_ipam_errors is defined and specific_ipam_errors | length > 0
+
+
+        - name: Assemble other errors PTR content
+          set_fact:
+            support_groups_other: >-
+              {{
+                other_errors | join('\n')
+              }}
+          # when: other_errors | length > 0
+          when: other_errors is defined and other_errors | length > 0
+
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "CSTY::DECO::DCAT::VM DECO: IP DNS record removal failure list and details with failed TR - {{ record_dns }}"
+            tr_map: "{{ record_dns }}"
+            assignee_group: "{{ requester_group }}" 
+            ptr_logs: "{{ support_groups_ipam }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_out_dns
+          until: '"Successfully" in ptr_out_dns.msg'
+          retries: 3
+          delay: 10            
+          # when: specific_ipam_errors | length > 0 and result_dns_fin_v is not search("INFO")
+          when:
+            - specific_ipam_errors is defined
+            - specific_ipam_errors | length > 0
+            - result_dns_fin_v is not search('INFO')
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "CSTY::DECO::DCAT::VM DECO: IP DNS record removal failure list and details with failed TR - {{ record_dns }}"
+            tr_map: "{{ record_dns }}"
+            assignee_group: "OCISNEAC"  
+            ptr_logs: "{{ support_groups_other }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_out_dns
+          until: '"Successfully" in ptr_out_dns.msg'
+          retries: 3
+          delay: 10            
+          # when: other_errors | length > 0 and result_dns_fin_v is not search("INFO")
+          when:
+            - other_errors is defined
+            - other_errors | length > 0
+            - result_dns_fin_v is not search('INFO')
+        
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: filter owner group
+          categorize_servers:
+            path: vm_ipam_stat_failure_agp.txt
+          delegate_to: localhost
+          register: failure_servers_list
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is not search("INFO")
+
+        - debug:
+            var: failure_servers_list
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is not search("INFO")
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_out_dns.id }}"
+            event: "VM DECO: IPAM DNS record removal failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}" 
+          loop: "{{ failure_servers_list.Status.Failure }}"
+          register: ptr_add
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is not search("INFO")
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_dns }}"
+            prob_id: "{{ ptr_out_dns.id }}"                   
+          register: update_overview  
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is not search("INFO")   
+
+########################  closing implementation as failed  ############################################
+        - name: Implementation Failed that is closing the implementation as failed
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: fail_implementation
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+              task_id: "{{ record_dns }}"
+              text: "{{ result_dns_fin_v }}"
+          register: fail_implementation  
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is not search("INFO")         
+
+
+ ########################  Pending Partial implementation  ############################################
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "VM DECO: IP DNS record removal failure list and details with partially implemented TR - {{ record_dns }}"
+            tr_map: "{{ record_dns }}"
+            assignee_group: "{{ requester_group }}" 
+            ptr_logs: "{{ support_groups_ipam }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_out_dns
+          until: '"Successfully" in ptr_out_dns.msg'
+          retries: 3
+          delay: 10  
+          # when: specific_ipam_errors | length > 0 and result_dns_fin_v is search("INFO")
+          when:
+            - specific_ipam_errors is defined
+            - specific_ipam_errors | length > 0
+            - result_dns_fin_v is search("INFO")
+
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "VM DECO: IP DNS record removal failure list and details with partially implemented TR - {{ record_dns }}"
+            tr_map: "{{ record_dns }}"
+            assignee_group: "OCISNEAC"  
+            ptr_logs: "{{ support_groups_other }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_out_dns
+          until: '"Successfully" in ptr_out_dns.msg'
+          retries: 3
+          delay: 10  
+          # when: other_errors | length > 0 and result_dns_fin_v is search("INFO")
+          when:
+            - other_errors is defined
+            - other_errors | length > 0
+            - result_dns_fin_v is search("INFO")
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: filter owner group
+          categorize_servers:
+            path: vm_ipam_stat_failure_agp.txt
+          delegate_to: localhost
+          register: failure_servers_list
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is search("INFO")
+
+        - debug:
+            var: failure_servers_list
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is search("INFO")
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_out_dns.id }}"
+            event: "VM DECO: IPAM DNS record removal failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}" 
+          loop: "{{ failure_servers_list.Status.Failure }}"
+          register: ptr_add
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is search("INFO")
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_dns }}"
+            prob_id: "{{ ptr_out_dns.id }}"                   
+          register: update_overview  
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is search("INFO") 
+
+        - name: Implementation partial that is closing the implementation as partial
+          tr_partial_imp:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_dns }}"
+          register: partial_implement
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is search("INFO")
+
+# ########################  Close Partial implementation  ############################################
+        - name: Implementation partial that is closing the implementation as partial
+          tr_partial_close:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_dns }}"
+            closing_comment: "{{ result_dns_fin_v }}"
+          register: close_partial_implement
+          when: result_dns_fin_v is search("ERROR") and result_dns_fin_v is search("INFO")      
+
+############################# closing implementation as success ####################            
+        - name: END Implementation that is closing the implementation as success
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: end_implementation
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+                task_id: "{{ record_dns }}"
+                text: "{{ result_dns_fin_v }}"
+          register: end_implementation
+          when: result_dns_fin_v is not search("ERROR") and result_dns_fin_v is search("INFO")
+
+        - name: start Validate Implementation for closing the success TR
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: validate
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+              task_id: "{{ record_dns }}"
+              text: "{{ result_dns_fin_v }}"
+          register: validation
+          when: result_dns_fin_v is not search("ERROR") and result_dns_fin_v is search("INFO") 
+
+        
+      rescue:
+        - debug:
+            msg: "Exception occurred so rescued the main tr result block for IPAM update" 

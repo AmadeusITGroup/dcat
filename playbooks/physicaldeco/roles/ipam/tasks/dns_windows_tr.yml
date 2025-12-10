@@ -1,0 +1,99 @@
+---
+# - name: "This playbook is to Create TR"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+#     dns_check: False
+#     graceperiod_flag: true
+#     nas_check: true
+
+#   #### TR creatation #####
+
+#   tasks:
+    - name: "Handling Create TR- Win@proach "
+      block:
+        - set_fact:
+            dns_check: False
+            graceperiod_flag: True
+            nas_check: true
+
+        - name: Display the JSON file content
+          shell: cat phy_dns_win_success.yml
+          delegate_to: localhost
+          register: win_data
+        
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            dns_record_win: "{{ win_data.stdout }}" 
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: dns_record_win is not search('manual') or dns_record_win == ""
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "VM DECO - Windows DNS Records Cleanup"
+            assignee_name: "DecoP112686"
+            assignee_group: "OSX02WIN"     #"DINFDECO"            
+            severity: "4"
+            overview: "VM DECO - Windows DNS Records Cleanup"
+            parent_id: "{{ cr }}"            
+            username: "{{ winAproach_username }}"     
+            password: "{{ winAproach_password }}"
+          delegate_to: localhost
+          no_log: False
+          register: create_tr_output
+        
+        - set_fact:
+            record_dns: "{{create_tr_output.record_id}}"
+           
+
+        - copy:
+            content: '{{ record_dns|to_json }}'
+            dest: record_for_dns.json
+          delegate_to: localhost
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_dns }}"
+          register: add_document
+          delegate_to: localhost
+
+        - name: grep windows DNS content
+          shell: cat vm_dns_win_success.yml
+          delegate_to: localhost
+          register: dns_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_dns: "{{ dns_result.stdout }}" 
+          delegate_to: localhost
+
+        - meta: end_host
+          when: vm_dns == ""
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the Windows VMs qualified for DNS Records Cleanup"
+            form3: "***********************************************************************"
+            form4: "***********************************************************************"            
+        - set_fact:
+            content_dns_success: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ vm_dns +'\n'+ form4 }}"
+
+        - name: "Add message to DNS TR"
+          add_message_to_tr:
+            record_id: "{{ record_dns }}"
+            message: "{{ content_dns_success }}"             
+            username: "{{ winAproach_username }}"     
+            password: "{{ winAproach_password }}" 
+          delegate_to: localhost
+          register: add_msg_output
+
+
+      rescue:
+        - debug:
+            msg: "Failed to Create VM DECO - Windows DNS Records Cleanup TR"

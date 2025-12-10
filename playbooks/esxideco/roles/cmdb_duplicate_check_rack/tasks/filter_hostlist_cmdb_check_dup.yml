@@ -1,0 +1,68 @@
+---
+    - name: "Check entry for DECO server"
+      throttle: 1
+      block:
+ 
+        - set_fact:
+            host_list: host_list_cmdb_duplicate_check.yml
+          run_once: true
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          run_once: true
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          run_once: true
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck != ""
+
+        # - name: Display the JSON file content
+        #   shell: cat esxi_ssh_fail.yml
+        #   delegate_to: localhost
+        #   register: TR_result_esxi_ssh_fail  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     ssh_fail: "{{ TR_result_esxi_ssh_fail.stdout }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: ssh_fail is search("{{ inventory_hostname }}")    
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          run_once: true
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          run_once: true
+          delegate_to: localhost      
+                
+        - name: "Check entry for DECO server for filter hostlist for cmdb duplicate list"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{ inventory_hostname }}"
+          register: idem_status 
+          delegate_to: localhost
+                 
+        - set_fact: 
+            cmdb_dup_check: '{{ idem_status.module_update.cmdb_dup_check }}'                  
+           
+        - name: "esxi server list qualified for cmdb duplicate check"
+          shell: echo "{{ inventory_hostname }}," >> {{ host_list }}                   
+          delegate_to: localhost
+          when: cmdb_dup_check == "F"                 
+           
+      rescue:
+        - debug:
+            msg: "Failed to fetch hostlist for CMDB duplicate check "      
+

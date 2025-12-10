@@ -1,0 +1,36 @@
+---
+- name: "success/Failure logs - Second Trigger"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: success/Failure logs
+      ansible.builtin.import_role:
+        name: logs_agp
+        tasks_from: success_fail_doc_agp.yml
+        
+
+- name: "Create TR for success/Failure logs"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: True 
+  tasks:
+    - name: success/Failure logs
+      ansible.builtin.import_role:
+        name: logs_agp
+        tasks_from: create_tr_success_fail_doc_agp.yml
+
+    - name: success/Failure logs
+      ansible.builtin.import_role:
+        name: logs_agp
+        tasks_from: add_info_success_fail_doc_agp.yml
+
+    # - name: success/Failure logs
+    #   ansible.builtin.import_role:
+    #     name: logs_agp
+    #     tasks_from: logger_success_fail_doc_agp.yml
+
+    # - name: success/Failure logs
+    #   ansible.builtin.import_role:
+    #     name: logs_agp
+    #     tasks_from: close_logger_tr.yml

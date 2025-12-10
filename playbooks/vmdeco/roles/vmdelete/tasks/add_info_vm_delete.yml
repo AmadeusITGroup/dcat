@@ -1,0 +1,416 @@
+---
+# - name: "This playbook is to update the implementation,validation result and close the TR for VM poweroff and delete task"
+#   hosts: localhost
+#   gather_facts: no  
+#   vars:
+#     file_gp_fail: "vm_hostname_failure_gp.yml"
+#     #file_failure_poweron: "vm_hostname_failure_poweron.yml"
+#     file_failure_del: "vm_hostname_failure_del.yml" 
+#     file_success_del: "vm_hostname_success_del.yml"
+#     graceperiod_flag: true
+#     poweroff: False
+#     record_id_vm_del : ""
+#     vmdelete: False
+#     dns_check: true    
+
+#   tasks:      
+        
+    - name: "Handling TR record_id for implementation and validation result"
+      block:
+ #############  success info gathering deletion ##########################
+        - name : handling error in the success block
+          block:
+
+            - set_fact:
+                file_gp_fail: "vm_hostname_failure_gp.yml"
+                file_failure_del: "vm_hostname_failure_del.yml" 
+                file_success_del: "vm_hostname_success_del.yml"            
+
+            - name: Display the JSON file content
+              shell: cat record_healthcheck.json
+              delegate_to: localhost
+              register: TR_result_healthcheck  
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+              delegate_to: localhost
+
+            - meta: end_host
+              when: record_id_healthcheck != ""          
+
+            - name: Display the JSON file content
+              shell: cat record_healthcheck.json
+              delegate_to: localhost
+              register: TR_result_healthcheck  
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+              delegate_to: localhost
+
+            - meta: end_host
+              when: record_id_healthcheck != ""          
+
+            - name: Display the JSON file content
+              shell: cat record_vm_del.json
+              delegate_to: localhost
+              register: TR_result_del  
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                record_id_vm_del: "{{ TR_result_del.stdout[1:-1] }}"
+              delegate_to: localhost         
+
+            - meta: end_host
+              when: record_id_vm_del == ""
+
+            - name: Display the JSON file content
+              shell: cat vm_hostname_success_del.yml
+              delegate_to: localhost
+              register: result_vm_del_suc
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_vm_del_suc_v: "{{ result_vm_del_suc.stdout }}" 
+              delegate_to: localhost  
+    
+            
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are the DECO results for VM Poweroff & Delete - VMs"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_vm_del_suc: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_vm_del_suc_v }}"
+              when: result_vm_del_suc_v != ""   
+           
+
+            - name: " Merge Success information to single final file "
+              shell: echo "{{content_vm_del_suc}}" >> vm_del_final.yml                    
+              delegate_to: localhost
+              when: result_vm_del_suc_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no success file found and continue"      
+  ####################### Failure info gathering during poweroff and delete merging to single file ########################## 
+        - name : handling error in the failure block for poweroff
+          block:
+
+            - name: Display the JSON file content
+              shell: cat vm_hostname_failure_gp.yml
+              delegate_to: localhost
+              register: result_vm_del_fail
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_vm_del_fail_v: "{{ result_vm_del_fail.stdout }}" 
+              delegate_to: localhost  
+
+
+            - name: " Merge Failure information to to single final file of poweroff"
+              shell: echo "{{ result_vm_del_fail_v }}" >> vm_del_final_fail.yml                    
+              delegate_to: localhost
+              when: result_vm_del_fail_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue during poweroff for no failure file found and continue "
+
+        - name : handling error in the failure block for deletion
+          block:
+
+            - name: Display the JSON file content
+              shell: cat vm_hostname_failure_del.yml
+              delegate_to: localhost
+              register: result_vc_del_fail
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_vc_del_fail_v: "{{ result_vc_del_fail.stdout }}" 
+              delegate_to: localhost  
+                
+
+            - name: " Merge Failure information to to single final file of delete"
+              shell: echo "{{ result_vc_del_fail_v }}" >> vm_del_final_fail.yml                    
+              delegate_to: localhost
+              when: result_vc_del_fail_v != ""                     
+
+          rescue:
+            - debug:
+                msg: "Rescue for no failure file found and continue at deletion"
+
+#####################  reading the final failure file ##########################
+        - name : handling error in the reading the final failure file block
+          block:
+            - name: Display the JSON file content
+              shell: cat vm_del_final_fail.yml
+              delegate_to: localhost
+              register: result_vm_del_rd
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_vm_del_rd_v: "{{ result_vm_del_rd.stdout }}" 
+              delegate_to: localhost  
+    
+            
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are the DECO results for VM Poweroff & Delete - VMs"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_vm_del_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_vm_del_rd_v }}" 
+              when: result_vm_del_rd_v != ""
+
+
+            - name: " Merge failure information to single final file "
+              shell: echo "{{content_vm_del_fail}}" >> vm_del_final.yml                    
+              delegate_to: localhost
+              when: result_vm_del_rd_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue the final failure file when not found and continue"
+
+
+##########################  merging both failure and success results ###########################
+
+        - name: Display the JSON file content
+          shell: cat vm_del_final.yml
+          delegate_to: localhost
+          register: result_vm_del_fin
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            result_vm_del_fin_v: "{{ result_vm_del_fin.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost            
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "CSTY::DECO::DCAT::VM DECO: VM Deletion from vcenter failure list and details with failed TR - {{ record_id_vm_del }}"
+            tr_map: "{{ record_id_vm_del }}"
+            assignee_group: "OSP000" #"DINFDECO"  
+            ptr_logs: "{{ content_vm_del_fail }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_out_deletion
+          until: '"Successfully" in ptr_out_deletion.msg'
+          retries: 3
+          delay: 10            
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is not search("INFO")
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: filter owner group
+          categorize_servers:
+            path: vm_poweroff_failure_agp.txt
+          delegate_to: localhost
+          register: failure_servers_list
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is not search("INFO")
+
+        - debug:
+            var: failure_servers_list
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is not search("INFO")
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_out_deletion.id }}"
+            event: "VM DECO: VM Deletion from vcenter failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}" 
+          loop: "{{ failure_servers_list.Status.Failure }}"
+          register: ptr_add
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is not search("INFO")
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_vm_del }}"
+            prob_id: "{{ ptr_out_deletion.id }}"                   
+          register: update_overview  
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is not search("INFO")
+
+########################  closing implementation as failed  ############################################
+        - name: Implementation Failed that is closing the implementation as failed
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: fail_implementation
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+              task_id: "{{ record_id_vm_del }}" #"{{ record_id }}"
+              text: "{{ result_vm_del_fin_v }}"
+          register: fail_implementation  
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is not search("INFO")
+
+
+########################  Pending Partial implementation  ############################################
+        - name: Implementation partial that is closing the implementation as partial
+          tr_partial_imp:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_vm_del }}"
+          register: partial_implement
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is search("INFO")
+   
+
+# ########################  Close Partial implementation  ############################################
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "VM DECO: VM Deletion from vcenter failure list and details with partially implemented TR - {{ record_id_vm_del }}"
+            tr_map: "{{ record_id_vm_del }}"
+            assignee_group: "OSP000" #"DINFDECO"  
+            ptr_logs: "{{ content_vm_del_fail }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_out_deletion
+          until: '"Successfully" in ptr_out_deletion.msg'
+          retries: 3
+          delay: 10           
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is search("INFO")
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: filter owner group
+          categorize_servers:
+            path: vm_poweroff_failure_agp.txt
+          delegate_to: localhost
+          register: failure_servers_list
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is search("INFO")
+
+        - debug:
+            var: failure_servers_list
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is search("INFO")
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_out_deletion.id }}"
+            event: "VM DECO: VM Deletion from vcenter failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}" 
+          loop: "{{ failure_servers_list.Status.Failure }}"
+          register: ptr_add
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is search("INFO")
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_vm_del }}"
+            prob_id: "{{ ptr_out_deletion.id }}"                   
+          register: update_overview  
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is search("INFO")  
+
+        - name: Implementation partial that is closing the implementation as partial
+          tr_partial_close:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_vm_del }}"
+            closing_comment: "{{ result_vm_del_fin_v }}"
+          register: close_partial_implement
+          when: result_vm_del_fin_v is search("ERROR") and result_vm_del_fin_v is search("INFO")         
+
+
+# ############################# closing implementation as success ####################            
+        - name: END Implementation that is closing the implementation as success
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: end_implementation
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+                task_id: "{{ record_id_vm_del }}" #"{{ record_id }}"
+                text: "{{ result_vm_del_fin_v }}"
+          register: end_implementation
+          when: result_vm_del_fin_v is not search("ERROR") and result_vm_del_fin_v is search("INFO")
+ 
+
+        - name: start Validate Implementation for closing the success TR
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: validate
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+              task_id: "{{ record_id_vm_del }}" #"{{ record_id }}"
+              text: "{{ result_vm_del_fin_v }}"
+          register: validation
+          when: result_vm_del_fin_v is not search("ERROR") and result_vm_del_fin_v is search("INFO") 
+
+        
+      rescue:
+        - debug:
+            msg: "Exception occurred so rescued the main tr result block for VM poweroff and delete task"
+
+
+
+
+
+                           
+        
+            
+             

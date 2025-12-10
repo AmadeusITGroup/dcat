@@ -1,0 +1,306 @@
+- name: "Cluster Method - Storage Controller Cleanup" 
+  throttle: 1
+  vars:
+      renames: "success"
+      deleted_hostcluster: ""
+
+  block:
+    - name: Display the JSON file content for storage cleanup  
+      shell: cat record_storage_cleanup_phy.json
+      delegate_to: localhost
+      register: TR_result_storage_cleanup  
+
+    - name: save the Json data to a Variable as a Fact for storage cleanup
+      set_fact:
+        record_id_storage_cleanup: "{{ TR_result_storage_cleanup.stdout[1:-1] }}"
+      delegate_to: localhost
+
+    - name: "Check host cluster members."
+      ibm.spectrum_virtualize.ibm_svcinfo_command:
+        command: "svcinfo lshostcluster {{ hostcluster_name }}"
+        clustername: "{{ storage_sys }}"
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+      register: hostcountdata 
+
+    - name: "Debug host cluster members output"
+      debug:
+        var: hostcountdata.stdout 
+
+    - name: "Host Count"
+      check_host_clustermembers:
+        hostcount_data: "{{ hostcountdata.stdout }}"
+      register: hostcount
+
+    - name: "Debug Host Count output"
+      debug:
+        var: hostcount.data
+
+    - set_fact:
+        host_count: "{{ hostcount.data }}" 
+
+    - name: "Check host cluster volume mappings."
+      ibm.spectrum_virtualize.ibm_svcinfo_command:
+        command: "svcinfo lshostclustervolumemap {{ hostcluster_name }}"
+        clustername: "{{ storage_sys }}"
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+      register: host_cluster_volume
+
+    - name: "Debug host cluster volume mappings output"
+      debug:
+        var: host_cluster_volume.stdout
+
+    - name: "Host Cluster volume"
+      check_host_clustervolume:
+        hostcluster_volume: "{{ host_cluster_volume.stdout }}"
+      register: hostclustervolume
+
+    - name: "Debug Host Cluster volume output"
+      debug:
+        var: hostclustervolume
+
+    - set_fact:
+          cluster_volume: "{{ hostclustervolume.data }}" 
+    - set_fact:
+          uid_cluster_volumes: "{{ hostclustervolume.uid }}"  
+    - set_fact:
+          scsi_cluster_volumes: "{{ hostclustervolume.scsi }}"           
+
+    - name: populate combined var
+      set_fact:
+        combined_var_cluster: "{{ combined_var_cluster|default([]) + [dict(uid=inner_item[0], volume=inner_item[1],scsi=inner_item[2])] }}"
+      loop: "{{ uid_cluster_volumes | zip_longest(cluster_volume,scsi_cluster_volumes) | list }}"
+      loop_control:
+        loop_var: inner_item
+      register: combined_var_cluster
+      when: cluster_volume | length != 0
+
+    - set_fact:
+        last_in_list_cluster: "{{ combined_var_cluster.results |last }}"
+      when: cluster_volume | length != 0  
+
+    - set_fact:
+        vol_uid_cluster: "{{ last_in_list_cluster.ansible_facts.combined_var_cluster | to_json}}"     
+      when: cluster_volume | length != 0
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }} - Host_cluster_sharemapped_volumes - {{vol_uid_cluster}}." >> {{file_info_storage}}                   
+      delegate_to: localhost
+      when: cluster_volume | length != 0
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }} - Host_cluster_sharemapped_volumes - No shared volumes." >> {{file_info_storage}}                   
+      delegate_to: localhost
+      when: cluster_volume | length == 0
+
+###################  Removing hosts from cluster  previous code ################################3
+    # - name: "Remove host from the host cluster"
+    #   ibm.spectrum_virtualize.ibm_svctask_command:
+    #     command: "svctask rmhostclustermember -host {{ inventory_hostname }} -removemappings -force {{ hostcluster_name }}"
+    #     clustername: "{{ storage_sys }}"
+        # username: "{{ synergon_username }}"
+        # password: "{{ synergon_password }}"
+    #   register: removal_host_output
+
+    # - name: "Debug Remove host from the host cluster output"
+    #   debug:
+    #     var: removal_host_output.changed
+    
+    # - name: Get timestamp from the system
+    #   shell: "date +%Y-%m-%d/%H:%M"
+    #   delegate_to: localhost
+    #   register: tstamp  
+    # - set_fact:
+    #       time: "{{tstamp.stdout}}"
+    # - name: "Physical host list"
+    #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Removal of host from the host cluster failed. Check errors in clustermethod module." >> {{file_storage_cleanup_fail}}                    
+    #   delegate_to: localhost   
+    #   when: removal_host_output.changed != true
+    # - meta: end_host
+    #   when: removal_host_output.changed != true    
+#####################  Unmapping the host cluster volume mappings #################
+    - name: "Unmap the Host Cluster volume mappings"
+      ibm.spectrum_virtualize.ibm_svc_vol_map:
+        clustername: "{{ storage_sys }}" 
+        hostcluster: "{{ hostcluster_name }}"
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        volname: "{{ inner_item }}"
+        state: absent
+      loop: "{{ cluster_volume }}"
+      loop_control:
+        loop_var: inner_item
+      register: hostcluster_unmapoutput
+      when: host_count == "1" and  cluster_volume | length != 0
+    - name: "Debug Unmapping the Host Cluster volumes output"
+      debug:
+        var: hostcluster_unmapoutput
+
+#################################################################
+    - name: "Remove host from the host cluster"
+      ibm.spectrum_virtualize.ibm_svctask_command:
+        command: "svctask rmhostclustermember -host {{ inventory_hostname }} -removemappings -force {{ hostcluster_name }}"
+        clustername: "{{ storage_sys }}"
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+      register: removal_host_output
+
+    - name: "Debug Remove host from the host cluster output"
+      debug:
+        var: removal_host_output.changed
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+    
+    - set_fact:
+          time: "{{tstamp.stdout}}"
+
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+      when: removal_host_output.changed != true
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Removal of host from the host cluster failed. Check errors in clustermethod module." >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost   
+      when: removal_host_output.changed != true
+    - meta: end_host
+      when: removal_host_output.changed != true   
+
+    - name: "Check if unmapped volume is mapped to other hosts."
+      ibm.spectrum_virtualize.ibm_svcinfo_command:
+        command: "svcinfo lsvdiskhostmap {{ inner_item }}"
+        clustername: "{{ storage_sys }}"
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+      loop: "{{ cluster_volume }}"
+      loop_control:
+        loop_var: inner_item
+      register: vdiskhostmapoutput
+      when: host_count == "1" and  cluster_volume | length != 0
+    - name: "Debug lsvdiskhostmap output"
+      debug:
+        var: vdiskhostmapoutput
+    - name: "Parse vdiskhostmapoutput"
+      check_volumes_torename:
+        lsvdisk_output: "{{ vdiskhostmapoutput.results }}"
+      register: vdisklist 
+      when: host_count == "1" and  cluster_volume | length != 0
+    - name: "Debug parse_lsvdiskhostmap_output"
+      debug:
+        var: vdisklist
+    - name: "Filter out volumes that have to be renamed"
+      filter_vols_for_renaming:
+        vols: "{{ vdisklist.data }}" 
+        TR: "{{ record_id_storage_cleanup }}" #"{{ input.TR }}"
+      register: vols_to_be_renamed 
+      when: host_count == "1" and  cluster_volume | length != 0
+    - name: "Debug list of volumes to be renamed"
+      debug:
+        var: vols_to_be_renamed
+    - name: "Rename host cluster mapped volume"
+      ibm.spectrum_virtualize.ibm_svctask_command:
+        command: ["svctask chvdisk -name {{item.newname}} {{item.oldname}}"]
+        clustername: "{{ storage_sys }}"
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+      loop: "{{vols_to_be_renamed.vols}}"
+      register: renamevolumeoutputs
+      when: host_count == "1" and  cluster_volume | length != 0
+    - name: "Debug Rename host private mapped volume output"
+      debug:
+        var: renamevolumeoutputs
+    
+    - name: "Rename output"
+      check_rename_output:
+        rename_output: "{{ renamevolumeoutputs.results }}"
+      register: outputs_rename
+      when: host_count == "1" and  cluster_volume | length != 0 
+
+    - name: "Debug Rename output"
+      debug:
+        var: outputs_rename
+    - set_fact:
+          renames: "{{outputs_rename.data}}"
+      when: host_count == "1" and  cluster_volume | length != 0
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+    
+    - set_fact:
+          time: "{{tstamp.stdout}}"
+
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+      when: renames == "fails"
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Host cluster Unmapped volumes are not renamed. Check errors in clustermethod module." >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost   
+      when: renames == "fails"
+
+# ##########################  deletion of host cluster ################################################################  
+    - name: "delete host cluster"
+      ibm.spectrum_virtualize.ibm_svc_hostcluster:
+        clustername: "{{ storage_sys }}" 
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        name: "{{ hostcluster_name }}"
+        state: absent
+      register: delete_host_cluster_output
+      when: host_count == "1" 
+    - name: "Debug delete host cluster output"
+      debug:
+        var: delete_host_cluster_output
+    - set_fact:
+          deleted_hostcluster: "{{delete_host_cluster_output.msg}}"
+      when: host_count == "1" 
+    
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+    
+    - set_fact:
+          time: "{{tstamp.stdout}}"
+    
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+      when: deleted_hostcluster is not search("has been deleted") and host_count == "1"
+    
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Host Cluster Not Deleted. Check errors in clustermethod module." >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost   
+      when: deleted_hostcluster is not search("has been deleted") and host_count == "1"
+    - meta: end_host
+      when: deleted_hostcluster is not search("has been deleted") and host_count == "1"
+    
+  rescue: 
+    - name: When above one throws error the below task should execute
+      debug:
+        msg: "Exception occurred but rescued - check errors on cluster method module"  
+    
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+    
+    - set_fact:
+          time: "{{tstamp.stdout}}"
+    
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], clustermethod module." >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost   
+
+    

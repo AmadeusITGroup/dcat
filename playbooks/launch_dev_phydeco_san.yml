@@ -1,0 +1,12 @@
+---
+- hosts: localhost
+  gather_facts: no
+
+  tasks:
+  - name: set env for deco
+    set_fact:
+      env_name: dev
+
+- import_playbook: main_phydeco_san.yml
+  vars:
+    env: "{{ env_name }}"

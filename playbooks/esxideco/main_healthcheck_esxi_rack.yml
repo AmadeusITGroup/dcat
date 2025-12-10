@@ -1,0 +1,153 @@
+---
+- name: "Healthcheck from localhost"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Health check CMDB
+      ansible.builtin.import_role:
+        name: healthcheck_esxi_rack
+        tasks_from: health_check_cmdb.yml
+
+    - name: Health check Synergon
+      ansible.builtin.import_role:
+        name: healthcheck_esxi_rack
+        tasks_from: health_check_synergon.yml
+
+- name: "Prepare variables and run health checks"
+  hosts: all:esxideco_rack
+  gather_facts: no
+  tasks:
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      run_once: true
+      register: result_private_endpoint_connection_string
+
+    - name: Save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      run_once: true
+      delegate_to: localhost   
+
+    - name: Check entry for DECO server for filter hostlist for blade healthcheck
+      azure_update_ref_esxi.py:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{ inventory_hostname }}"
+      register: idem_status 
+      delegate_to: localhost
+
+    - name: Set server shutdown status
+      set_fact: 
+        server_shutdown: "{{ idem_status.module_update.server_shutdown }}"
+
+    - name: End play for shutdown servers
+      meta: end_host
+      when: server_shutdown == "T"
+      
+    - name: "Fetch vCenter details"
+      fetch_esxi_vcenter:
+        esxiname: '{{ inventory_hostname }}'
+        synergon_api: '{{ synergon_url }}'
+      delegate_to: localhost
+      register: vcenter_output
+      until: '"Successfully" in vcenter_output.msg or "Unable to find" in vcenter_output.msg or "duplicate entries" in vcenter_output.msg'
+      retries: 3
+      delay: 10
+
+    - name: Debug - Check the content of vcenter_output
+      debug:
+        var: vcenter_output
+
+    - name: "Ensure vCenter details were fetched successfully"
+      fail:
+        msg: "Failed to fetch vCenter details for ESXi host {{ inventory_hostname }}: {{ vcenter_output.msg }}"
+      when: '"Successfully" not in vcenter_output.msg'
+
+    - name: "Extract FQDN from ESXi details"
+      set_fact:
+        esxi_fqdn: "{{ vcenter_output.esxi_details.self.name }}"
+
+    - name: "Debug extracted FQDN"
+      debug:
+        msg: "The extracted FQDN is: {{ esxi_fqdn }}"
+
+    - name: "Set initial vCenter details"
+      set_fact:
+        v_center_before: "{{ vcenter_output.esxi_details.vcenter }}"
+        v_center_msg: "{{ vcenter_output.msg }}"
+
+    - name: "Set the FQDN for vCenter"
+      set_fact:
+        fqdn_vc: ""
+
+    - name: "Construct vCenter FQDN for standard cases"
+      set_fact:
+        fqdn_vc: ".muc.msp.net"
+      when: v_center_before is not search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|mucamnaz1|mucamnvcpa1|mucamnvcpa2|mucamnaz2|mucamnvcpb1|mucamnvcpb2|mucamnaz3|mucamnvcpc1|mucamnvcpc2") and v_center_before is not search(".muc.msp.net")
+
+    - name: "Construct vCenter FQDN for specific cases"
+      set_fact:
+        fqdn_vc: ".vclassic.net"
+      when: v_center_before is search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|mucamnaz1|mucamnvcpa1|mucamnvcpa2|mucamnaz2|mucamnvcpb1|mucamnvcpb2|mucamnaz3|mucamnvcpc1|mucamnvcpc2") and v_center_before is not search(".vclassic.net")
+
+    - name: "Define protocol for vCenter URL"
+      set_fact:
+        proto: "https://"
+
+    - name: "Construct the complete vCenter URL"
+      set_fact:
+        v_center: "{{ proto ~ v_center_before ~ fqdn_vc }}"
+
+    - name: "Set vCenter fully qualified domain name"
+      set_fact:
+        v_center_fqdn: "{{ v_center_before ~ fqdn_vc }}"
+
+    - name: "Debug the constructed vCenter URL"
+      debug:
+        msg: "The vCenter URL is: {{ v_center }}"
+
+    #Run health checks
+    # - name: Health check iLO
+    #   ansible.builtin.import_role:
+    #     name: healthcheck_esxi_rack
+    #     tasks_from: esxi_health_check_ilo.yml
+
+    - name: Health check vCenter
+      ansible.builtin.import_role:
+        name: healthcheck_esxi_rack
+        tasks_from: health_check_vcenter.yml
+      delegate_to: localhost
+      vars:
+        v_center_fqdn: "{{ v_center_fqdn }}"
+        esxi_fqdn: "{{ esxi_fqdn }}"
+
+    - name: Health check SSH
+      ansible.builtin.import_role:
+        name: healthcheck_esxi_rack
+        tasks_from: health_check_ssh.yml
+
+
+# =============================================================================
+- name: "Create TR for healthcheck ESXi"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Healthcheck create TR
+      ansible.builtin.import_role:
+        name: healthcheck_esxi_rack
+        tasks_from: create_tr_health_check.yml
+      register: create_tr_result
+      until: create_tr_result is succeeded
+      retries: 3
+      delay: 10
+
+    - name: Healthcheck add info
+      ansible.builtin.import_role:
+        name: healthcheck_esxi_rack
+        tasks_from: add_info_healthcheck.yml
+
+    - name: Healthcheck create PTR
+      ansible.builtin.import_role:
+        name: healthcheck_esxi_rack
+        tasks_from: create_ptr_health_check.yml

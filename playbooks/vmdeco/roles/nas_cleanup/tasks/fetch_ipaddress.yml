@@ -1,0 +1,40 @@
+    - name: Handle error while fetching IP address
+      throttle: 1
+      block:
+        - name: fetching IP address of the input server
+          ansible.builtin.debug:
+            msg: "{{ lookup('community.general.dig', '{{ fqdn }}')}}"    #{{ client_match }}
+          register: ip_fetch_result
+          delegate_to: localhost
+
+        - set_fact:
+            ip_address: '{{ ip_fetch_result.msg  }}'
+           
+      rescue:
+        - name: error while fetching the ip address
+          debug:
+            msg: '{{ip_fetch_result.msg }}'
+
+        - set_fact:
+            ip_address: ""
+
+        - set_fact:
+            vm_fetch_ip_msg: "Exception occurred while fetching IP address of server for NAS storage cleanup. Kindly check fetch_ipaddress module in NAS storage"
+         
+##################################################################
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}" 
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_nas_hostname_failure.txt                    
+          delegate_to: localhost 
+
+        - name: "VM host list"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Exception occurred while fetching IP address of server for NAS storage cleanup. Kindly check fetch_ipaddress module in NAS storage." >> {{file_failure}}                    
+          delegate_to: localhost                
+       

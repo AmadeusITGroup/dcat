@@ -1,0 +1,52 @@
+- name: Handle Physical DECO - Storage Controller cleanup collect information from state file and svc inventory
+  throttle: 1
+  block:
+
+    - set_fact:
+        fabric_input: '{{fabric_name}}'
+    - set_fact:    
+        fabric_n: "SVC-{{ fabric_input | lower }}"
+
+    - name: Read YAML file
+      include_vars:
+        file: svc_inventory.yml
+        name: yaml_content
+
+    - name: Extract values under [SVC-] section
+      set_fact:
+        storage_systems_names: "{{ yaml_content[fabric_n] }}"
+
+    - debug:
+        var: storage_systems_names
+
+    - include: "check_host_hostcluster.yml"
+      vars:
+        storagesys: '{{ item }}'
+      loop: "{{ storage_systems_names }}"
+      register: storage_systems_output
+      ignore_errors: True
+        
+    - name: "storage systems output"
+      debug:
+        var: storage_systems_output        
+  
+  rescue: 
+    - name: When above one throws error the below task should execute
+      debug:
+        msg: "Exception occurred but rescued - check errors on fetch storage systems module" 
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+    - set_fact:
+          time: "{{tstamp.stdout}}"
+
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+
+    - name: "writing failure file in fetch svc names module for storage cleanup"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Check errors on fetch svc names module." >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost   
+

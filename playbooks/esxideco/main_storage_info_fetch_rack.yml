@@ -1,0 +1,67 @@
+---
+- name: "Filter hostlist for storage info fetch"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: storage info fetch
+      ansible.builtin.import_role:
+        name: storage_fetch_rack
+        tasks_from: filter_hostlist_storage_info_fetch.yml
+
+- name: "Create TR for storage info fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    san_info_fetch: "F"
+    graceperiod_flag: False
+    cmdb_fetch_bgp: ""
+  tasks:
+    - name: storage info fetch
+      ansible.builtin.import_role:
+        name: storage_fetch_rack
+        tasks_from: create_tr_storage_info_fetch.yml
+
+- name: "storage info fetch"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks:
+    - name: storage info fetch
+      ansible.builtin.import_role:
+        name: storage_fetch_rack
+        tasks_from: san_storage_cleanup_info_gather.yml
+      #when: san_info_fetch == "F" and cmdb_fetch_bgp == "T"       
+
+- name: "Add info to TR for storage info fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    san_info_fetch: "F"
+    graceperiod_flag: False
+    cmdb_fetch_bgp: ""
+  tasks:
+    - name: storage info fetch
+      ansible.builtin.import_role:
+        name: storage_fetch_rack
+        tasks_from: add_info_storage_info_fetch.yml
+
+# - name: "storage info fetch"
+#   hosts: all:vmdeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: storage info fetch
+#       ansible.builtin.import_role:
+#         name: storage_fetch_rack
+#         tasks_from: cmdb_stat_logging.yml
+
+# - name: "Logger for storage info fetch"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+    # san_info_fetch: "F"
+    # graceperiod_flag: False
+    # cmdb_fetch_bgp: ""
+#   tasks:
+#     - name: storage info fetch
+#       ansible.builtin.import_role:
+#         name: storage_fetch_rack
+#         tasks_from: logger_cmdb_stat.yml

@@ -1,0 +1,59 @@
+---
+# - name: Playbook for DECO Health check_Network 
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+#     graceperiod_flag: true
+
+#   tasks:
+
+    - name: "Deco Health check status Network"
+      block:      
+
+        - name: "Deco Health check status SAN"
+          healthcheck_phy_network:
+            username: "{{ network_username }}"
+            password: "{{ network_password }}"
+            hostname: "{{network_switch_fqdn}}"               
+          delegate_to: localhost                       
+          register: network_validation
+
+        - debug:
+            var: network_validation
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"        
+
+
+        - name: "network validation_success"
+          shell: echo "#Network health_check, {{ time }}, [INFO], :Network jump server muccws11 SSH connectivity is enabled" >> network_healthcheck_success.yml   
+          delegate_to: localhost         
+          when: network_validation is search("muccws11") 
+
+        - name: "network validation_fail"
+          shell: echo "!Network health_check, {{ time }}, [ERROR], :Network jump server muccws11 SSH connectivity has issue either connection or credential issue" >> network_healthcheck_fail.yml
+          delegate_to: localhost
+          when: network_validation is search ("ERROR")                     
+
+      rescue:
+        - debug:
+            var: network_validation
+         
+            
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                          
+        - set_fact:
+            time: "{{tstamp.stdout}}"        
+
+        - name: "network validation"
+          shell: echo "!Network health_check, {{ time }}, [ERROR], :Network jump server muccws11 SSH connectivity has issue either connection or credential issue" >> network_healthcheck_fail.yml
+          delegate_to: localhost
+          when: network_validation is search ("ERROR")                    

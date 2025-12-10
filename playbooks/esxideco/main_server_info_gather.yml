@@ -1,0 +1,78 @@
+---
+- name: "server information gather filtering hostlist"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: server information gather
+      ansible.builtin.import_role:
+        name: server_info_gather
+        tasks_from: filter_hostlist_server_gather_info.yml
+
+- name: "Create TR for server information gather"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    # record_server_info_gather: ""
+    # graceperiod_flag: False
+    # fqdn_info: ""
+    # info: "F"
+  tasks:
+    - name: server information gather
+      ansible.builtin.import_role:
+        name: server_info_gather
+        tasks_from: create_tr_server_gather_info.yml
+
+- name: "server information gather"
+  hosts:  "{{ target_hosts }}"
+  gather_facts: no
+  vars:  
+    # remote_username: root
+    # remote_password: N1Flheim!
+    remote_username: "{{ remote_username }}"
+    remote_password: "{{ remote_password }}"  
+  tasks: 
+    - name: server information gather
+      ansible.builtin.import_role:
+        name: server_info_gather
+        tasks_from: server_gather_info.yml
+      # when: info == "F" and fqdn_info != "F"
+
+- name: "ADD info TR for server information gather"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+    - name: server information gather
+      ansible.builtin.import_role:
+        name: server_info_gather
+        tasks_from: add_info_server_info_gather.yml
+
+# - name: "server information gather"
+#   hosts: all:vmdeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: server information gather
+#       ansible.builtin.import_role:
+#         name: server_info_gather
+#         tasks_from: cmdb_logging.yml
+
+# - name: "Logger for server information gather"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+    # record_server_info_gather: ""
+    # graceperiod_flag: False
+    # info: "F"
+    # fqdn_info: ""
+#   tasks:
+#     - name: server information gather
+#       ansible.builtin.import_role:
+#         name: server_info_gather
+#         tasks_from: logger_cmdb.yml

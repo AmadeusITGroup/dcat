@@ -1,0 +1,279 @@
+---  
+    - name: "Handling Create TR- Win@proach "
+      block:
+ 
+        - name: Display the JSON file content
+          shell: cat dcm.yml
+          delegate_to: localhost
+          register: result_dcm
+
+        - meta: end_host
+          # when: result_dcm == ""
+          when: result_dcm.stdout == ""
+
+        # - name: Load and parse dcm.yml
+        #   set_fact:
+        #     dcm_dict: "{{ lookup('file', 'dcm.yml') | from_yaml }}"
+
+        # - name: Extract server names
+        #   set_fact:
+        #     dcm_server_list: "{{ dcm_dict.keys() | list }}"
+
+        # - name: "Check entry for DECO server for filter hostlist for DCM module"
+        #   azure_update_ref_esxi:
+        #     connection_string: "{{ private_endpoint_connection_string }}"
+        #     hostname: "{{ item }}"
+        #   loop: "{{ dcm_server_list }}"
+        #   register: idem_status 
+        #   delegate_to: localhost
+
+        # - name: printing idem status
+        #   debug:
+        #     var: idem_status
+
+        # - set_fact:
+        #     network_cleanup: '{{idem_status.module_update.network_cleanup}}'
+
+        # - set_fact:
+        #     dcm: '{{idem_status.module_update.dcm}}'
+
+        # - name: End play for this host
+        #   meta: end_host
+        #   when: dcm != "F" or network_cleanup != "T"   
+
+        - set_fact:
+            serverData_path: "dcm.yml"
+            dest_path: "dcm_excel.xlsx"
+
+
+
+        # - name: "Check entry for DECO server for filter hostlist for DCM module"
+        #   azure_update_ref_esxi:
+        #     connection_string: "{{ private_endpoint_connection_string }}"
+        #     hostname: "{{inventory_hostname}}"
+        #   register: idem_status 
+        #   delegate_to: localhost
+ 
+        # - name: printing idem status
+        #   debug:
+        #     var: idem_status
+
+        # - set_fact:
+        #     network_cleanup: '{{idem_status.module_update.network_cleanup}}'
+
+        # - set_fact:
+        #     dcm: '{{idem_status.module_update.dcm}}'
+
+        # - name: End play for this host
+        #   meta: end_host
+        #   when: dcm != "F" or network_cleanup != "T"    
+
+
+        - set_fact:
+            file_content: "{{ lookup('file', 'dcm.yml').splitlines() | map('from_yaml')| list }}"
+
+        - name: display the dcm content from the file 
+          debug:
+            var: file_content
+
+        - name: aggregating into specific format
+          dcm_cont:
+            location_content: "{{ file_content }}"
+          register: dcm_data
+          delegate_to: localhost
+
+        - set_fact:
+            dcm_body: "{{ dcm_data.dcm_content }}"
+
+        - name: print DCM Body
+          debug:
+            var: dcm_body
+
+        - name: Format dictionary
+          set_fact:
+            formatted_dict: |
+              {% set result = {} %}
+              {% for key, value in dcm_body.items() %}
+                {% set inner_dict = {} %}
+                {% for item in value %}
+                  {% set inner_key = item.keys()|first %}
+                  {% set inner_value = item[inner_key] %}
+                  {% set _ = inner_dict.update({inner_key: inner_value}) %}
+                {% endfor %}
+                {% set _ = result.update({key: inner_dict}) %}
+              {% endfor %}
+              {{ result }}
+        
+        - name: printing formatted dict
+          debug:
+            var: formatted_dict
+
+        - name: Parse formatted dictionary
+          set_fact:
+            parsed_dict: "{{ formatted_dict | from_yaml }}"
+
+        - name: printing parsed dict
+          debug: 
+            var: parsed_dict
+
+        - name: Load dcm.yml to excel
+          load_DCM_data_to_excel:
+            data_path: "{{ serverData_path }}"
+            store_path:  "{{ dest_path }}"
+          register: result_excel
+          delegate_to: localhost
+
+        - name: Generate output
+          set_fact:
+            formatted_output: |
+              {% for room, servers in parsed_dict.items() %}
+              {{ room }}:
+              {% for server, details in servers.items() %}
+              {{ server }}:{{ details  | to_json }}
+              {% endfor %}
+              {% endfor %}
+
+        - name: Display formatted_output
+          debug:
+            var: formatted_output
+        
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO  - DCM" #remove test while putting for production
+            assignee_name: "DecoP112686"
+            assignee_group: "OOT04HWP"
+            severity: "4"
+            overview: "ESXi DECO - DCM"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+          when: dcm_data != ""
+       
+        - set_fact:
+            record_dcm: "{{create_tr_output.record_id}}"
+          when: dcm_data != ""
+ 
+        - debug:
+            var: record_dcm
+          when: dcm_data != ""
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "{{win_url}}"
+            task_id: "{{ record_dcm }}"
+          register: add_document
+          delegate_to: localhost
+          when: dcm_data != ""
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: |
+              Dear DCM teams,
+                TR for De-cabling all Network and SAN connection as well as unplug the power cable.
+                If the device is and HPE Server Gen 9 or newer, we keep it in the rack.
+                If it is older or a different type/brand, please remove it from the rack and place it in the scrap room.
+            form3: "***********************************************************************"
+            form4: "As per security recommendation, storage device must be destructed so that data cannot be recovered."
+            form5: "***********************************************************************"
+            form6: "***********************************************************************"
+
+
+        - set_fact:
+            content_dcm_succ: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ formatted_output +'\n'+ form4 +'\n'+ form5 +'\n'+ form6 }}" 
+          when: formatted_output != ""  
+
+        # - set_fact:
+        #     content_dcm_succ: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ formatted_output +'\n'+ form4 }}" 
+        #   when: formatted_output != ""  
+
+        - name: "Attach excel file to TR"
+          add_attachment_to_tr:
+            record_id: "{{ record_dcm }}"
+            attachments: "{{ dest_path }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}" 
+          delegate_to: localhost
+          register: add_attachment_output
+
+        - debug:
+            var: add_attachment_output
+
+        - name: Update Task
+          winaproach:
+            system: prod
+            type: task_record
+            operation: update_overview
+            username: "{{ winaproach_username }}"     
+            password: "{{ winAproach_password }}"
+            fields:
+              task_id: "{{ record_dcm }}"
+              text: "{{ content_dcm_succ }}"
+          register: update
+          
+        - debug:
+            var: update
+
+        # - name: Extract server names from file
+        #   set_fact:
+        #     dcm_server_list: >-
+        #       {{
+        #         result_dcm.stdout_lines
+        #         | map('regex_search', "'([^']+)':")
+        #         | reject('equalto', None)
+        #         | list
+        #       }}
+
+
+        - name: Extract server names from file
+          set_fact:
+            dcm_server_list: >-
+              {{
+                result_dcm.stdout_lines
+                | map('regex_search', "'([^']+)':")
+                | reject('equalto', None)
+                | map('regex_replace', "^'+|'+:$", "")
+                | list
+              }}
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          run_once: true
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          run_once: true
+          delegate_to: localhost      
+                
+
+        - name: "update entry for DECO server for DCM"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{ item }}"
+            module_name: "dcm"
+            status: "T"         
+          register: update_status
+          loop: "{{ dcm_server_list }}"
+          delegate_to: localhost
+            
+        #- name: "Add message to TR"
+        #  add_message_to_tr:
+        #    record_id: "{{record_dcm}}"  #{{dcm_dataforteam}}\n\n
+        #    message: "{{content_dcm_succ}}" #content_dcm_succ  formatted_output
+        #    username: "{{ winaproach_username }}"    
+        #    password: "{{ winaproach_password }}"
+        #  delegate_to: localhost
+        #  register: add_msg_output
+        #  #when: dcm_data == ""
+           
+      rescue:
+        - debug:
+            msg: "Failed to Create ESXi DECO - DCM TR"

@@ -1,0 +1,242 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    associated_cis: "{{ associated_cis }}"
+    graceperiod_flag: "{{ graceperiod_flag }}"
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}" 
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}"   
+       
+  tasks: 
+
+  - name: Display input JSON
+    set_fact:
+      serial: 20 #15 
+
+  - name: register env information
+    debug: 
+      msg: "{{ serial }}"
+    register: serial_number
+
+  - name: Display input JSON
+    set_fact:
+      jsondata: "{{ associated_cis }}"
+      
+  - name: fetch host details
+    diff_server:
+      host: "{{ associated_cis | to_json }}"
+      cmdb_rtu: "{{cmdb_rtu}}"
+    register: host_list
+    
+  - name: Update SNOW with Failure Status
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ ritm_number }}"
+      status: Waiting
+      comments: |
+        Trigger-1 failed as we were unable to fetch host details from RTU. Investigation in progress.
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost
+    run_once: true
+    register: api_result
+    when: host_list is not defined or (host_list.vm_list | length == 0)
+
+  - name: display data
+    debug:
+      var: host_list
+
+  - name: Fail if no hosts found in the list
+    fail:
+      msg: "No hosts were found in RTU. Hence stopping execution. Please check."
+    when: host_list is not defined or (host_list.vm_list | length == 0)
+
+
+  - name: filtering valid CI list prod
+    validate_vm_name_bgp:
+      vmname: "{{ item }}"
+      synergon_api: "{{synergon_api}}"
+    loop: '{{ host_list.vm_list }}'
+    delegate_to: localhost
+    register: host_group
+    until: host_group is search("Successfully")
+    retries: 3
+    delay: 30
+    when: env == "prod" and graceperiod_flag == "False"
+  
+  - name: Set fact for successful CIs- prod
+    set_fact:
+      vm_list: >-
+        {{
+          host_group.results
+          | selectattr('msg', 'defined')
+          | selectattr('msg', 'search', 'Successfully')
+          | map(attribute='ci')
+          | list
+        }}
+    when: env == "prod" and graceperiod_flag == "False"
+
+  - name: Set fact for unsuccessful CIs
+    set_fact:
+      invalid_ci_list: >-
+        {{
+          host_group.results
+          | rejectattr('msg', 'defined')  
+          | map(attribute='item')         
+          | list
+        }}
+    when: env == "prod" and graceperiod_flag == "False"
+       
+  - name: filtering valid CI list dev
+    validate_vm_name_bgp:
+      vmname: "{{ item }}"
+      synergon_api: "{{synergon_api}}"
+    loop: '{{ host_list.vm_list }}'
+    delegate_to: localhost
+    register: host_group
+    until: host_group is search("Successfully")
+    retries: 3
+    delay: 30
+    when: env == "dev" and graceperiod_flag == "False" 
+
+  - name: Set fact for successful CIs
+    set_fact:
+      vm_list: >-
+        {{
+          host_group.results
+          | selectattr('msg', 'defined')
+          | selectattr('msg', 'search', 'Successfully')
+          | map(attribute='ci')
+          | list
+        }}
+    when: env == "dev" and graceperiod_flag == "False"
+    
+  - name: Set fact for unsuccessful CIs
+    set_fact:
+      invalid_ci_list: >-
+        {{
+          host_group.results
+          | selectattr('msg', 'search', 'Exception')  
+          | map(attribute='vmname')         
+          | list
+        }}
+    when: env == "dev" and graceperiod_flag == "False"
+ 
+  - name: debug vm_list
+    debug:
+      var: vm_list
+
+  - name: debug invalid_ci_list
+    debug:
+      msg: "The following CIs were not validated in synergon - {{ invalid_ci_list }}"
+    when: invalid_ci_list is defined and invalid_ci_list | length > 0   
+  
+  - name: Update SNOW with invalid CIs
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ ritm_number }}"
+      status: Waiting
+      comments: |
+        Trigger-1 failed as the following CIs were not validated in synergon - {{ invalid_ci_list }}. Investigation in progress.
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost
+    run_once: true
+    register: api_result
+    when: vm_list is not defined or (vm_list | length == 0)
+  
+  - name: Fail if no hosts found in the list
+    fail:
+      msg: "No hosts were found in the list. Hence stopping execution. Please check."
+    when: vm_list is not defined or (vm_list | length == 0)
+
+  - name: "Freeze Check module"
+    freeze_check:
+      oms_url: '{{oms_url}}'
+      change_type_level1: "Infrastructure"
+      change_type_level2: " "
+      change_methods: " "
+      hosts: "{{ vm_list }}"
+      environment: " "
+    delegate_to: localhost
+    register: freeze_information
+
+  - name: "Debug Freeze_list if present"
+    debug:
+      var: freeze_information.status.Freeze_list
+    when: freeze_information.status is defined and freeze_information.status.Freeze_list is defined
+    
+    
+  - name: Update SNOW with freeze status
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ ritm_number }}"
+      status: Waiting
+      comments: |
+        Following servers are in freeze, automation will be triggered after freeze ends  -
+        {{ freeze_information.status.Freeze_list }}
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost
+    run_once: true
+    register: api_result
+    when:
+      - freeze_information.status is defined
+      - freeze_information.status.Freeze_list is defined
+      - freeze_information.status.Freeze_list | length > 0
+  
+  - name: Fail if freeze is in place
+    fail:
+      msg: "Ending execution as all hosts are within the scope of a freeze. Please retry once the freeze lifts."
+    when:
+      - freeze_information.status is defined
+      - (freeze_information.status.No_freeze | default([], true)) | length == 0
+      - freeze_information.status.Freeze_list | length > 0 
+
+  - name: Add hosts to vmdeco group
+    add_host:
+      hostname: "{{ item }}"
+      groups: vmdeco
+    loop: '{{ freeze_information.status.No_freeze }}'
+       
+  - name: register env information
+    debug: 
+      msg: "{{ env }}"
+    register: env_data
+             
+- import_playbook: vmdeco/VMDECO_Master_play_phase1.yml
+  vars:
+    vm_list: "{{ hostvars.localhost.vm_list }}"
+    serial_number: "{{ serial_number }}"
+    associated_cis: "{{ associated_cis }}"  
+    cr: "{{ cr }}" 
+    graceperiod_flag: "{{ graceperiod_flag }}"
+    retention_days: "{{ retention_days }}"
+    pillar: "{{ pillar }}"
+    mit_ticket: "{{ mit_ticket }}"
+    ritm_number: "{{ ritm_number }}"
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"
+    paccount_username: "{{ pAccount_username }}"
+    paccount_password: "{{ pAccount_password }}"
+    infoblox_username: "{{ infoblox_username }}"
+    infoblox_password: "{{ infoblox_password }}"
+    emdb_username: "{{ emdb_username }}" 
+    emdb_password: "{{ emdb_password }}"
+    remote_username: "{{ secret }}"
+    remote_keyfile: "{{ secret_key }}"   
+    auth_username: "{{ auth_username }}"
+    auth_password: "{{ auth_password }}"
+    btmp_user: "{{ si_username }}"
+    btmp_password: "{{ si_password }}"
+    win_user: "{{ elk_user }}"
+    win_password: "{{ elk_password }}"        
+    synergon_username: "{{ synergon_username }}"
+    synergon_password: "{{ synergon_password }}"
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}"
+  no_log: true
+  run_once: True
+

@@ -1,0 +1,600 @@
+---      
+    - name: "This playbook is to fetch network switch port data"
+      throttle: 1
+      block:
+     
+  
+        - name: ESXI_host list
+          shell: cat host_list_network.yml
+          delegate_to: localhost
+          register: hostlist_esxi              
+
+        - name: save the esi list to a Variable as a Fact
+          set_fact:
+            esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: esxi_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost      
+                
+        - name: "Check entry for DECO server for filter hostlist for cmdb update"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+
+        - set_fact: 
+            ipam_cleanup: '{{idem_status.module_update.ipam_cleanup }}'  
+
+        - set_fact: 
+            network_cleanup: '{{idem_status.module_update.network_cleanup}}' 
+
+        - name: End play for this host
+          meta: end_host
+          when: network_cleanup != "F" or ipam_cleanup != "T"    
+
+
+# ===========================================================================================
+
+        - set_fact:
+            swit: ""                                            
+
+        - name: "network fetch - all switches"
+          network_ssh:
+            hostname: "{{network_switch_fqdn}}"
+            ph_server: "{{ inventory_hostname }}"
+            username: "{{ network_username }}"
+            password: "{{ network_password }}"          
+          register: net_fetch
+          delegate_to: localhost
+
+        - set_fact:
+            swit: "{{ net_fetch.sw_name | join(', ') }}"
+
+        - debug: 
+            msg: "{{ swit }}"
+                    
+        - set_fact:
+            sw: "{{ swit | regex_findall('([a-z0-9-]+).run.cfg') | unique }}"
+
+        - debug: 
+            msg: "{{ sw }}"
+
+
+# ============================================================
+# No Switch No Error
+# ==============================================================================================
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}" 
+
+        - name: "Debug time "
+          debug:
+            var: time    
+
+        - set_fact:
+            "{{ 'network_no_sw_' + inventory_hostname }}": "!{{ inventory_hostname }}, {{ time }}, [INFO], :Network no switches found for the CI {{ inventory_hostname }} needs manual intervention"
+          when: swit == "" and net_fetch is not search("ERROR")
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: ESXI RACK DECO - Network Switch port details - no switches - {{ inventory_hostname }}"
+            assignee_name: "LANAu117138" #"LANAu117138" #"DecoP112686"
+            assignee_group: "OIPSVSE"    #"OIPSVSE"   #"DINFDECO"            
+            severity: "4"
+            overview: "Esxi Deco - Network Switch port details - No Switches for CI {{ inventory_hostname }}"
+            parent_id: "{{ cr }}"            
+            username: "{{ network_usergroup }}"     
+            password: "{{ network_grouppass }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+          when: swit == "" and net_fetch is not search("ERROR") 
+
+        - set_fact:
+            "{{ 'record_no_sw_' + inventory_hostname }}": "{{create_tr_output.record_id}}" 
+          when: swit == "" and net_fetch is not search("ERROR")         
+
+        - name: Update Task for no switch
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: update_overview
+            username: "{{ network_usergroup }}"     
+            password: "{{ network_grouppass }}"
+            fields:
+              task_id: "{{ vars['record_no_sw_' + inventory_hostname ] }}"
+              text: "{{ vars['network_no_sw_' + inventory_hostname] }}"
+          delegate_to: localhost     
+          register: update
+          when: swit == "" and net_fetch is not search("ERROR")                    
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "update entry for DECO server for cmdb duplicate check"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "network_cleanup"
+            status: "T"           
+          register: update_status
+          delegate_to: localhost  
+          when: swit == "" and net_fetch is not search("ERROR")        
+
+        - meta: end_host
+          when: swit == "" and net_fetch is not search("ERROR")
+
+
+# ================================================================================================
+# Error SSH to Jump Server
+# ================================================================================================
+
+        - set_fact:
+            network_fail: "!{{network_switch_fqdn}}, {{ time }}, [ERROR], :Network unable to ssh from AWX to the jump server {{network_switch_fqdn}} using ptr1 account, needs attentions"
+          run_once: True
+          when: net_fetch is search("ERROR")
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: ESXI RACK DECO - Network Switch port details - Jump server-muccws11 issue"
+            assignee_name: "LANAu117138" #"LANAu117138" #"DecoP112686"
+            assignee_group: "OIPSVSE"    #"OIPSVSE"   #"DINFDECO"            
+            severity: "4"
+            overview: "ESXi Deco - Network Switch port details - Jump server({{network_switch_fqdn}}) issue"
+            parent_id: "{{ cr }}"            
+            username: "{{ network_usergroup }}"     
+            password: "{{ network_grouppass }}"
+          delegate_to: localhost  
+          no_log: False
+          run_once: True
+          register: create_tr_output
+          when: net_fetch is search("ERROR")
+
+        - set_fact:
+            record_jump: "{{create_tr_output.record_id}}"
+          run_once: True   
+          when: net_fetch is search("ERROR") 
+
+        - set_fact:
+            form1: "************************************************************************"
+            form2: "Below are Network jump server({{network_switch_fqdn}}) SSH connectivity issue details which needs support"
+            form3: "************************************************************************"
+          run_once: True  
+          when: net_fetch is search("ERROR")                  
+
+
+        - set_fact:
+            content_esxi_ssh_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ network_fail }}"
+          run_once: True  
+          when: net_fetch is search("ERROR")                  
+
+        - name: Update Task for SSH issue to Jump Server
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: update_overview
+            username: "{{ network_usergroup }}"     
+            password: "{{ network_grouppass }}"
+            fields:
+              task_id: "{{ record_jump }}"
+              text: "{{ content_esxi_ssh_fail }}"
+          delegate_to: localhost
+          run_once: True     
+          register: update
+          when: net_fetch is search("ERROR")
+
+
+      #         ############################################################################################################
+        - name: read yaml file from the specific location 
+          set_fact:
+            file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        - name: split the file content
+          set_fact:
+            lines: "{{file_content.split('\n')}}"
+
+        - name: convert the lines in the file to dict
+          set_fact:
+            res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+          loop: "{{ lines }}"
+
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key: "{{ present_key | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_esxi_ssh_fail is defined and item in content_esxi_ssh_fail
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name: "{{ allowner_name | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key }}"
+          when: content_esxi_ssh_fail is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final: | 
+              {% for key,value in allowner_name.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_esxi_ssh_fail is defined
+
+        - set_fact:
+            Requester_group: "Requester_group: {{requester_group}}"
+            Requester_name: "Requester_name: {{requester_name}}"
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_esxi_ssh_fail}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_esxi_ssh_fail is defined
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups
+          when: content_esxi_ssh_fail is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups: "{{ result_groups.stdout }}" 
+          delegate_to: localhost
+          when: content_esxi_ssh_fail is defined
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "{{ network_usergroup }}" 
+            password: "{{ network_grouppass }}"
+            ptr_title: "CSTY:DECO:DCAT: ESXI DECO: Network jump server-muccws11 SSH connectivity issue referring TR - {{ record_jump }}"
+            tr_map: "{{ record_jump }}"
+            assignee_group: "DINFDECO"  
+            ptr_logs: "{{ support_groups }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"
+          delegate_to: localhost           
+          register: ptr_esxi_ssh_fail
+          run_once: True
+          until: '"Successfully" in ptr_esxi_ssh_fail.msg'
+          retries: 3
+          delay: 10
+          when: net_fetch is search("ERROR") 
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "{{ network_usergroup }}"
+            password: "{{ network_grouppass }}"
+            task_id: "{{ record_jump }}"
+            prob_id: "{{ ptr_esxi_ssh_fail.id }}"
+          delegate_to: localhost                     
+          register: update_overview 
+          run_once: True 
+          when: net_fetch is search("ERROR")                   
+
+        - meta: end_host
+          when: net_fetch is search("ERROR")                             
+
+      # rescue:
+      #   - debug:
+      #       var: swit
+
+# ==============================================================================================================================
+
+        - name: "network fetch"
+          network_ssh_switch_esxi:
+            hostname: "{{network_switch_fqdn}}"
+            ph_server: "{{ inventory_hostname }}"
+            username: "{{ network_username }}"
+            password: "{{ network_password }}"
+            switch: "{{ item }}"
+          loop: "{{ sw }}"             
+          register: net_fetch
+          delegate_to: localhost
+          when: sw is defined and sw | length > 0
+
+        - debug:
+            var: net_fetch          
+          when: net_fetch is defined
+
+        - set_fact: 
+            yep: "{{ yep | default([]) + item.resp }}"
+          loop: "{{ net_fetch.results }}"
+
+        - debug: 
+            msg: "{{ yep }}"
+          when: yep is defined
+
+        - debug:
+            msg: "{{ yep | type_debug }}"
+          when: yep is defined
+
+        - name: "Switch_port fetch"
+          network_filter:
+            swt_port: "{{ yep }}" 
+          register: st_po
+          delegate_to: localhost
+          when: yep is defined and yep | length > 0
+
+        - set_fact:
+            final: "{{ st_po.res | rejectattr('port', 'equalto', '') | unique | list }}"
+          when: st_po is defined and st_po.res is defined
+
+        - debug: 
+            var: final
+          when: final is defined
+
+        - set_fact:
+            unique_switches: "{{ final | map(attribute='sw') | list | unique }}"
+          when: final is defined and final | length > 0
+
+        - name: "Network vendor fetch check"
+          network_ssh_switch_vendor_esxi:
+            hostname: "{{network_switch_fqdn}}"
+            username: "{{ network_username }}"
+            password: "{{ network_password }}"
+            switch: "{{ item }}"
+          loop: "{{ unique_switches }}"
+          register: vendor_fetch
+          delegate_to: localhost
+          when: unique_switches is defined and unique_switches | length > 0
+
+        - set_fact:
+            all_vendors: "{{ vendor_fetch.results | map(attribute='vendor') | list | unique }}"
+          when: vendor_fetch is defined and vendor_fetch.results is defined
+
+        - set_fact:
+            vendor_data: "{{ all_vendors | sort | join(', ') }}"
+          when: all_vendors is defined
+
+
+        - name: Build switch to vendor map
+          set_fact:
+            switch_to_vendor: >-
+              {{
+                dict(
+                  vendor_fetch.results
+                  | map(attribute='item') 
+                  | zip(vendor_fetch.results | map(attribute='vendor'))
+                )
+              }}
+          when: vendor_fetch is defined and vendor_fetch.results is defined
+
+        - name: Initialize flattened list
+          set_fact:
+            flattened: []
+
+        - name: Flatten and enrich final
+          set_fact:
+            flattened: "{{ flattened + [ enriched ] }}"
+          vars:
+            enriched:
+              port: "{{ item.port }}"
+              sw: "{{ item.sw }}"
+              server: "{{ item.server | first }}"
+              vendor: "{{ switch_to_vendor[item.sw] | default('unknown') }}"
+          loop: "{{ final }}"
+          delegate_to: localhost
+          when: final is defined and switch_to_vendor is defined
+
+        - name: Init network_info
+          set_fact:
+            network_info: {}
+
+        - name: Build structured network_info
+          set_fact:
+            network_info: >-
+              {{
+                network_info | combine({
+                  item.vendor: (
+                    (network_info[item.vendor] | default({})) | combine({
+                      item.sw: (
+                        (network_info[item.vendor][item.sw] | default([]))
+                        + [ { item.port: item.server } ]
+                      )
+                    })
+                  )
+                }, recursive=True)
+              }}
+          loop: "{{ flattened }}"
+          delegate_to: localhost
+          when: flattened is defined and flattened | length > 0
+
+        - debug:
+            var: network_info 
+          when: network_info is defined
+
+        - name: Create output directory
+          file:
+            path: "/tmp/network_outputs"
+            state: directory
+            mode: '0755'
+          delegate_to: localhost
+
+        - name: Generate network_info YAML files per server
+          per_server_switch_data:
+            flattened: "{{ flattened }}"
+            output_dir: "/tmp/network_outputs"
+          register: result
+          delegate_to: localhost
+          when: flattened is defined and flattened | length > 0
+
+        - name: Debug result
+          debug:
+            var: result
+          when: result is defined
+
+        - name: Read each generated YAML file content
+          slurp:
+            src: "{{ item }}"
+          loop: "{{ result.created }}"
+          delegate_to: localhost
+          register: file_contents
+          when: result.created is defined and result.created | length > 0
+
+        - name: Decode and show YAML contents
+          debug:
+            msg: |
+              {{ item.item | basename }}:
+              {{ item.content | b64decode }}
+          loop: "{{ file_contents.results }}"
+          when: file_contents.results is defined
+
+        - name: Extract server name and slurp file
+          slurp:
+            src: "{{ item }}"
+          loop: "{{ result.created }}"
+          register: slurped_files
+          delegate_to: localhost
+          when: result.created is defined and result.created | length > 0
+
+        - name: Set server_name fact for each file
+          set_fact:
+            server_names: "{{ (server_names | default({})) | combine({ (item.item | basename | regex_replace('\\.yml$', '')): item.content }) }}"
+          loop: "{{ slurped_files.results }}"
+          when: slurped_files is defined and slurped_files.results is defined
+
+        - name: Create TR for each server
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: ESXI RACK DECO - Network Switch port details - [{{ hostvars[item | basename | regex_replace('\\.yml$', '')]['vendor_data'] }}] - {{ item | basename | regex_replace('\\.yml$', '') }}"
+            # assignee_name: "Kaushal" #"{{ requester_name }}"
+            # assignee_group: "DINFDECO" #"{{ requester_group }}"
+            assignee_name: "LANAu117138" #"LANAu117138" #"DecoP112686"
+            assignee_group: "OIPSVSE"    #"OIPSVSE"   #"DINFDECO"    
+            severity: "4"
+            overview: "ESXi Deco - Network Switch port details - [{{ hostvars[item | basename | regex_replace('\\.yml$', '')]['vendor_data'] }}]"
+            parent_id: "{{ cr }}"
+            username: "{{ network_usergroup }}"
+            password: "{{ network_grouppass }}"
+          loop: "{{ result.created }}"
+          loop_control:
+            label: "{{ item | basename }}"
+          register: create_tr_output
+          delegate_to: localhost
+          no_log: false
+          when: result.created is defined and result.created | length > 0
+
+        - name: Set fact of TR list for this host
+          set_fact:
+            local_tr_list: "{{ create_tr_output.results | selectattr('record_id', 'defined') | map(attribute='record_id') | list }}"
+          delegate_to: localhost
+          when: create_tr_output.results is defined
+
+        - name: Aggregate TR list from all hosts
+          set_fact:
+            all_trs: "{{ all_trs | default([]) + hostvars[item]['local_tr_list'] }}"
+          with_items: "{{ ansible_play_hosts }}"
+          run_once: true
+          delegate_to: localhost
+          when: hostvars[item].local_tr_list is defined
+
+        - name: Write all TRs to file in one shot
+          copy:
+            content: "{{ all_trs | join('\n') }}"
+            dest: lan_deco_tr_number.txt
+          delegate_to: localhost
+          run_once: true
+
+        - name: Write decoded YAML to temp file with TR ID in name
+          copy:
+            content: "{{ server_names[item | basename | regex_replace('\\.yml$', '')] | b64decode }}"
+            dest: "/tmp/TR{{ create_tr_output.results[item_index].record_id }}_deco_components.yml"
+          loop: "{{ result.created }}"
+          loop_control:
+            index_var: item_index
+            label: "{{ item | basename }}"
+          delegate_to: localhost
+          when: create_tr_output is defined and create_tr_output.results[item_index].record_id is defined
+
+        - name: Attach YAML to TR
+          add_attachment_to_tr:
+            record_id: "{{ create_tr_output.results[item_index].record_id }}"
+            attachments:
+              - "/tmp/TR{{ create_tr_output.results[item_index].record_id }}_deco_components.yml"
+            username: "{{ network_usergroup }}"
+            password: "{{ network_grouppass }}"
+          loop: "{{ result.created | list }}"
+          loop_control:
+            index_var: item_index
+            label: "TR{{ create_tr_output.results[item_index].record_id }}"
+          delegate_to: localhost
+          register: add_attachment_output_info
+          when: create_tr_output is defined and create_tr_output.results[item_index].record_id is defined
+
+        - name: "Update entry for DECO server for CMDB duplicate check"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{ item | basename | regex_replace('\\.yml$', '') }}"
+            module_name: "network_cleanup"
+            status: "T"
+          register: update_status
+          loop: "{{ result.created }}"
+          loop_control:
+            label: "{{ item | basename }}"
+            index_var: item_index
+          when: >
+            create_tr_output.results[item_index].record_id is defined and
+            (
+              add_attachment_output_info.results[item_index].added_attachments is defined and
+              add_attachment_output_info.results[item_index].added_attachments | bool
+            )
+          delegate_to: localhost
+
+        - name: Read the lan_deco_tr_number.txt file
+          shell: cat lan_deco_tr_number.txt
+          delegate_to: localhost
+          register: lan_deco_tr_number
+          run_once: True
+
+
+        - name: Debug lan_deco_tr_number
+          debug:
+            var: lan_deco_tr_number
+          delegate_to: localhost
+          run_once: True
+
+
+        - name: Start LAN decomissioning template
+          awx.awx.job_launch:
+            name: "lan_port_dcom"
+            wait: true
+            extra_vars:
+              tr: "{{ lan_deco_tr_number.stdout_lines }}"
+            tower_host: "{{AWX_INSTANCE}}"
+            tower_username: "{{ chg_mgmt_user }}"
+            tower_password: "{{ chg_mgmt_password }}"
+          delegate_to: localhost
+          run_once: true
+          register: launch_result
+          when: lan_deco_tr_number is defined and lan_deco_tr_number.stdout_lines | length > 0
+
+      rescue: 
+        - name: When main block fails below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for Network Module"  

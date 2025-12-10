@@ -1,0 +1,74 @@
+---
+- name: Test Playbook (Handle all test operations from here)
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: testing
+      debug:
+        msg: "check"
+
+    - set_fact:
+        file_content: "{{ lookup('file', '/home/ppk1/deco-automation/playbooks/dcm_file.yml').splitlines()|
+                     map('from_yaml')|
+                     list }}"
+            
+    - name: display the dcm content from the file 
+      debug:
+        var: file_content
+
+    - name: aggregating into specific format
+      dcm_cont:
+        location_content: "{{ file_content }}"
+      register: dcm_data
+      delegate_to: localhost
+
+    - debug:
+        var: dcm_data
+
+    - set_fact:
+        dcm_body: "{{ dcm_data.dcm_content }}"
+
+    - name: print DCM Body
+      debug:
+        var: dcm_body
+
+    - name: Format dictionary
+      set_fact:
+        formatted_dict: |
+          {% set result = {} %}
+          {% for key, value in dcm_body.items() %}
+            {% set inner_dict = {} %}
+            {% for item in value %}
+              {% set inner_key = item.keys()|first %}
+              {% set inner_value = item[inner_key] %}
+              {% set _ = inner_dict.update({inner_key: inner_value}) %}
+            {% endfor %}
+            {% set _ = result.update({key: inner_dict}) %}
+          {% endfor %}
+          {{ result }}
+    
+    - name: printing formatted dict
+      debug:
+        var: formatted_dict
+
+    - name: Parse formatted dictionary
+      set_fact:
+        parsed_dict: "{{ formatted_dict | from_yaml }}"
+
+    - name: printing parsed dict
+      debug: 
+        var: parsed_dict
+
+    - name: Generate output
+      set_fact:
+        formatted_output: |
+          {% for room, servers in parsed_dict.items() %}
+          {{ room }}:
+          {% for server, details in servers.items() %}
+          {{ server }}:{{ details  | to_json }}
+          {% endfor %}
+          {% endfor %}
+
+    - name: Display formatted_output
+      debug:
+        var: formatted_output

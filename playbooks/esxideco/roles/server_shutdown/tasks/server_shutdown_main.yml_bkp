@@ -1,0 +1,713 @@
+---
+
+
+
+
+# - name: "Shut down ESXi after disk wipe"
+#   ssh_check_esxi_with_pass:
+#     hostname: "{{ esxi_fqdn }}"
+#     username: "{{ remote_username }}"
+#     password: "{{ remote_password }}"
+#     command: "shutdown -h now"
+#   delegate_to: localhost
+
+
+
+    - name: Initiating Server Shutdown Command
+      throttle: 1
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_shutdown.json
+          delegate_to: localhost
+          register: TR_result_shutdown_esxi
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_shutdown_esxi: "{{ TR_result_shutdown_esxi.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: record_id_shutdown_esxi== ""   
+
+        - set_fact:
+            shutdown_success: "shutdown_success.yml"
+            shutdown_failure: "shutdown_failure.yml"
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server from Azure"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"                        
+          register: idem_status
+          delegate_to: localhost    
+
+        - debug:
+            var: idem_status
+
+        - set_fact: 
+            shutdown_server: '{{idem_status.module_update.server_shutdown}}'                
+
+        - set_fact: 
+            nvme_cleanup: '{{idem_status.module_update.nvme_cleanup}}'   
+
+        - name: End play for this host
+          meta: end_host
+          when: nvme_cleanup != "T" or shutdown_server != "F"
+
+
+        - set_fact: 
+            esxi_fqdn: '{{idem_status.module_update.fqdn_info}}'   
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        # - name: "Identify local storage devices on ESXi"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: "esxcli storage core device list | awk -F ': ' '/Devfs Path:/ {dev = $2} /Is Local: true/ {print dev}'"
+        #   register: local_disks
+        #   delegate_to: localhost
+
+        - name: "Identify local non-cdrom, non-boot storage devices on ESXi"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device list | awk '!/^[[:space:]]/ {if (dev && local && boot && dev !~ /cdrom/) print dev; dev=$1; local=0; boot=0} /Is Local: true/ {local=1} /Is Boot Device: false/ {boot=1} END {if (dev && local && boot && dev !~ /cdrom/) print dev}'"
+          register: local_disks
+          delegate_to: localhost
+
+
+
+        - name: "Set local disks list"
+          set_fact:
+            local_disks_list: "{{ local_disks.output.split('\n') | reject('equalto', '') | list }}"  # Reject empty strings
+          when: local_disks is defined and local_disks.output is defined and local_disks.output | length > 0
+
+        # - name: Log Success for Local Storage Devices Fetch
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Local storage devices fetched successfully {{ local_disks.output }}" >> {{ shutdown_success }} 
+        #   delegate_to: localhost
+        #   # when: "'Successfully' in local_disks.msg"
+        #   when: local_disks.status == 'success'
+        #   # when: local_disks.rc == 0
+
+        # - name: Log Failure for Local Storage Devices Fetch
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to fetch local storage devices for {{ inventory_hostname }}" >> {{ shutdown_failure }} 
+        #   delegate_to: localhost
+        #   when: local_disks.status == 'failure'
+
+        # - meta: end_host
+        #   when: local_disks.status == 'failure'
+
+
+        - name: "Get VMFS extents for each local disk"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            # command: "esxcli storage vmfs extent list | grep '{{ item | basename }}' || true"
+            # command: "esxcli storage vmfs extent list | grep '{{ item | basename }}' | awk '{print $1}' || true"
+            command: "esxcli storage vmfs extent list | grep '{{ item }}' | awk '{print $1}' || true"
+          loop: "{{ local_disks_list | default([]) }}"
+          register: vmfs_extents_info
+          delegate_to: localhost
+          when: local_disks_list is defined and local_disks_list | length > 0  # Only run if local_disks_list is defined and has items
+
+        - name: Debug custom module output
+          debug:
+            var: vmfs_extents_info
+          when: vmfs_extents_info is defined
+
+
+        - name: "Extract volume names from VMFS extents info"
+          set_fact:
+            # vmfs_volumes_list: "{{ vmfs_extents_info.results | map(attribute='output') | list }}"
+            vmfs_volumes_list: "{{ vmfs_extents_info.results | map(attribute='output') | map('trim') | list }}"
+          when: vmfs_extents_info is defined and vmfs_extents_info.results | length > 0
+
+
+        - name: "Unmount VMFS datastore for each local disk"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage filesystem unmount -l '{{ vmfs_volumes_list[loop.index0] }}'"
+          loop: "{{ local_disks_list }}"
+          loop_control:
+            index_var: loop_index0
+          # when: vmfs_volumes_list | length > loop_index0 and vmfs_volumes_list[loop_index0] | trim != ''
+          when: local_disks_list is defined and local_disks_list | length > 0 and vmfs_volumes_list | length > loop_index0 and vmfs_volumes_list[loop_index0] | trim != ''
+          delegate_to: localhost
+
+
+        - name: "Delete VMFS datastore for each local disk"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage vmfs volume delete -l '{{ item.stdout }}'"
+          loop: "{{ vmfs_extents_info.results }}"
+          when: item.stdout != ''
+          delegate_to: localhost
+
+
+
+# ===========================================================================================================================
+
+        # - name: "Identify local storage uuid on ESXi"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     # command: "esxcli storage core device list | awk -F ': ' '/Is Local: true/ {dev_path=$2} /Other UIDs:/ {gsub(/^ +/, ""); uids=$2; if (dev_path && dev_path !~ /cdrom/ && uids ~ /^vml\./) print uids}'"
+        #     command: "esxcli storage core device list | awk -F ': ' '/Is Local: true/ {dev_path=$2} /Other UIDs:/ {gsub(/^ +/, \"\"); uids=$2; if (dev_path && dev_path !~ /cdrom/ && uids ~ /^vml./) print uids}'"
+        #     # command: "esxcli storage core device list | awk -F ': ' '/Devfs Path:/ {dev = $2} /Is Local: true/ {print dev}'"
+        #   register: local_disks_uuid
+        #   delegate_to: localhost
+
+        - name: "Identify local storage uuid on ESXi"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device list | awk -F ': ' '/Is Local: true/ {dev_path=$2} /Other UIDs:/ {gsub(/^ +/, \"\"); uids=$2} /Is Boot Device: false/ {if (dev_path && dev_path !~ /cdrom/ && uids ~ /^vml./) print uids}'"
+          register: local_disks_uuid
+          delegate_to: localhost
+
+
+
+        - name: "Set local disks uuid list"
+          set_fact:
+            local_disks_uuid_list: "{{ local_disks_uuid.output.split('\n') | reject('equalto', '') | list }}"  # Reject empty strings
+          when: local_disks_uuid is defined and local_disks_uuid.output is defined and local_disks_uuid.output | length > 0
+
+        # - name: Log Success for Local Storage Devices Fetch
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Local storage devices fetched successfully {{ local_disks_uuid.output }}" >> {{ shutdown_success }} 
+        #   delegate_to: localhost
+        #   # when: "'Successfully' in local_disks.msg"
+        #   when: local_disks_uuid.status == 'success'
+        #   # when: local_disks.rc == 0
+
+        # - name: Log Failure for Local Storage Devices Fetch
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to fetch local storage devices for {{ inventory_hostname }}" >> {{ shutdown_failure }} 
+        #   delegate_to: localhost
+        #   when: local_disks_uuid.status == 'failure'
+
+        # - meta: end_host
+        #   when: local_disks.status == 'failure'
+
+
+
+        - name: "Disable local disk"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device set --device {{ item }} --state off"
+          loop: "{{ local_disks_uuid_list }}"
+          # when: local_disks_uuid_list | length > 0
+          when: local_disks_uuid_list is defined and local_disks_uuid_list | length > 0
+          delegate_to: localhost
+          register: disable_disk_results
+          ignore_errors: yes
+
+        # - name: Log Success for Disabling Local Disk
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Local disk {{ item }} disabled successfully" >> {{ shutdown_success }} 
+        #   delegate_to: localhost
+        #   when: disable_disk_results.status == 'success'
+        #   loop: "{{ disable_disk_results.results }}"
+        #   loop_control:
+        #     label: "{{ item.item }}"
+
+        # - name: Log Failure for Disabling Local Disk
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to disable local disk {{ item.item }}" >> {{ shutdown_failure }} 
+        #   delegate_to: localhost
+        #   when: disable_disk_results.status == 'failure'
+        #   loop: "{{ disable_disk_results.results }}"
+        #   loop_control:
+        #     label: "{{ item.item }}"
+
+        # - meta: end_host
+        #   when: disable_disk_results.status == 'failure'
+          
+        # - name: "Delete the local disk"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: "partedUtil delete {{ item }}"
+        #   loop: "{{ local_disks_uuid_list }}"
+        #   when: local_disks_uuid_list | length > 0
+        #   delegate_to: localhost
+        #   register: delete_disk_results
+        #   ignore_errors: yes
+
+        # - name: Log Success for Deleting Local Disk
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Local disk {{ item }} deleted successfully" >> {{ shutdown_success }} 
+        #   delegate_to: localhost
+        #   when: delete_disk_results.status == 'success'
+        #   loop: "{{ delete_disk_results.results }}"
+        #   loop_control:
+        #     label: "{{ item.item }}"
+
+        # - name: Log Failure for Deleting Local Disk
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to delete local disk {{ item.item }}" >> {{ shutdown_failure }} 
+        #   delegate_to: localhost
+        #   when: delete_disk_results.status == 'failure'
+        #   loop: "{{ delete_disk_results.results }}"
+        #   loop_control:
+        #     label: "{{ item.item }}"
+
+        # - meta: end_host
+        #   when: delete_disk_results.status == 'failure'
+
+        - name: "Remove detached local disk from ESXi"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device detached remove -d {{ item }}"
+          loop: "{{ local_disks_uuid_list }}"
+          # when: local_disks_uuid_list | length > 0
+          when: local_disks_uuid_list is defined and local_disks_uuid_list | length > 0
+          delegate_to: localhost
+          register: detach_disk_results
+          ignore_errors: yes
+          
+        # - name: Log Success for Removing Detached Local Disk
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Detached local disk {{ item }} removed successfully" >> {{ shutdown_success }} 
+        #   delegate_to: localhost
+        #   when: detach_disk_results.status == 'success'
+        #   loop: "{{ detach_disk_results.results }}"
+        #   loop_control:
+        #     label: "{{ item.item }}"
+
+        # - name: Log Failure for Removing Detached Local Disk
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to remove detached local disk {{ item.item }}" >> {{ shutdown_failure }} 
+        #   delegate_to: localhost
+        #   when: detach_disk_results.status == 'failure'
+        #   loop: "{{ detach_disk_results.results }}"
+        #   loop_control:
+        #     label: "{{ item.item }}"
+
+        # - meta: end_host
+        #   when: detach_disk_results.status == 'failure'
+
+# ========================================================================================================================
+
+        - name: "Identify local storage devices on ESXi"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device list | awk -F ': ' '/Devfs Path:/ { dev_path = $2 } /Other UIDs:/ { if ($0 ~ /{{ item }}/) { print dev_path; exit } }'"
+          loop: "{{ local_disks_uuid_list }}"
+          register: local_disks_path
+          delegate_to: localhost
+          when: local_disks_uuid_list is defined and local_disks_uuid_list | length > 0
+
+
+        - name: "Set local disks list"
+          set_fact:
+            local_disks_path_list: "{{ local_disks_path.output.split('\n') | reject('equalto', '') | list }}"  # Reject empty strings
+          when: local_disks_path is defined and local_disks_path.output is defined and local_disks_path.output | length > 0
+
+        # - name: "Set local disks list"
+        #   set_fact:
+        #     local_disks_path_list: "{{ local_disks_path.results | map(attribute='stdout') | reject('equalto', '') | list }}"  # Reject empty strings
+        #   when: local_disks_path is defined and local_disks_path.results | length > 0
+
+        - name: "Get partition table for each local disk"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "partedUtil getptbl {{ item }}"
+          loop: "{{ local_disks_path_list }}"
+          delegate_to: localhost
+          register: partition_info
+          ignore_errors: yes
+          # when: local_disks_path_list | length > 0
+          when: local_disks_path_list is defined and local_disks_path_list | length > 0
+
+
+        - name: "Extract partition numbers for deletion"
+          set_fact:
+            partitions_to_delete: "{{ partition_info.results | selectattr('item', 'eq', item) | first | default({}) | stdout | regex_findall('^\\d+') | map('int') | list }}"
+          loop: "{{ local_disks_path_list }}"
+          # when: partition_info.results is defined
+          when: partition_info.results is defined and local_disks_path_list | length > 0
+
+
+        # - name: "Extract partition numbers for each disk"
+        #   set_fact:
+        #     disk_partitions: "{{ disk_partitions | default({}) | combine({item: partition_info.results | selectattr('item', 'eq', item) | first | default({}) | stdout | regex_findall('^\\d+') | map('int') | list }) }}"
+        #   loop: "{{ local_disks_list }}"
+        #   when: partition_info.results is defined
+
+        - name: "Delete partitions on the local disk"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "partedUtil delete {{ item }} {{ item }}"
+          loop: "{{ partitions_to_delete }}"
+          delegate_to: localhost
+          register: delete_partition_results
+          ignore_errors: yes
+          # when: partitions_to_delete | length > 0
+          when: partitions_to_delete is defined and partitions_to_delete | length > 0
+
+
+        # - name: "Delete partitions on each local disk"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: "partedUtil delete {{ item }} {{ partition_number }}"
+        #   loop: "{{ local_disks_list }}"
+        #   with_items: "{{ disk_partitions[item] | default([]) }}"
+        #   loop_control:
+        #     loop_var: partition_number
+        #   delegate_to: localhost
+        #   register: delete_partition_results
+        #   ignore_errors: yes
+        #   when: disk_partitions is defined and disk_partitions[item] is defined
+
+        # - name: "Get partition table for each local disk"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: "partedUtil getptbl {{ item }}"
+        #   loop: "{{ local_disks_list }}"
+        #   when: local_disks_list | length > 0
+        #   delegate_to: localhost
+        #   register: partition_info
+        #   ignore_errors: yes
+        #   when: local_disks is defined and local_disks.output is defined and local_disks.output | length > 0
+
+        # - name: "Log Success for Partition Info Fetch"
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Partition info fetched successfully for disks - {{ local_disks_list }}" >> {{ shutdown_success }}
+        #   delegate_to: localhost
+        #   when: 
+        #     - local_disks is defined
+        #     - local_disks.output is defined
+        #     - local_disks.output | length > 0
+        #     - partition_info.results is defined
+        #     - partition_info.results | length > 0
+
+        # - name: "Log Failure for Partition Info Fetch"
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to fetch partition info for disks - {{ local_disks_list | default([]) }}" >> {{ shutdown_failure }}
+        #   delegate_to: localhost
+        #   when: 
+        #     - local_disks is defined
+        #     - local_disks.output is defined
+        #     - local_disks.output | length > 0
+        #     - partition_info.results is not defined or partition_info.results | length == 0
+
+        # - meta: end_host
+        #   when: 
+        #     - local_disks is defined
+        #     - local_disks.output is defined
+        #     - local_disks.output | length > 0
+        #     - partition_info.results is not defined or partition_info.results | length == 0
+
+
+        # - name: Log Success for Wiping Local Disks
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Local disks wiped successfully {{ item.item }}" >> {{ shutdown_success }}
+        #   delegate_to: localhost
+        #   # when: "'Successfully' in item.msg"
+        #   when: item.status == 'success'
+        #   # when: item.rc == 0
+        #   loop: "{{ wipe_results.results }}"
+        #   loop_control:
+        #     label: "{{ item.item }}"
+
+        # - name: Log Success for Wiping Local Disks
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Local disks wiped successfully {{ item.item }}" >> {{ shutdown_success }}
+        #   delegate_to: localhost
+        #   when: item.status == 'success'
+        #   loop: "{{ delete_disk_results.results }}"
+        #   loop_control:
+        #     label: "{{ item.item }}"
+
+        # - name: Log Failure for Wiping Local Disks
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to wipe local disk {{ item.item }}" >> {{ shutdown_failure }}
+        #   delegate_to: localhost
+        #   # when: "'Successfully' not in item.msg"
+        #   when: item.status == 'failure'
+        #   # when: item.rc != 0
+        #   loop: "{{ wipe_results.results }}"
+        #   loop_control:
+        #     label: "{{ item.item }}"
+
+        # - name: Log Failure for Wiping Local Disks
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to wipe local disk {{ item.item }}" >> {{ shutdown_failure }}
+        #   delegate_to: localhost
+        #   when: item.status == 'failure'
+        #   loop: "{{ delete_disk_results.results }}"
+        #   loop_control:
+        #     label: "{{ item.item }}"
+                    
+        # - meta: end_host
+        #   # when: "'Successfully' not in item.msg"
+        #   when: item.status == 'failure'
+
+        # - meta: end_host
+        #   when: delete_disk_results.results | selectattr('status', 'equalto', 'failure') | list | length > 0
+
+        # - name: "Set local disks list"
+        #   set_fact:
+        #     local_disks_list: "{{ local_disks.stdout.split('\n') }}"  # Split output into a list
+        #   when: local_disks.stdout | length > 0
+
+        # - name: "Display local disks list"
+        #   debug:
+        #     msg: "{{ local_disks_list }}"
+        #   # when: local_disks_list | length > 0
+        #   when: local_disks is defined and local_disks.output is defined and local_disks.output | length > 0
+
+          
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        # - name: Log Success for Local Storage Devices Fetch
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Local storage devices fetched successfully {{ local_disks.output }}" >> {{ shutdown_success }} 
+        #   delegate_to: localhost
+        #   # when: "'Successfully' in local_disks.msg"
+        #   when: local_disks.status == 'success'
+        #   # when: local_disks.rc == 0
+
+        # - name: Log Failure for Local Storage Devices Fetch
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to fetch local storage devices for {{ inventory_hostname }}" >> {{ shutdown_failure }} 
+        #   delegate_to: localhost
+        #   # when: "'Successfully' not in local_disks.msg"
+        #   when: local_disks.status == 'failure'
+        #   # when: local_disks.rc != 0
+
+        # - meta: end_host
+        #   when: local_disks.status == 'failure'
+        #   # when: "'Successfully' not in local_disks.msg"
+
+        - name: "Wipe /boot and system partitions"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: |
+              rm -rf bootbank/*
+              rm -rf /vmfs/volumes/BOOTBANK*
+
+      # Another directory
+          register: wipe_partitions
+          delegate_to: localhost
+
+        - name: Log Success for Wiping /boot and System Partitions
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - /boot and system partitions wiped successfully" >> {{ shutdown_success }}
+          delegate_to: localhost
+          # when: "'Successfully' in wipe_partitions.msg"
+          # when: wipe_partitions.rc == 0
+          when: wipe_partitions.status == 'success'
+
+
+        - name: Log Failure for Wiping bootbank and System Partitions
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to wipe /boot and system partitions for {{ inventory_hostname }}" >> {{ shutdown_failure }}
+          delegate_to: localhost
+          # when: "'Successfully' not in wipe_partitions.msg"
+          # when: wipe_partitions.rc != 0
+          when: wipe_partitions.status == 'failure'
+
+        - meta: end_host
+          # when: "'Successfully' not in wipe_partitions.msg"
+          when: wipe_partitions.status == 'failure'
+
+        # # # - name: "Wipe Local Disks"
+        # # #   ssh_check_esxi_with_pass:
+        # # #     hostname: "{{ esxi_fqdn }}"
+        # # #     username: "{{ remote_username }}"
+        # # #     password: "{{ remote_password }}"
+        # # #     command: |
+        # # #       sudo dd if=/dev/zero of={{ item }} bs=1M status=progress
+        # # #   loop: "{{ local_disks.stdout_lines }}"
+        # # #   when: local_disks.stdout_lines | length > 0
+        # # #   delegate_to: localhost
+        # # #   register: wipe_results
+        # # #   ignore_errors: yes
+
+        # # # - name: "Wipe Local Disks"
+        # # #   ssh_check_esxi_with_pass:
+        # # #     hostname: "{{ esxi_fqdn }}"
+        # # #     username: "{{ remote_username }}"
+        # # #     password: "{{ remote_password }}"
+        # # #     command: |
+        # # #       sudo dd if=/dev/zero of={{ item }} bs=1M status=progress
+        # # #   loop: "{{ local_disks_list }}"  # Use the fact set earlier
+        # # #   when: local_disks_list | length > 0  # Check if the list has any disks
+        # # #   delegate_to: localhost
+        # # #   register: wipe_results
+        # # #   ignore_errors: yes
+
+        # # - name: "Wipe Local partition"
+        # #   ssh_check_esxi_with_pass:
+        # #     hostname: "{{ esxi_fqdn }}"
+        # #     username: "{{ remote_username }}"
+        # #     password: "{{ remote_password }}"
+        # #     command: |
+        # #       partedUtil delete {{ item }}
+        # #   loop: "{{ local_disks_list }}"  # Corrected to use the proper variable
+        # #   when: local_disks_list is defined and local_disks_list | length > 0  # Ensure there are disks to process
+        # #   delegate_to: localhost
+        # #   register: wipe_results
+        # #   ignore_errors: yes
+
+        # # - name: "Debug Wipe Results"
+        # #   debug:
+        # #     msg:
+        # #       - "Command: {{ item.item }}"
+        # #       - "STDOUT: {{ item.stdout }}"
+        # #       - "STDERR: {{ item.stderr }}"
+        # #       - "Status: {{ item.status }}"
+        # #   loop: "{{ wipe_results.results }}"
+        # #   loop_control:
+        # #     label: "{{ item.item }}"
+        # #   when: wipe_results is defined
+
+
+
+          
+        - name: "Shutdown ESXi (Immediate)"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli system shutdown poweroff -d 10 -r 'Immediate shutdown'"
+          register: shutdown_result
+          delegate_to: localhost
+
+
+        - name: "Debug: Show immediate shutdown result"
+          debug:
+            var: shutdown_result
+
+        - name: "Fail if immediate shutdown failed"
+          fail:
+            msg: "Critical Error: Failed to shutdown ESXi host {{ esxi_fqdn }}."
+          # when: "'error' in shutdown_result.stdout.lower()"
+          # when: shutdown_result.failed or ('error' in shutdown_result.stdout | lower)
+          when: shutdown_result.status == 'failure'
+
+        - name: Wait for a short period after initiating shutdown"
+          pause:
+            seconds: 15
+          when: shutdown_result.status == 'success'
+
+        # - name: "Check if ESXi host is down after shutdown"
+        #   wait_for_connection:
+        #     host: "{{ esxi_fqdn }}"
+        #     port: 22
+        #     state: absent  # Expect the connection to be absent (down)
+        #     timeout: 60    # Wait for up to 60 seconds
+        #   register: check_down_result
+        #   ignore_errors: yes # Allow this task to fail
+
+        - name: "Check if ESXi host is down after shutdown"
+          wait_for:
+            host: "{{ esxi_fqdn }}"
+            port: 22
+            state: stopped  # Wait for the port to stop accepting connections
+            timeout: 60     # Wait for up to 60 seconds
+          register: check_down_result
+          ignore_errors: yes # Allow this task to fail
+          delegate_to: localhost
+
+
+
+        - name: "Debug: Show check down result"
+          debug:
+            var: check_down_result
+
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                      
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+            
+        - name: "Server Shutdown Success for host"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Server Shutdown Completed for host - Powered Off" >> {{ shutdown_success }}                    
+          delegate_to: localhost
+          # when: shutdown_result.status is defined
+          # when: not shutdown_result.failed and ('error' not in shutdown_result.stdout | lower) and check_down_result.unreachable
+          # when: shutdown_result.status == 'success' and check_down_result.unreachable
+          when: shutdown_result.status == 'success' and check_down_result.failed
+
+
+
+        - name: "Server Shutdown Failed for host"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Server Shutdown Failed for host" >> {{ shutdown_failure }}                    
+          delegate_to: localhost
+          # when: shutdown_result.status is not defined
+          # when: shutdown_result.failed or ('error' in shutdown_result.stdout | lower) or not check_down_result.unreachable
+          when: shutdown_result.status == 'failure' or not check_down_result.failed
+
+
+        - name: "update entry for DECO server for Server Shutdown"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "server_shutdown"
+            status: "T"           
+          register: update_status_info_state
+          delegate_to: localhost
+          # when: shutdown_result.status is defined
+          # when: not shutdown_result.failed and ('error' not in shutdown_result.stdout | lower) and check_down_result.unreachable
+          when: shutdown_result.status == 'success' and check_down_result.failed
+
+        - meta: end_host
+          # when: shutdown_result.failed or ('error' in shutdown_result.stdout | lower) or not check_down_result.unreachable
+          when: shutdown_result.failed or ('error' in shutdown_result.stdout | lower) or not check_down_result.failed
+
+
+
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for Shutdown module"  
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Failure information to file in rescue block"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Kindly check server shutdown module for esxi servers" >> {{ shutdown_failure }}                    
+          delegate_to: localhost

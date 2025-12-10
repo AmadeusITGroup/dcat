@@ -1,0 +1,171 @@
+---
+- name: "Check output files"
+  hosts: localhost
+  gather_facts: no    
+  tasks: 
+    - name: Create result files
+      copy:
+        dest: "{{ item }}"
+        mode: 0644
+        content: |
+          F
+      with_items:
+        - fqdn_pre.json
+      no_log: True
+
+    - name: Create result files
+      copy:
+        dest: "{{ item }}"
+        mode: 0644
+        content: |
+          T
+      with_items:
+        - fqdn.json
+        - record_for_fetch_fqdn_ph.json
+      no_log: True
+
+    - name: generate output files for every module
+      file:
+        path: "{{ item }}"
+        state: touch
+        mode: 0644
+      with_items:
+        - host_list_cmdb_duplicate_check.yml
+        - record_for_server_info_gather.json
+        - esxi_stat_failure.yml
+        - esxi_stat_success.yml
+        - esxi_stat_failure_cmdb.yml
+        - esxi_stat_failure_owner.yml
+        - ptr_system.yml
+        - cmdb_stat_success.yml
+        - cmdb_stat_failure.yml
+        - cmdb_stat_failure_cmdb_agp_phy.yml
+        - cmdb_stat_failure_owner_agp_phy.yml
+        - cmdb_stat_failure_cmdb.yml
+        - cmdb_stat_failure_owner.yml
+        - cmdb_stat_final.yml
+        - cmdb_success.yml
+        - cmdb_failure.yml
+        - cmdb_final.yml     
+        - host_list_fqdn_fetch_phy.yml
+        - host_list_server_info_gather.yml
+        - server_info_success.yml
+        - server_info_failure.yml
+        - server_info_final.yml
+        - fqdn_success_phy.yml
+        - check_remedy_success.yml
+        - check_remedy_fail.yml
+        - check_remedy.yml
+        - ilo_command_success.yml
+        - ilo_command_fail.yml
+        - san_switches_success.yml
+        - san_switches_fail.yml
+        - esxi_ssh_success.yml
+        - esxi_ssh_fail.yml
+        - check_synergon_success.yml
+        - check_synergon_fail.yml
+        - check_synergon.yml
+        - vcenter_api_success.yml
+        - vcenter_api_fail.yml
+        - vcenter_host_facts_success.yml
+        - vcenter_host_facts_fail.yml
+        - san_box.yml
+        - synergon_url.yml
+        - record_healthcheck.json
+        - check_final_success.yml
+        - check_final_fail.yml 
+        - winaproach_category.yml
+        - groups_ptr.yml
+        - esxi_ssh_shell_fail.yml
+        - hp_oa_success.log
+        - hp_oa_failure.log
+        - cmdb_dup_success.yml
+        - cmdb_dup_failure.yml
+        - cmdb_dup_info_fetch_final.yml
+        - record_for_cmdb_dup_info.json
+        - host_list_fqdn_fetch_esxi.yml
+        - fqdn_failure_esxi.yml
+        - fqdn_success_esxi.yml
+        - fqdn_final_esxi.yml
+        - host_list_cmdb_fetch.yml
+        - record_cmdb_fetch.json
+        - nvme_success_esxi.yml
+        - nvme_failure_esxi.yml
+        - nvme_fin.yml
+        - host_list_cmdb_update_esxi.yml
+        - host_list_storage_info_fetch.yml
+        - record_for_storage_info_fetch.json
+        - storage_info_fetch_success.yml
+        - storage_info_fetch_failure.yml
+        - storage_fetch_information_final.txt
+        - info_storage_esxi.txt
+        - brocade_inventory.yml
+        - storage_info_fetch_final.yml
+        - file_failure_storage_info
+        - cisco_sw_yes_list.yml
+        - cisco_sw_no_list.yml
+        - arista_sw_yes_list.yml
+        - arista_sw_no_list.yml
+        - lan_deco_tr_number.txt
+        - hp_blade_success.yml
+        - hp_blade_fail.yml
+        - lenovo_blade_fail.yml
+        - lenovo_blade_success.yml
+        - hp_blade_ilo_fail.yml
+        - hp_blade_ilo_success.yml
+        - esxi_ilo_final.yml 
+        - record_ilo.json
+        - host_list_shutdown.yml
+        - host_list_ilo.yml
+        - record_shutdown.json
+        - shutdown_success.yml
+        - shutdown_failure.yml
+        - esxi_shutdown_final.yml
+        - host_list_ip_dns.yml
+        - dns_success.yml
+        - record_dns.json
+        - esxi_dns_success.yml
+        - esxi_dns_win_success.yml
+        - esxi_dns_failure.yml
+        - record_dns_fail.json
+        - record_dns_suc.json
+        - esxi_dns_final.yml
+        - record_cmdb_update_esxi.json
+        - host_list_network.yml 
+        - record_for_fetch_nvme_cleanup.json
+        - host_list_nvme_cleanup.yml
+        - dcm.yml
+        - nvmeout.yml
+        - host_list_vcenter.yml
+        - record_vcenter.json
+        - vcenter_failure.yml
+        - vcenter_success.yml
+        - esxi_vcenter_final.yml
+        - ilo_success.yml
+        - ilo_failure.yml
+        - host_list_oview_lxca.yml
+        - record_oview_lxca.json
+        - oview_lxca_success.yml
+        - oview_lxca_failure.yml
+        - oview_lxca_final.yml
+        - host_list_oview_lxca_enclosure.yml
+        - record_oview_lxca_enclosure.json
+        - oview_lxca_success_enclosure.yml
+        - oview_lxca_failure_enclosure.yml
+        - oview_lxca_enclosure_final.yml
+        - enclosures_ready.json
+        - check_final_success_blades.yml
+        - check_final_fail_blades.yml
+        - enclosure_blade_count_fail.yml
+        - enclosure_blade_count_success.yml
+        - success_esxi.yml
+        - failure_esxi.yml
+        - record_doc_esxi.json
+        - doc_final.yml
+        - machinegroups.yml
+        - host_list_blades_health_check.yml
+        - record_for_fetch_fqdn_esxi.json
+        - record_healthcheck_enclosure.json
+        - host_list_enclosure_storage.yml
+        - record_encl_stg.json
+      no_log: true

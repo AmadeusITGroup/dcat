@@ -1,0 +1,71 @@
+---
+- name: "cmdb duplicate check"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb duplicate check
+      ansible.builtin.import_role:
+        name: cmdb_duplicate_check_enclosure
+        tasks_from: filter_hostlist_cmdb_check_dup.yml
+
+- name: "Create TR for cmdb duplicate check"
+  hosts: localhost
+  gather_facts: no
+  vars:
+  tasks:
+    - name: cmdb duplicate check
+      ansible.builtin.import_role:
+        name: cmdb_duplicate_check_enclosure
+        tasks_from: create_tr_cmdb_duplicate_check_info.yml
+
+- name: "cmdb duplicate check"
+  # hosts: enclosures
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  vars:
+    cmdb_url_update: "{{ hostvars['localhost']['config_data']['cmdb_url_update'] }}"
+  tasks: 
+    - name: cmdb duplicate check
+      ansible.builtin.import_role:
+        name: cmdb_duplicate_check_enclosure
+        tasks_from: cmdb_check_duplicates.yml
+
+
+- name: "ADD info to TR for cmdb duplicate check"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_system: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+    - name: cmdb duplicate check
+      ansible.builtin.import_role:
+        name: cmdb_duplicate_check_enclosure
+        tasks_from: add_info_cmdb_duplicate_check.yml
+
+# - name: "cmdb duplicate check"
+#   hosts: all:vmdeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: cmdb duplicate check
+#       ansible.builtin.import_role:
+#         name: cmdb_duplicate_check
+#         tasks_from: cmdb_logging.yml
+
+# - name: "Logger for cmdb duplicate check"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+    # record_cmdb_dup_info: ""
+    # graceperiod_flag: False
+    # cmdb_dup_check: "F"
+#   tasks:
+#     - name: cmdb duplicate check
+#       ansible.builtin.import_role:
+#         name: cmdb_duplicate_check
+#         tasks_from: logger_cmdb.yml

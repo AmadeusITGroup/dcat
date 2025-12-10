@@ -1,0 +1,24 @@
+---
+- name: "validate_qualify_vm"
+  hosts: vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: validate_qualify_vm
+      ansible.builtin.import_role:
+        name: validate_qualify_vm
+        tasks_from: validate_qualify_vm.yml
+
+- name: "Create and add info TR for validate_qualify_vm"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: validate_qualify_vm
+      ansible.builtin.import_role:
+        name: validate_qualify_vm
+        tasks_from: create_tr_qualify_vm.yml
+
+    - name: validate_qualify_vm
+      ansible.builtin.import_role:
+        name: validate_qualify_vm
+        tasks_from: add_info_qualify_vm.yml

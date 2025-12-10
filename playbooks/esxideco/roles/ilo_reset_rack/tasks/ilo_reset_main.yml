@@ -1,0 +1,508 @@
+---
+    - name: Initiating the ILO reset and disk Cleanup Module
+      throttle: 1
+      block:
+        - set_fact:
+            ilo_success: "ilo_success.yml"
+            ilo_failure: "ilo_failure.yml"
+            # remote_username: "root"
+            # remote_password: "N1Flheim!"
+            remote_username: "{{ remote_username }}"
+            remote_password: "{{ remote_password }}"
+
+        - name: Display the JSON file content
+          shell: cat record_ilo.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ilo_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: ilo_record_id == "" 
+        
+        - name: ESXI_host list
+          shell: cat host_list_ilo.yml
+          delegate_to: localhost
+          register: hostlist_esxi             
+
+        - name: save the ESXI list to a Variable as a Fact
+          set_fact:
+            esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: esxi_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Fetch vCenter details"
+          fetch_esxi_vcenter:
+            esxiname: '{{ inventory_hostname }}'
+            synergon_api: '{{ synergon_url }}'
+          delegate_to: localhost
+          register: vcenter_output
+          until: '"Successfully" in vcenter_output.msg or "Unable to find" in vcenter_output.msg or "duplicate entries" in vcenter_output.msg'
+          retries: 3
+          delay: 10
+
+        - name: Debug - Check the content of vcenter_output
+          debug:
+            var: vcenter_output
+
+        - name: Debug vendor details
+          debug:
+            msg:
+              - "vendorModel: {{ vcenter_output.esxi_details.vendorModel }}"
+              - "vendorName: {{ vcenter_output.esxi_details.vendorName }}"
+              - "Model contains 'Flex System': {{ 'Flex System' in vcenter_output.esxi_details.vendorModel }}"
+              - "Name contains 'Lenovo': {{ 'Lenovo' in vcenter_output.esxi_details.vendorName }}"
+
+
+
+        - name: Identify server type (Blade, Rack, or Unidentified)
+          set_fact:
+            server_type: >-
+              {% if ('Synergy' in vcenter_output.esxi_details.vendorModel or
+                      'BL' in vcenter_output.esxi_details.vendorModel) and
+                    'hp' in vcenter_output.esxi_details.vendorName|lower %}
+                HPBlade
+              {% elif 'DL' in vcenter_output.esxi_details.vendorModel and
+                    'hp' in vcenter_output.esxi_details.vendorName|lower %}
+                HPRack
+              {% elif 'flex system' in vcenter_output.esxi_details.vendorModel|lower and
+                    'lenovo' in vcenter_output.esxi_details.vendorName|lower %}
+                LenovoBlade
+              {% elif 'thinksystem' in vcenter_output.esxi_details.vendorModel|lower and
+                    'lenovo' in vcenter_output.esxi_details.vendorName|lower %}
+                LenovoRack
+              {% else %}
+                Unidentified
+              {% endif %}
+
+
+        - name: "Extract FQDN from ESXi details"
+          set_fact:
+            esxi_fqdn: "{{ vcenter_output.esxi_details.self.name }}"
+
+        - name: "Debug extracted FQDN"
+          debug:
+            msg: "The extracted FQDN is: {{ esxi_fqdn }}"
+
+          
+################################################## UPDATED LOGIC - ILO RESET #########################################################
+                    
+        - name: "Check entry for DECO server for filter hostlist for FQDN and Vcenter Fetch"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+
+        - set_fact: 
+            esxi_type: '{{idem_status.module_update.esxi_type}}'   
+
+        - set_fact: 
+            storage_info: '{{idem_status.module_update.san_info_fetch }}'
+
+        - set_fact: 
+            ilo_reset: '{{idem_status.module_update.ilo_reset}}'
+
+        - set_fact: 
+            esxi_fqdn: '{{idem_status.module_update.fqdn_info}}'   
+
+        - name: End play for this host
+          meta: end_host
+          when: ilo_reset != "F" or storage_info != "T"    
+
+
+        - name: Fetch ESXi details if HP rack
+          enclosure_synergon_data_fetch:
+            enclosure: "{{ inventory_hostname }}"
+            synergon_api: "{{ synergon_url }}"
+          delegate_to: localhost
+          register: esxi_data   
+          when: server_type | trim == "HPRack"
+        
+
+        - name: SSH to ESXi and perform iLO factory reset operation on HP Blade
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: |
+              /opt/tools/ilorest factorydefaults
+          register: ilo_reset_output
+          delegate_to: localhost
+          # when: ilo_result == '200' and server_type | trim == "HPRack"
+
+
+        - name: Display iLO reset output
+          debug:
+            var: ilo_reset_output
+          # when: ilo_result == '200' and server_type | trim == "HPRack"
+
+        - name: Log HP iLO reset failure
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Failed to reset iLO on HP Blade. {{ ilo_reset_output.output | to_yaml }}" >> {{ ilo_failure }}
+          delegate_to: localhost
+          when:
+            - server_type | trim == "HPRack"
+            - ilo_reset_output.status == "failure" #or ilo_reset_output.output is not search("Discovering data...Done")
+
+        - meta: end_host
+          when:
+            - server_type | trim == "HPRack"
+            - ilo_reset_output.status == "failure" #or ilo_reset_output.output is not search("Discovering data...Done")
+
+        # - name: Set fact for ESXi cluster
+        #   set_fact:
+        #     serial_status: "{{ esxi_data.esxi_details[0].serialNumber }}"
+        #   when: server_type | trim == "HPRack"
+      
+
+        - name: Set fact for ESXi cluster
+          set_fact:
+            serial_status: "{{ esxi_data.esxi_details[0].serialNumber | trim }}"
+          when: server_type | trim == "HPRack"
+
+        - name: Set domain based on vcenter
+          set_fact:
+            domain: "{{ '.clfra1.net' if esxi_data.esxi_details[0].vcenter == 'fracol1vcsa1' else '.muc.net' }}"
+          when: server_type | trim == "HPRack"
+
+
+        - name: Set fact for iLO hostname for HP Rack
+          set_fact:
+            ilohost: "ilo{{ serial_status }}{{ domain }}"
+
+        - debug:
+            var: ilohost
+          # when: ilo_result == '200' and  server_type | trim == "HPRack"
+
+        # Wait for iLO to become reachable again (post-reset delay)
+        - name: Wait for iLO to come back online after factory reset
+          wait_for:
+            host: "{{ ilohost }}"
+            port: 443
+            delay: 60          # Wait before checking (optional)
+            timeout: 300       # Max wait time
+            state: started
+          delegate_to: localhost
+          # when: ilo_result == '200' and server_type | trim == "HPRack"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        #Login to iLO again and set BIOS parameter
+        # - name: Set BIOS AutoPowerOn to AlwaysPowerOff after reset
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: |
+        #       /opt/tools/ilorest set AutoPowerOn=AlwaysPowerOff --selector=Bios. --commit && \
+        #       /opt/tools/ilorest reboot
+        #   register: ilo_bios_config_output
+        #   delegate_to: localhost
+        #   when: ilo_result == '200' and server_type | trim == "HPRack"
+
+        # - name: Set BIOS AutoPowerOn to AlwaysPowerOff after reset
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: "/opt/tools/ilorest set AutoPowerOn=AlwaysPowerOff --selector=Bios. --commit"
+        #   register: ilo_bios_config_output
+        #   delegate_to: localhost
+        #   when: ilo_result == '200' and server_type | trim == "HPRack"
+
+        - name: Run ilorest set AutoPowerOn=AlwaysPowerOff
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "/opt/tools/ilorest set AutoPowerOn=AlwaysPowerOff --selector=Bios. --commit"
+          register: set_result
+          delegate_to: localhost
+          # when: ilo_result == '200' and server_type | trim == "HPRack"
+
+        - name: Verify AutoPowerOn is set correctly
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "/opt/tools/ilorest get AutoPowerOn --selector=Bios."
+          register: get_result
+          delegate_to: localhost
+          when: set_result.status == "success" # ilo_result == '200' and server_type | trim == "HPRack" 
+        
+        - name: Check if AutoPowerOn is set to AlwaysPowerOff
+          set_fact:
+            ilo_bios_config_output: 
+              status: "{{ 'success' if get_result.output is search('AlwaysPowerOff') else 'failure' }}"
+              output: "{{ get_result.output }}"
+          when: set_result.status == "success" # ilo_result == '200' and server_type | trim == "HPRack" and 
+        
+        - name: Debug - Check the content of ilo_bios_config_output
+          debug:
+            var: ilo_bios_config_output
+
+        - name: Retry ilorest set AutoPowerOn=AlwaysPowerOff
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "/opt/tools/ilorest set AutoPowerOn=AlwaysPowerOff --selector=Bios. --commit"
+          register: set_result
+          delegate_to: localhost
+          when: ilo_bios_config_output.status == "failure"
+
+        - name: Verify AutoPowerOn is set correctly
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "/opt/tools/ilorest get AutoPowerOn --selector=Bios."
+          register: get_result
+          delegate_to: localhost
+          when: ilo_bios_config_output.status == "failure"
+
+        - name: Check if AutoPowerOn is set to AlwaysPowerOff
+          set_fact:
+            ilo_bios_config_output: 
+              status: "{{ 'success' if get_result.output is search('AlwaysPowerOff') else 'failure' }}"
+              output: "{{ get_result.output }}"
+          when: ilo_bios_config_output.status == "failure"
+        
+        - name: Debug - Check the content of ilo_bios_config_output
+          debug:
+            var: ilo_bios_config_output
+          when: ilo_bios_config_output.status == "failure"
+
+        - name: Reboot the server using ilorest
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "/opt/tools/ilorest reboot"
+          when: ilo_bios_config_output.status == "success"
+          register: ilo_reboot_output
+          delegate_to: localhost
+
+        - name: Waiting for 10 minutes (600 seconds)
+          wait_for:
+            timeout: 600
+          delegate_to: localhost
+          when: ilo_bios_config_output.status == "success"
+
+        - name: "Fetch vCenter details"
+          fetch_esxi_vcenter:
+            esxiname: '{{ inventory_hostname }}'
+            synergon_api: '{{ synergon_url }}'
+          delegate_to: localhost
+          register: vcenter_output
+          until: '"Successfully" in vcenter_output.msg or "Unable to find" in vcenter_output.msg or "duplicate entries" in vcenter_output.msg'
+          retries: 3
+          delay: 10
+
+        - name: Debug - Check the content of vcenter_output
+          debug:
+            var: vcenter_output
+
+        - name: "Ensure vCenter details were fetched successfully"
+          fail:
+            msg: "Failed to fetch vCenter details for ESXi host {{ inventory_hostname }}: {{ vcenter_output.msg }}"
+          when: '"Successfully" not in vcenter_output.msg'
+
+        - name: "Extract FQDN from ESXi details"
+          set_fact:
+            esxi_fqdn: "{{ vcenter_output.esxi_details.self.name }}"
+
+        - name: "Debug extracted FQDN"
+          debug:
+            msg: "The extracted FQDN is: {{ esxi_fqdn }}"
+
+        - name: "Set initial vCenter details"
+          set_fact:
+            v_center_before: "{{ vcenter_output.esxi_details.vcenter }}"
+            v_center_msg: "{{ vcenter_output.msg }}"
+
+        - name: "Set the FQDN for vCenter"
+          set_fact:
+            fqdn_vc: ""
+
+        - name: "Construct vCenter FQDN for standard cases"
+          set_fact:
+            fqdn_vc: ".muc.msp.net"
+          when: v_center_before is not search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|mucamnaz1|mucamnvcpa1|mucamnvcpa2|mucamnaz2|mucamnvcpb1|mucamnvcpb2|mucamnaz3|mucamnvcpc1|mucamnvcpc2") and v_center_before is not search(".muc.msp.net")
+
+        - name: "Construct vCenter FQDN for specific cases"
+          set_fact:
+            fqdn_vc: ".vclassic.net"
+          when: v_center_before is search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|mucamnaz1|mucamnvcpa1|mucamnvcpa2|mucamnaz2|mucamnvcpb1|mucamnvcpb2|mucamnaz3|mucamnvcpc1|mucamnvcpc2") and v_center_before is not search(".vclassic.net")
+
+        - name: "Define protocol for vCenter URL"
+          set_fact:
+            proto: "https://"
+
+        - name: "Construct the complete vCenter URL"
+          set_fact:
+            v_center: "{{ proto ~ v_center_before ~ fqdn_vc }}"
+
+        - name: "Set vCenter fully qualified domain name"
+          set_fact:
+            v_center_fqdn: "{{ v_center_before ~ fqdn_vc }}"
+
+        - name: "Debug the constructed vCenter URL"
+          debug:
+            msg: "The vCenter URL is: {{ v_center }}"
+
+        - name: Wait until ping responds
+          shell: "ping -c 1 {{ esxi_fqdn }}"
+          register: ping_result
+          retries: "60"
+          delay: "5"
+          until: ping_result.rc == 0
+          ignore_errors: true
+          delegate_to: localhost
+
+        - name: "Start SSH service on ESXi hosts from vCenter"
+          community.vmware.vmware_host_service_manager:
+            hostname: "{{ v_center_fqdn }}"
+            username: "{{ vcenter_username }}"
+            password: "{{ vcenter_password }}"
+            validate_certs: false
+            esxi_hostname: "{{ esxi_fqdn }}"
+            service_name: TSM-SSH
+            state: start
+          delegate_to: localhost
+          register: ssh_service_status
+          # until: ssh_service_status.changed
+          until: ssh_service_status.host_service_status[esxi_fqdn]['actual_service_state'] == 'running'
+          retries: 5
+          delay: 60
+
+        - name: Debug SSH service result
+          debug:
+            var: ssh_service_status
+
+        - name: SUCCESS - Log BIOS config output
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [INFO], BIOS config status: {{ ilo_bios_config_output.output | default('N/A') | replace('\n', ' ') }}" >> {{ ilo_success }}
+          delegate_to: localhost
+          when: ssh_service_status.host_service_status[esxi_fqdn]['actual_service_state'] == 'running' # ilo_result == '200' and server_type | trim == "HPRack" and ilo_bios_config_output.status == "success"
+
+        - name: FAILURE - Log BIOS config output
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [ERROR], BIOS config status: {{ ilo_bios_config_output.output | default('N/A') | replace('\n', ' ') }}" >> {{ ilo_failure }}
+          delegate_to: localhost
+          when: ssh_service_status.host_service_status[esxi_fqdn]['actual_service_state'] != 'running'
+            # - server_type | trim == "HPRack"
+            # - ilo_bios_config_output.status == "failure" # or ilo_result == 'failure'
+
+        # End host if BIOS config failed (optional, based on output)
+        - meta: end_host
+          when: ssh_service_status.host_service_status[esxi_fqdn]['actual_service_state'] != 'running'
+            # - server_type | trim == "HPRack"
+            # - ilo_bios_config_output.status == "failure" #or ilo_bios_config_output.output is not search("AutoPowerOn")
+
+        - name: Add iLO user account with Administrator role
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: |
+              /opt/tools/ilorest iloaccounts add {{ ilo_deco_adm_username }} {{ ilo_deco_adm_username }} {{ ilo_deco_adm_password }} --addprivs=1,2,3,4,5,6
+          register: ilo_user_add_output
+          delegate_to: localhost
+          when: ssh_service_status.host_service_status[esxi_fqdn]['actual_service_state'] == 'running' #ilo_result == '200' and server_type | trim == "HPRack"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: SUCCESS - Log iLO user creation output
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [INFO], Created new iLO user. Output: {{ ilo_user_add_output.output | default('N/A') | replace('\n', ' ') }}" >> {{ ilo_success }}
+          delegate_to: localhost
+          when: ilo_user_add_output.status == 'success'  #ilo_result == '200' and server_type | trim == "HPRack"
+
+        - name: FAILURE - Log iLO user creation output
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Failed to create new iLO user. Output: {{ ilo_user_add_output.output | default('N/A') | replace('\n', ' ') }}" >> {{ ilo_success }}
+          delegate_to: localhost
+          when: 
+            - server_type | trim == "HPRack"
+            - ilo_user_add_output.status == 'failure' or ilo_user_add_output.output is search("Error|Failure|fail|invalid") 
+
+
+        - meta: end_host
+          when:
+            - server_type | trim == "HPRack"
+            - ilo_user_add_output.status == "failure" or ilo_user_add_output.output is search("Error|Failure|fail|invalid")
+      
+        - name: Log HP iLO reset success
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], Successfully reset iLO on HP Blade." >> {{ ilo_success }}
+          delegate_to: localhost
+          when:
+            - ilo_user_add_output.status == 'success'
+            # - ilo_reset_output.status == "success"
+            # # - ilo_reset_output.output is search("Discovering data...Done")
+            # - server_type | trim == "HPRack"
+          
+        - name: "update entry for DECO server for for ILO reset"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "ilo_reset"
+            status: "T"            
+          register: update_status_info_state
+          delegate_to: localhost
+          when: ilo_user_add_output.status == 'success'
+
+# ##########################################################################################################################
+
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for ilo reset module"  
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Failure information to file in rescue block"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Kindly check ILO reset module for esxi servers" >> {{ilo_failure}}                    
+          delegate_to: localhost

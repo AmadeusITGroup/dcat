@@ -1,0 +1,62 @@
+---
+- name: "nas cleanup"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: nas cleanup
+      ansible.builtin.import_role:
+        name: nas_cleanup
+        tasks_from: filter_hostlist_nas_cleanup.yml
+
+- name: "nas cleanup"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no
+  tasks:
+    - name: nas cleanup
+      ansible.builtin.import_role:
+        name: nas_cleanup
+        tasks_from: nas_no_cleanup_server.yml
+      when: nas_validate is search("absent|manual") and nas_validate is defined and (nas_check == "F") and nas_check is defined and (backup_remove == "T") and backup_remove is defined and filter_domain == 'MUCMSPDOM' and filter_domain is defined
+
+    - name: nas cleanup
+      ansible.builtin.import_role:
+        name: nas_cleanup
+        tasks_from: nas_storage_cleanup_main.yml
+      when: nas_validate == 'present' and nas_validate is defined and (nas_check == "F") and nas_check is defined and (backup_remove == "T") and backup_remove is defined and filter_domain == 'MUCMSPDOM' and filter_domain is defined
+
+- name: "Create TR for nas cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_id_nas: ""
+    graceperiod_flag: True
+    nas_check: "F"
+    backup: "T"
+    virtual: "T" 
+  tasks:
+    - name: nas cleanup
+      ansible.builtin.import_role:
+        name: nas_cleanup
+        tasks_from: create_tr_nas_cleanup.yml
+
+- name: "Update TR for nas cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_id_nas: ""
+    graceperiod_flag: True
+    nas_check: "F"
+    backup: "T"
+    virtual: "T"
+  tasks:
+    - name: nas cleanup
+      ansible.builtin.import_role:
+        name: nas_cleanup
+        tasks_from: add_info_nas.yml
+    
+    - name: nas cleanup
+      ansible.builtin.import_role:
+        name: nas_cleanup
+        tasks_from: logger_nas.yml

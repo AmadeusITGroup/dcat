@@ -1,0 +1,45 @@
+---
+- name: "NVME Cleanup"
+  hosts: physicaldeco
+  gather_facts: no 
+  tasks: 
+    - name: nvme cleanup
+      ansible.builtin.import_role:
+        name: nvme_cleanup
+        tasks_from: filter_hostlist_nvme.yml
+
+- name: "Create TR for nvme cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_for_firewall: ""
+    graceperiod_flag: True
+  tasks:        
+    - name: nvme cleanup
+      ansible.builtin.import_role:
+        name: nvme_cleanup
+        tasks_from: create_tr_nvme_fetch.yml
+
+- name: "NvMe Cleanup"
+  hosts: physicaldeco
+  gather_facts: no
+  tasks: 
+    - name: nvme cleanup
+      ansible.builtin.import_role:
+        name: nvme_cleanup
+        tasks_from: fetch_nvme.yml
+      when: check_backup_status == "T"
+
+
+- name: "Add info TR for nvme clean up"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_for_nvme: ""
+    graceperiod_flag: true
+    synergon_api: ""
+  tasks:
+    - name: nvme cleanup
+      ansible.builtin.import_role:
+        name: nvme_cleanup
+        tasks_from: add_info_nvme_cleanup.yml

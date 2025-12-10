@@ -1,0 +1,32 @@
+---
+- name: Echo Playbook
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  collections:
+    - awx.awx
+
+  tasks:
+    - name: Launch the Ping Template
+      awx.awx.job_launch:
+        name: "lan_port_dcom"
+        wait: true
+        extra_vars:
+          tr: ["{{ tr }}"]
+
+        tower_host: "{{AWX_URL}}"
+
+        tower_username: "{{ auth_username }}"
+        tower_password: "{{ auth_password }}"
+
+      register: launch_result
+
+    - name: Output the result
+      ansible.builtin.debug:
+        msg: "Ping Template job completed with status: {{ launch_result.status }}"
+
+    - name: Show complete job information
+      ansible.builtin.debug:
+        var: launch_result
+        verbosity: 1

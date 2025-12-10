@@ -1,0 +1,233 @@
+---  
+    - name: "Handling Create TR- Win@proach for health check task "
+      block:
+
+
+        - name: Display the JSON file content
+          shell: cat check_ssh_linux.yml
+          delegate_to: localhost
+          register: result_check_linux
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ssh_linux: "{{ result_check_linux.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_ssh_windows.yml
+          delegate_to: localhost
+          register: result_check_windows
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ssh_windows: "{{ result_check_windows.stdout }}" 
+          delegate_to: localhost                                                                      
+
+        - meta: end_host
+          when: check_ssh_linux == "" and check_ssh_windows == ""       
+
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: VM DECO : Service health check before grace period - SSH/WINRM connectivity linux/Windows"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"            
+            severity: "3"
+            overview: "VM DECO - Service health check - SSH/WINRM connectivity linux/Windows"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output          
+
+        - set_fact:
+            record_id: "{{create_tr_output.record_id}}"
+   
+    
+        - copy:
+            content: '{{ record_id|to_json }}'
+            dest: record_healthcheck_ssh.json
+          delegate_to: localhost
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_id }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Failed to Create VM DECO - TR"
+
+    - name: "Handling Create TR- Win@proach for health check task - Retry 1"
+      block:                                                  
+
+        - name: Display the JSON file content
+          shell: cat check_ssh_linux.yml
+          delegate_to: localhost
+          register: result_check_linux
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ssh_linux: "{{ result_check_linux.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_ssh_windows.yml
+          delegate_to: localhost
+          register: result_check_windows
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ssh_windows: "{{ result_check_windows.stdout }}" 
+          delegate_to: localhost                                                                      
+
+        - meta: end_host
+          when: check_ssh_linux == "" and check_ssh_windows == ""       
+
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck_ssh.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_healthcheck_ssh: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: record_healthcheck_ssh == ""                          
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: VM DECO : Service health check before grace period - SSH/WINRM connectivity linux/Windows"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"            
+            severity: "3"
+            overview: "VM DECO - Service health check - SSH/WINRM connectivity linux/Windows"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output   
+          when: record_healthcheck_ssh == ""       
+
+        - set_fact:
+            record_id: "{{create_tr_output.record_id}}"
+          when: record_healthcheck_ssh == ""    
+
+    
+        - copy:
+            content: '{{ record_id|to_json }}'
+            dest: record_healthcheck_ssh.json
+          delegate_to: localhost
+          when: record_healthcheck_ssh == ""
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_id }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Retried and Failed to Create VM DECO - TR"
+
+    - name: "Handling Create TR- Win@proach for health check task-Retry 2 "
+      block:                                                  
+
+        - name: Display the JSON file content
+          shell: cat check_ssh_linux.yml
+          delegate_to: localhost
+          register: result_check_linux
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ssh_linux: "{{ result_check_linux.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_ssh_windows.yml
+          delegate_to: localhost
+          register: result_check_windows
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ssh_windows: "{{ result_check_windows.stdout }}" 
+          delegate_to: localhost                                                                      
+
+        - meta: end_host
+          when: check_ssh_linux == "" and check_ssh_windows == ""       
+
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck_ssh.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_healthcheck_ssh: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: record_healthcheck_ssh == ""    
+          
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: VM DECO : Service health check before grace period - SSH/WINRM connectivity linux/Windows"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"            
+            severity: "3"
+            overview: "VM DECO - Service health check - SSH/WINRM connectivity linux/Windows"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output 
+          when: record_healthcheck_ssh == ""
+       
+
+        - set_fact:
+            record_id: "{{create_tr_output.record_id}}"
+          when: record_healthcheck_ssh == ""  
+  
+    
+        - copy:
+            content: '{{ record_id|to_json }}'
+            dest: record_healthcheck_ssh.json
+          delegate_to: localhost
+          when: record_healthcheck_ssh == ""
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_id }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Retried and Failed to Create VM DECO - TR"                                
+

@@ -1,0 +1,206 @@
+---
+- name: Blade count check for ESXi
+  throttle: 1
+  block:
+
+      - name: Display the JSON file content
+        shell: cat private_endpoint_connection_string.yml
+        delegate_to: localhost
+        register: result_private_endpoint_connection_string
+
+      - name: save the Json data to a Variable as a Fact
+        set_fact:
+          private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+        delegate_to: localhost
+
+      - name: Check entries for Enclosure in CMDB
+        get_esxi_type_cmdb:
+          conn_str: "{{ private_endpoint_connection_string }}"
+          server_name: "{{ inventory_hostname | lower }}"
+          cmdb_server: "{{ cmdb_url_update }}"
+          user_name: "{{ emdb_username }}"
+          pass_word: "{{ emdb_password }}"
+        delegate_to: localhost
+        register: enclosure_cmdb_check
+        retries: 3
+        delay: 1
+        ignore_errors: yes
+
+      - name: "Debug server_type from CMDB check"
+        debug:
+          msg: "Server Type: {{ enclosure_cmdb_check.server_type }}"
+
+      - name: Get timestamp from the system
+        shell: "date +%Y-%m-%d/%H:%M"
+        delegate_to: localhost
+        register: tstamp              
+
+      - set_fact:
+          time: "{{ tstamp.stdout }}"
+
+      - name: Log failure for ESXi type fetch in CMDB
+        shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ enclosure_cmdb_check.server_type }}" >> enclosure_blade_count_fail.yml
+        delegate_to: localhost
+        when: >
+          enclosure_cmdb_check is defined and
+          (enclosure_cmdb_check.cmdb_check_result is not defined or
+          'Successfully' not in enclosure_cmdb_check.cmdb_check_result)
+
+      - name: End host if CMDB check failed
+        meta: end_host
+        when: >
+          enclosure_cmdb_check is defined and
+          (
+            enclosure_cmdb_check.cmdb_check_result is not defined or
+            'Successfully' not in enclosure_cmdb_check.cmdb_check_result
+          )
+
+      - name: Log success for ESXi type fetch in CMDB
+        shell: echo "{{ inventory_hostname }}, {{ time }}, [SUCCESS], {{ enclosure_cmdb_check.server_type }}" >> enclosure_blade_count_success.yml
+        delegate_to: localhost
+        when: >
+          enclosure_cmdb_check is defined and
+          enclosure_cmdb_check.cmdb_check_result is defined and
+          'Successfully' in enclosure_cmdb_check.cmdb_check_result
+
+      - name: Set fact if HP Enclosure
+        set_fact:
+          enclosure_type: "HPEnclosure"
+        when: enclosure_cmdb_check.server_type == "HPEnclosure"
+
+      - name: Set fact if Lenovo Enclosure
+        set_fact:
+          enclosure_type: "LenovoEnclosure"
+        when: enclosure_cmdb_check.server_type == "LenovoEnclosure"
+
+      - name: Set fact if Enclosure type is unidentified
+        set_fact:
+          enclosure_type: "Unidentified"
+        when: enclosure_cmdb_check.server_type not in ["HPEnclosure", "LenovoEnclosure"]
+
+      - name: Log unidentified enclosure type
+        shell: |
+          echo "#Enclosure Check - {{ time }}, [ERROR], Enclosure type for '{{ inventory_hostname }}' could not be identified. Skipping host." >> enclosure_blade_count_fail.yml
+        delegate_to: localhost
+        when: enclosure_type == "Unidentified"
+
+      - name: End host execution for unidentified enclosure
+        meta: end_host
+        when: enclosure_type == "Unidentified"
+
+      - name: Fetch ESXi details
+        enclosure_synergon_data_fetch:
+          enclosure: "{{ inventory_hostname }}"
+          synergon_api: "{{ synergon_url }}"
+        delegate_to: localhost
+        register: esxi_data
+        when: enclosure_type in ["HPEnclosure", "LenovoEnclosure"]
+
+      - name: Store blades in hostvars
+        set_fact:
+          enclosure_blades: "{{ esxi_data.esxi_details | map(attribute='ci_name') | list }}"
+        when:
+          - enclosure_type in ["HPEnclosure", "LenovoEnclosure"]
+          - esxi_data.esxi_details is defined
+
+
+  
+
+      - name: Get timestamp from the system
+        shell: "date +%Y-%m-%d/%H:%M"
+        delegate_to: localhost
+        register: tstamp
+        when: enclosure_type in ["HPEnclosure", "LenovoEnclosure"]
+
+      - set_fact:
+          time: "{{ tstamp.stdout }}"
+
+      - name: Log mismatch for HP enclosure
+        shell: |
+          echo "#Enclosure Check - {{ time }}, [ERROR], HP Enclosure '{{ inventory_hostname }}' has blade count {{ enclosure_blades | length }} instead of 16. Skipping host." >> enclosure_blade_count_fail.yml
+        delegate_to: localhost
+        when:
+          - enclosure_type == "HPEnclosure"
+          - enclosure_blades | length != 16
+
+      - name: Log mismatch for Lenovo enclosure
+        shell: |
+          echo "#Enclosure Check - {{ time }}, [ERROR], Lenovo Enclosure '{{ inventory_hostname }}' has blade count {{ enclosure_blades | length }} instead of 14. Skipping host." >> enclosure_blade_count_fail.yml
+        delegate_to: localhost
+        when:
+          - enclosure_type == "LenovoEnclosure"
+          - enclosure_blades | length != 14
+
+      - name: End host execution for blade count mismatch (HP)
+        meta: end_host
+        when:
+          - enclosure_type == "HPEnclosure"
+          - enclosure_blades | length != 16
+
+      - name: End host execution for blade count mismatch (Lenovo)
+        meta: end_host
+        when:
+          - enclosure_type == "LenovoEnclosure"
+          - enclosure_blades | length != 14
+
+      - name: Log success for HP Enclosure blade count
+        shell: |
+          echo "#Enclosure Check - {{ time }}, [INFO], HP Enclosure '{{ inventory_hostname }}' blade count verified: 16 blades." >> enclosure_blade_count_success.yml
+        delegate_to: localhost
+        when:
+          - enclosure_type == "HPEnclosure"
+          - enclosure_blades | length == 16
+
+
+      - name: "update entry for DECO server for Healthy Status"
+        azure_update_module_vals_esxi:
+          connection_string: "{{ private_endpoint_connection_string }}"
+          hostname: "{{inventory_hostname}}"
+          module_name: "healthy"
+          status: "T"           
+        register: update_status_info_state
+        delegate_to: localhost
+        when:
+          - enclosure_type == "HPEnclosure"
+          - enclosure_blades | length == 16
+
+      - name: Log success for Lenovo Enclosure blade count
+        shell: |
+          echo "#Enclosure Check - {{ time }}, [INFO], Lenovo Enclosure '{{ inventory_hostname }}' blade count verified: 14 blades." >> enclosure_blade_count_success.yml
+        delegate_to: localhost
+        when:
+          - enclosure_type == "LenovoEnclosure"
+          - enclosure_blades | length == 14
+
+
+      - name: "update entry for DECO server for Healthy Status"
+        azure_update_module_vals_esxi:
+          connection_string: "{{ private_endpoint_connection_string }}"
+          hostname: "{{inventory_hostname}}"
+          module_name: "healthy"
+          status: "T"           
+        register: update_status_info_state
+        delegate_to: localhost
+        when:
+          - enclosure_type == "LenovoEnclosure"
+          - enclosure_blades | length == 14
+
+
+  rescue:
+
+      - name: Get timestamp from the system (failure)
+        shell: "date +%Y-%m-%d/%H:%M"
+        delegate_to: localhost
+        register: tstamp_failure
+
+      - name: Set timestamp fact (failure)
+        set_fact:
+          time: "{{ tstamp_failure.stdout }}"
+
+      - name: Log unexpected error in blade count validation
+        shell: |
+          echo "#Enclosure Check - {{ time }}, {{ inventory_hostname }}, [ERROR], Unexpected error occurred during blade count validation." >> enclosure_blade_count_fail.yml
+        delegate_to: localhost
+
+      - name: End host execution on rescue
+        meta: end_host

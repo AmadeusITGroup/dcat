@@ -1,0 +1,75 @@
+---
+    - name: Initiating the ILO reset Module
+      throttle: 1
+      block:
+        # - set_fact:
+        #     ilo_success: "ilo_success.yml"
+        #     ilo_failure: "ilo_failure.yml"
+
+        - name: Display the JSON file content
+          shell: cat record_ilo.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ilo_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: ilo_record_id == "" 
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost      
+
+                 
+        - name: "Check entry for DECO server from Azure"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+
+        # - name: Get timestamp from the system
+        #   shell: "date +%Y-%m-%d/%H:%M"
+        #   delegate_to: localhost
+        #   register: tstamp              
+                  
+        # - set_fact:
+        #     time: "{{tstamp.stdout}}"
+
+
+        - set_fact: 
+            esxi_type: '{{idem_status.module_update.esxi_type}}'   
+
+        - set_fact: 
+            oneview_xclarity_removal: '{{idem_status.module_update.oneview_xclarity_removal }}'
+
+        - set_fact: 
+            ilo_reset: '{{idem_status.module_update.ilo_reset}}'
+
+        # - set_fact: 
+        #     esxi_fqdn: '{{idem_status.module_update.fqdn_info}}'   
+
+        - name: End play for this host
+          meta: end_host
+          when: ilo_reset != "F" or oneview_xclarity_removal != "T"    
+
+
+        - name: ILO Reset tasks
+          include_tasks: ilo_reset_hp.yml
+          when: esxi_type == 'HPBlade'
+
+        - name: IMM Reset tasks
+          include_tasks: imm_reset_lenovo.yml
+          when: esxi_type == 'LenovoBlade'
+
+
+

@@ -1,0 +1,55 @@
+---
+- name: "Backup Cleanup"
+  hosts: physicaldeco
+  gather_facts: no 
+  tasks: 
+    - name: backup cleanup
+      ansible.builtin.import_role:
+        name: backup_cleanup
+        tasks_from: filter_hostlist_backup.yml
+
+- name: "Create TR for backup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_for_backup: ""
+    #backup_status: "false"
+    graceperiod_flag: True
+    #cmdb_stat_check_agp: true
+  tasks:        
+    - name: backup cleanup
+      ansible.builtin.import_role:
+        name: backup_cleanup
+        tasks_from: create_tr_for_backup.yml
+
+- name: "Backup Cleanup"
+  hosts: physicaldeco
+  gather_facts: no
+  vars:
+    csv: "nodes.csv"
+    retention_days: "{{ retention_days }}"   
+  tasks: 
+    - name: backup cleanup
+      ansible.builtin.import_role:
+        name: backup_cleanup
+        tasks_from: backup_decommission_nodeslist.yml
+      when: (backup_remove == "F") and backup_remove is defined and (cmdb_fetch_agp == "T") and cmdb_fetch_agp is defined
+
+- name: "Add info TR for backup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_for_backup: ""
+    #backup_status: "false"
+    graceperiod_flag: true
+    #cmdb_stat_check_agp: true
+  tasks:
+    - name: backup cleanup
+      ansible.builtin.import_role:
+        name: backup_cleanup
+        tasks_from: add_info_for_backup.yml
+
+    # - name: backup
+    #   ansible.builtin.import_role:
+    #     name: backup_cleanup
+    #     tasks_from: logger_backup.yml

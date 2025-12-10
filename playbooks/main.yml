@@ -1,0 +1,123 @@
+---
+- hosts: localhost
+  gather_facts: no  
+       
+  tasks: 
+
+  - name: Display input JSON
+    set_fact:
+      serial: 20 #15 
+
+  - name: register env information
+    debug: 
+      msg: "{{ serial }}"
+    register: serial_number         
+
+  - name: Display input JSON
+    set_fact:
+      jsondata: "{{ associated_cis }}"
+      
+  - name: fetch host details
+    diff_server:
+      host: "{{ associated_cis | to_json }}"
+      cmdb_rtu: "{{CMDB_URL}}"
+    register: host_list
+
+  - name: display data
+    debug:
+      var: host_list
+
+  - set_fact:
+      vm: "{{ host_list.vm_list }}"        
+  
+  - name: Launching VM deco job1
+    deco_jobs:
+      url: "{{AWX_URL}}"
+      username: "{{ auth_username }}"
+      password: "{{ auth_password }}"
+      ci: '{{ host_list.vm_list }}'
+      cr: "'{{ cr }}'"
+      ritm_number: "{{ ritm_number }}"
+      graceperiod_flag: "'{{ graceperiod_flag }}'"
+      retention_days: "'{{ retention_days }}'"
+      requester_name: "{{ requester_name }}"
+      requester_group: "{{ requester_group }}"
+      pillar: "{{ pillar }}"
+      mit_ticket: "NA" #"{{ mit_ticket }}"
+    delegate_to: localhost                
+    register: job_status
+    when: vm != [] and graceperiod_flag == "False" 
+
+  - name: Launching VM deco job2
+    deco_jobs:
+      url: "{{AWX_URL}}"  
+      username: "{{ auth_username }}"
+      password: "{{ auth_password }}"
+      ci: '{{ host_list.vm_list }}'
+      cr: "'{{ cr }}'"
+      ritm_number: "{{ ritm_number }}"
+      graceperiod_flag: "'{{ graceperiod_flag }}'"
+      retention_days: "'{{ retention_days }}'"
+      requester_name: "{{ requester_name }}"
+      requester_group: "{{ requester_group }}"
+      pillar: "{{ pillar }}"
+      mit_ticket: "NA" #"{{ mit_ticket }}"
+    delegate_to: localhost                
+    register: job_status
+    when: vm != [] and graceperiod_flag == "True"
+
+  - set_fact:
+      physical: "{{ host_list.phy_list }}"
+
+  # - name: Launching SSH key add job
+  #   ssh_add_job:
+  #     url: "{{AWX_URL}}"
+  #     username: "{{ auth_username }}"
+  #     password: "{{ auth_password }}"
+  #     ci: '{{ host_list.phy_list }}'
+  #     cr: "'{{ cr }}'"
+  #     ritm_number: "{{ ritm_number }}"
+  #     graceperiod_flag: "'{{ graceperiod_flag }}'"
+  #     retention_days: "'{{ retention_days }}'"
+  #     requester_name: "{{ requester_name }}"
+  #     requester_group: "{{ requester_group }}"
+  #     pillar: "{{ pillar }}"
+  #   delegate_to: localhost                
+  #   register: job_status
+  #   when: physical != [] and graceperiod_flag == "False"   
+
+  - name: Launching physical deco job1
+    phydeco:
+      url: "{{AWX_URL}}"
+      username: "{{ auth_username }}"
+      password: "{{ auth_password }}"
+      ci: '{{ host_list.phy_list }}'
+      cr: "'{{ cr }}'"
+      ritm_number: "{{ ritm_number }}"
+      graceperiod_flag: "'{{ graceperiod_flag }}'"
+      retention_days: "'{{ retention_days }}'"
+      requester_name: "{{ requester_name }}"
+      requester_group: "{{ requester_group }}"
+      pillar: "{{ pillar }}"
+      mit_ticket: "NA" #"{{ mit_ticket }}"
+    delegate_to: localhost                
+    register: job_status
+    when: physical != [] and graceperiod_flag == "False"
+     
+  - name: Launching physical deco job1
+    phydeco:
+      url: "{{AWX_URL}}"
+      username: "{{ auth_username }}"
+      password: "{{ auth_password }}"
+      ci: '{{ host_list.phy_list }}'
+      cr: "'{{ cr }}'"
+      ritm_number: "{{ ritm_number }}"
+      graceperiod_flag: "'{{ graceperiod_flag }}'"
+      retention_days: "'{{ retention_days }}'"
+      requester_name: "{{ requester_name }}"
+      requester_group: "{{ requester_group }}"
+      pillar: "{{ pillar }}"
+      mit_ticket: "NA" #"{{ mit_ticket }}"
+    delegate_to: localhost                
+    register: job_status
+    when: physical != [] and graceperiod_flag == "True"

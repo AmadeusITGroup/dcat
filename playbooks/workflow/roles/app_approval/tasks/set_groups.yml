@@ -1,0 +1,20 @@
+---             
+    - name: "Handling node list, TR and retention days"
+      throttle: 1
+      block:  
+        - name: filter owner group
+          categorize_servers:
+            path: app_group.txt
+          delegate_to: localhost
+          register: group_list
+
+        - debug:
+            var: group_list.Status  
+        
+        - include: ticket_handler.yml
+          with_dict: "{{ group_list.Status }}"
+
+
+      rescue:
+        - debug:
+            msg: "DECO flow unable to categorize group for host"

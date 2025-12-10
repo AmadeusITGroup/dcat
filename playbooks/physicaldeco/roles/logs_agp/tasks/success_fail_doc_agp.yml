@@ -1,0 +1,99 @@
+---
+# - name: "Success and Failure list of VM's"
+#   hosts: all
+#   throttle: 1
+#   serial: 5 
+#   gather_facts: no
+#   vars:
+#     graceperiod_flag: ""
+
+#   tasks:
+    - name: "Check entry for DECO server"
+      throttle: 1
+      block:
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost      
+                
+        - name: "Check entry for DECO server for filter hostlist for cmdb duplicate list"
+          azure_update_ref_phy:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+
+        - set_fact: 
+            cmdb_check: '{{idem_status.module_update.cmdb_update}}' 
+
+        - set_fact:
+            serial_status: '{{ idem_status.module_update.serial }}'
+
+
+        # - name: Display the JSON file content
+        #   shell: cat failure_vm_agp.yml
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     vm_list: "{{ TR_result_healthcheck.stdout }}"
+        #   delegate_to: localhost                                   
+
+
+        - name: "VM success list"
+          shell: echo "{{ inventory_hostname }}" >> success_vm_agp.yml                    
+          delegate_to: localhost
+          when: cmdb_check == "T"
+
+        - name: "VM failure list"
+          shell: echo "{{ inventory_hostname }}" >> failure_vm_agp.yml                    
+          delegate_to: localhost
+          when: cmdb_check == "F" #and ('"{{ inventory_hostname }}" not in vm_list')       
+
+        - set_fact: 
+            san_cleanup: '{{idem_status.module_update.san_cleanup}}'
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}" 
+
+        - name: "update entry for DECO server for Closure date"
+          azure_update_module_vals_phy:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{ inventory_hostname }}"
+            module_name: "deco_date"
+            status: "{{ time }}"           
+          register: update_status_info_date
+          delegate_to: localhost  
+          when: cmdb_check == "T" and san_cleanup == "T"
+
+        - debug:
+            var: "{{ update_status_info_date }}"       
+        
+        - set_fact:
+            ilohost: "{{ 'ilo'+ serial_status +'.<server_fqdn>' }}"
+
+        - name: Power on server from ILO
+          ilo_power_validation_shutdown:
+            hostname: "{{ ilohost }}"
+            username: "{{ user_iloadm }}"
+            password: "{{ password_iloadm }}"
+          register: poweron_info
+          delegate_to: localhost  
+          when: cmdb_check == "T"
+  
+            
+      rescue:
+        - debug:
+            msg: "Failed fetch data from Idempotency" 
+

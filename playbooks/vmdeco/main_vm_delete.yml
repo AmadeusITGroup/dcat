@@ -1,0 +1,66 @@
+---
+- name: "vm delete"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: vm delete
+      ansible.builtin.import_role:
+        name: vmdelete
+        tasks_from: filter_hostlist_vm_delete.yml
+
+- name: "Create TR for vm delete"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: True
+    poweroff: "F"
+    vm_delete: "F"
+    dns: "T" 
+  tasks:
+    - name: vm delete
+      ansible.builtin.import_role:
+        name: vmdelete
+        tasks_from: create_tr_vm_deletion.yml
+
+- name: "vm delete"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no
+  tasks:
+    - name: vm delete
+      ansible.builtin.import_role:
+        name: vmdelete
+        tasks_from: vm_poweroff_after_grace_period.yml
+      when: (vm_delete == "F") and vm_delete is defined and (dns == "T") and dns is defined
+
+    - name: vm delete
+      ansible.builtin.import_role:
+        name: vmdelete
+        tasks_from: vm_deletion.yml
+      when: (vm_delete == "F") and vm_delete is defined and (dns == "T") and dns is defined
+
+
+- name: "Create TR for vm delete"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: True
+    poweroff: "F"
+    vm_delete: "F"
+    dns: "T"
+  tasks:
+    - name: vm delete
+      ansible.builtin.import_role:
+        name: vmdelete
+        tasks_from: add_info_vm_delete.yml
+
+    - name: vm delete
+      ansible.builtin.import_role:
+        name: vmdelete
+        tasks_from: vmpoweroff_logging_after_gp.yml
+
+    - name: vm delete
+      ansible.builtin.import_role:
+        name: vmdelete
+        tasks_from: logger_vmpoweroff_after_gp.yml

@@ -1,0 +1,191 @@
+---
+- name: Launching Rack Deco Playbook
+  hosts: localhost
+  gather_facts: no
+  vars:
+    azure_client_id: '{{ az_client_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+    storage_account_name: '{{ storage_account_name }}'
+    resource_group: '{{ resource_group }}'
+    azure_subscription_id: '{{ azure_subscription_id }}'
+    input: "{{ lookup('file','config.json') | from_json }}"
+
+  tasks:
+    - name: Display host input JSON
+      set_fact:
+        jsondata: "{{ associated_cis }}"
+        
+    - name: print hosts json data
+      debug:
+        var: jsondata
+
+    - name: Set env data
+      set_fact:
+        # env_data: "dev"
+        env_data: "prod"
+
+    
+    - name: Extract hosts from jsondata
+      set_fact:
+        server_list: "{{ jsondata | map(attribute='hosts') | list }}"
+
+    - name: Show server_list
+      debug:
+        var: server_list
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        storage_account_name: "{{ input.prod.storage_account_name }}"
+      delegate_to: localhost
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        resource_group: "{{ input.prod.resource_group }}"
+      delegate_to: localhost
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        azure_subscription_id: "{{ input.prod.azure_subscription_id }}"
+      delegate_to: localhost
+
+    - name: Retrieve Storage Account Key
+      azure_rm_storageaccount_info:
+        resource_group: "{{ resource_group }}"
+        name: "{{ storage_account_name }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_client_secret }}"
+        tenant: "{{ azure_tenant_id }}"
+        subscription_id: '{{ azure_subscription_id }}'
+        show_connection_string: true
+      register: storage_account_info
+
+    - name: Set Storage Account Key
+      set_fact:
+        storage_account_key: "{{ storage_account_info.storageaccounts[0].primary_endpoints.key }}"
+
+    - name: Get Private Endpoint Connection String
+      set_fact:
+        private_endpoint_connection_string: "DefaultEndpointsProtocol=https;AccountName={{ storage_account_name }};AccountKey={{ storage_account_key }};EndpointSuffix=core.windows.net"
+
+    - name: Check entries for Enclosure in CMDB
+      get_esxi_type_cmdb:
+        conn_str: "{{ private_endpoint_connection_string }}"
+        server_name: "{{ item }}"
+        cmdb_server:  "{{ cmdb_url_update }}"
+        user_name: "{{ emdb_username }}"
+        pass_word: "{{ emdb_password }}"
+      delegate_to: localhost
+      register: enclosure_cmdb_check
+      retries: 3
+      delay: 1
+      ignore_errors: yes
+      loop: "{{ server_list }}"
+      loop_control:
+        loop_var: item
+
+    - name: Debug CMDB check results
+      debug:
+        var: enclosure_cmdb_check.results
+
+
+    - name: Combine hostname and type into a list
+      set_fact:
+        hostname_and_type: "{{ hostname_and_type | default([]) + [{'hostname': item.item,'server_type':item.server_type}] }}"
+      loop: "{{ enclosure_cmdb_check.results }}"
+
+
+    - name: Show the combined results
+      debug:
+        var: hostname_and_type
+
+    - name: Initialize lists for racks and enclosures
+      set_fact:
+        rack_hostnames: []
+        enclosure_hostnames: []
+      # delegate_to: localhost
+      # run_once: true
+
+    - name: Separate hostnames into racks
+      set_fact:
+        rack_hostnames: "{{ rack_hostnames + [item.hostname] }}" 
+      when: "'Rack' in item.server_type"
+      loop: "{{ hostname_and_type }}"
+
+    - debug:
+        var: rack_hostnames
+
+    - name: Setting dynamic inventory for RACK
+      add_host:
+        hostname: "{{ item }}"
+        groups: esxideco_rack
+      loop: '{{ rack_hostnames }}'
+
+    - debug:
+        var: associated_cis
+          
+    - debug:
+        var: cr
+
+    - debug:
+        var: graceperiod_flag
+
+    - debug:
+        var: retention_days
+
+    - debug:
+        var: hostvars['localhost']['rack_hostnames']
+      delegate_to: localhost # Ensure this runs for localhost if not already in a localhost play
+
+    - debug:
+        msg: "Evaluating condition: {{ hostvars['localhost']['rack_hostnames'] | default([]) | length > 0 }}"
+      delegate_to: localhost # Ensure this runs for localhost
+
+- import_playbook: esxideco/esxideco_master_playbook_rack.yml
+  vars:
+    esxi_group: "{{hostvars.localhost.rack_hostnames}}"
+    serial_number: "{{ serial_number }}"
+    associated_cis: "{{ associated_cis }}"  
+    cr: "{{ cr }}" 
+    env_data: "{{ env_data }}"
+    graceperiod_flag: "{{ graceperiod_flag }}"
+    retention_days: "{{ retention_days }}"
+    requester_name: "{{ requester_name }}"
+    requester_group: "{{ requester_group }}"    
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"
+    phy_ssh_username: "{{ pAccount_username }}"
+    phy_ssh_password: "{{ pAccount_password }}"
+    infoblox_username: "{{ infoblox_username }}"
+    infoblox_password: "{{ infoblox_password }}"
+    user_iloroot: "{{ ansible_user }}"
+    password_iloroot: "{{ ansible_password }}"    
+    emdb_username: "{{ emdb_username }}" 
+    emdb_password: "{{ emdb_password }}"
+    remote_username: "{{ secret }}"
+    remote_keyfile: "{{ secret_key }}"   
+    artifacts_user: "{{ auth_username }}"
+    artifacts_password: "{{ auth_password }}"
+    btmp_user: "{{ si_username }}"
+    btmp_password: "{{ si_password }}"
+    # user_iloadm: "{{ elk_user }}"
+    # password_iloadm: "{{ elk_password }}"      
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"    
+    synergon_username: "{{ synergon_username }}"
+    synergon_password: "{{ synergon_password }}"
+    network_username: '{{ ar_username }}'    
+    network_password: '{{ ar_token }}'
+    ilo_deco_adm_password: '{{ auth_password }}'
+    ilo_deco_adm_username: '{{ auth_username }}'
+    network_usergroup: "{{ lookup('env', 'VROPS_USERNAME') }}"
+    network_grouppass: "{{ lookup('env', 'VROPS_PASSWORD') }}"  
+    awx_username: "{{ chg_mgmt_user }}"  
+    awx_password: "{{ chg_mgmt_password }}"
+    domain_username: "{{ pAccount_username }}"
+    domain_password: "{{ pAccount_password }}"
+    vcenter_username: "{{ pAccount_username }}"
+    vcenter_password: "{{ pAccount_password }}"
+  no_log: true
+  run_once: True
+  when: hostvars['localhost']['rack_hostnames'] | default([]) | length > 0

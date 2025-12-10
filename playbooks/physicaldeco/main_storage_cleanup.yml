@@ -1,0 +1,67 @@
+---
+- name: "Filter hostlist for storage cleanup physical"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: storage cleanup
+      ansible.builtin.import_role:
+        name: storage_cleanup
+        tasks_from: filter_hostlist_storage_cleanup.yml
+
+- name: "Create TR for storage cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    san_cleanup: "F"
+    graceperiod_flag: False
+  tasks:
+    - name: storage cleanup
+      ansible.builtin.import_role:
+        name: storage_cleanup
+        tasks_from: create_tr_storage_cleanup.yml
+
+- name: "storage cleanup physical"
+  hosts: physicaldeco
+  gather_facts: no  
+  connection: local  
+  tasks:
+    - name: storage cleanup physical
+      ansible.builtin.import_role:
+        name: storage_cleanup
+        tasks_from: storage_cleanup_main.yml
+      when: san_cleanup == "F" and cmdb_update == "T"    
+
+- name: "Add info to TR for storage cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    san_cleanup: "F"
+    graceperiod_flag: False
+    shutdown: ""
+  tasks:
+    - name: storage cleanup
+      ansible.builtin.import_role:
+        name: storage_cleanup
+        tasks_from: add_info_storage_cleanup.yml
+
+# - name: "storage cleanup"
+#   hosts: all:vmdeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: storage cleanup
+#       ansible.builtin.import_role:
+#         name: storage_cleanup
+#         tasks_from: cmdb_stat_logging.yml
+
+# - name: "Logger for storage cleanup"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+    # san_cleanup: "F"
+    # graceperiod_flag: False
+    # shutdown: ""
+#   tasks:
+#     - name: storage cleanup
+#       ansible.builtin.import_role:
+#         name: storage_cleanup
+#         tasks_from: logger_cmdb_stat.yml

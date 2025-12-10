@@ -1,0 +1,168 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    azure_client_id: '{{ az_client_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}"
+    auth_username: "{{ auth_username }}"
+    auth_password: "{{ auth_password }}"
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"    
+
+  tasks:
+    - name: set env for deco
+      set_fact:
+        env: prod
+
+    - name: register env information
+      debug: 
+        msg: "{{ env }}"
+      register: env_data
+
+    - set_fact:
+        storage_account_name: "awxdcatdev"
+      when: env_data is search("dev") 
+
+    - set_fact:
+        resource_group: "dcat"
+
+    - set_fact:
+        azure_subscription_id: "c7fe37a6-85d1-4afc-b695-13a64f545042"
+
+    - set_fact:
+        storage_account_name: "awxdcatprod"
+      when: env_data is search("prod")                              
+
+
+    - name: Retrieve Storage Account Key
+      azure_rm_storageaccount_info:
+        resource_group: "{{ resource_group }}"
+        name: "{{ storage_account_name }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_client_secret }}"
+        tenant: "{{ azure_tenant_id }}"
+        subscription_id: '{{ azure_subscription_id }}'
+        show_connection_string: true
+      register: storage_account_info
+
+    - name: Set Storage Account Key
+      set_fact:
+        storage_account_key: "{{ storage_account_info.storageaccounts[0].primary_endpoints.key }}"
+
+    - name: Get Private Endpoint Connection String
+      set_fact:
+        private_endpoint_connection_string: "DefaultEndpointsProtocol=https;AccountName={{ storage_account_name }};AccountKey={{ storage_account_key }};EndpointSuffix=core.windows.net"
+
+    - name: "data check"
+      shell: echo "{{ private_endpoint_connection_string }}" >> private_endpoint_connection_string.yml   
+      delegate_to: localhost  
+
+
+    - name: "Check entry for DECO server"
+      get_ptr_data:
+        connection_string: "{{ private_endpoint_connection_string }}"
+      register: get_data
+      delegate_to: localhost
+
+    - debug:
+        var: get_data
+
+
+    - name: Extract values for ptr
+      set_fact:
+        ptr_data: "{{ get_data.create_entity_result | map(attribute='ci') | zip_longest(get_data.create_entity_result | map(attribute='cr'), get_data.create_entity_result | map(attribute='event_number')) | list }}"
+    
+    - debug:
+        var: ptr_data
+
+    - include: retrigger_validator_ptr.yml
+      loop: "{{ ptr_data }}" 
+
+    - debug:
+        msg: "DECO terminated!!! No open tickets in queue - DECO will validate after 1hr "
+      when: ptr_data == []        
+
+    - name: Extract ritm_number values
+      set_fact:
+        ritm_numbers: "{{ get_data.create_entity_result | map(attribute='ritm_number') | unique | list }}"
+    
+    - debug:
+        var: ritm_numbers      
+
+    - name: Initialize empty list to store formatted data
+      set_fact:
+        formatted_data: []
+
+    - name: Iterate through create_entity_result
+      set_fact:
+        formatted_data: "{{ formatted_data + [ [ item.ritm_number, [item.ci], item.cr, item.requestor_name, item.requestor_group, item.retention_days, item.pillar, [item.event_number] ] ] }}"
+      loop: "{{ get_data.create_entity_result }}"
+      loop_control:
+        label: "{{ item.ritm_number }}"
+
+    - name: Remove duplicates from formatted data
+      set_fact:
+        formatted_data: "{{ formatted_data | unique }}"
+    
+    - debug:
+        var: formatted_data 
+
+    - name: format_data
+      format_data:
+        data_in: "{{ formatted_data }}" 
+      register: data_out
+      delegate_to: localhost 
+      
+
+    - name: Display final result
+      debug:
+        var: data_out.output
+
+    - set_fact:
+        data_val: "{{ data_out.output }}"   
+        
+
+    - name: "Check entry for DECO server"
+      get_ptr_data:
+        connection_string: "{{ private_endpoint_connection_string }}"
+      register: get_data_check
+      delegate_to: localhost
+
+    - debug:
+        var: get_data_check   
+              
+
+    - include: retrigger_update.yml
+      loop: "{{ data_val }}"
+      when: get_data_check is not search("{{ item.0 }}")
+
+    - name: Check if task should run today
+      shell: date +%H
+      register: current_hour
+
+    - name: format_data
+      data_snow:
+        data_in: "{{ data_val }}" 
+      register: snow_data
+      delegate_to: localhost 
+
+    - debug:
+        var : snow_data.output  
+    
+    - set_fact:
+        data_update: "{{ snow_data.output }}"
+
+    - name: Check snow api call back
+      update_snow:
+        action: Approval
+        ritm_number: "{{ item.0 }}"
+        status: Waiting
+        comments: Waiting for the PTRs to be resolved. 
+        username: "{{ SN_USERNAME }}"
+        password: "{{ SN_PASSWORD }}"
+      loop: "{{ data_update }}"      
+      register: api_result
+      when: get_data_check is search("{{ item.0 }}") #and current_hour.stdout == "05"

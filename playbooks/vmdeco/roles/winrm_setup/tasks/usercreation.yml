@@ -1,0 +1,35 @@
+---
+    - name: "user addition"
+      throttle: 1
+      block:
+
+        - name: Add  Domain Group to Adminstrators Local Group
+          windows_useradd:
+            hostname: "{{ inventory_hostname }}"
+            username: "{{ sshusr }}"
+            password: "{{ sshpass }}"
+          no_log: True
+          delegate_to: localhost
+          register: winrmaddgrp_result
+
+        - set_fact:
+            winrm_result: "{{ winrmaddgrp_result.window_host_result }}"
+
+        - debug:
+            var: winrm_result
+
+        - name: "pushing success log"
+          shell: echo "{{ inventory_hostname }}, [INFO], winrm Key add success " >> winrm_key_final.yml                    
+          delegate_to: localhost
+          when: '"successfully" in winrm_result'
+
+        - name: "pushing failure log"
+          shell: echo "{{ inventory_hostname }}, [ERROR], winrm Key add Failed " >> winrm_key_final.yml                    
+          delegate_to: localhost 
+          when: '"successfully" not in winrm_result'
+
+      rescue:
+        - name: "VM host list"
+          shell: echo "{{ inventory_hostname }}, [ERROR], winrm Key add Failed " >> winrm_key_final.yml                    
+          delegate_to: localhost 
+           

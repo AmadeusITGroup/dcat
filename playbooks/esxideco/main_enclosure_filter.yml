@@ -1,0 +1,246 @@
+- name: "CMDB update check for blades before moving to Enclosure"
+  hosts: "{{ target_hosts_enclosure }}"
+  gather_facts: no
+  vars:
+    # synergon_url: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+    instanceid: ""
+    ready_enclosures: []
+
+  tasks:
+
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      register: result_private_endpoint_connection_string
+      delegate_to: localhost
+
+
+    - name: Save the JSON data to a variable as a fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      delegate_to: localhost
+
+    - name: Fetch blades for each enclosure
+      get_servers_by_enclosure:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        enclosure_name: "{{ inventory_hostname }}"
+      register: enclosure_blades
+      delegate_to: localhost
+
+    - name: Build blades_by_enclosure on localhost
+      set_fact:
+        blades_by_enclosure: >-
+          {{
+            dict(
+              groups['all'] | map('extract', hostvars, 'enclosure_blades') |
+              select('defined') |
+              zip(groups['all']) |
+              map('reverse')
+            )
+          }}
+      delegate_to: localhost
+      run_once: true
+
+    # - name: Flatten blades_by_enclosure into blade_cmdb_input
+    #   set_fact:
+    #     blade_cmdb_input: >-
+    #       {%- set result = [] -%}
+    #       {%- for enclosure, info in blades_by_enclosure.items() -%}
+    #         {%- for blade in info.hostnames | default([]) -%}
+    #           {%- set _ = result.append({'enclosure': enclosure, 'hostname': blade}) -%}
+    #         {%- endfor -%}
+    #       {%- endfor -%}
+    #       {{ result }}
+    #   delegate_to: localhost
+    #   run_once: true
+
+    - name: Flatten blades_by_enclosure into blade_cmdb_input
+      set_fact:
+        blade_cmdb_input: >-
+          {%- set result = [] -%}
+          {%- for enclosure, info in blades_by_enclosure.items() -%}
+            {%- for blade in info.hostnames | default([]) | reject('equalto', enclosure) -%}
+              {%- set _ = result.append({'enclosure': enclosure, 'hostname': blade}) -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {{ result }}
+      delegate_to: localhost
+      run_once: true
+
+
+    - name: Check CMDB update for each blade (run once)
+      azure_update_ref_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{ item.hostname }}"
+      loop: "{{ blade_cmdb_input }}"
+      loop_control:
+        label: "{{ item.hostname }} ({{ item.enclosure }})"
+      register: cmdb_check_results
+      delegate_to: localhost
+      run_once: true
+
+    - name: Extract CMDB update status per blade
+      set_fact:
+        cmdb_status_by_enclosure: >-
+          {%- set result = {} -%}
+          {%- for item in cmdb_check_results.results -%}
+            {%- set enc = item.item.enclosure -%}
+            {%- set host = item.item.hostname -%}
+            {%- set cmdb = item.module_update.cmdb_update | default('F') -%}
+            {%- set _ = result.setdefault(enc, {}) -%}
+            {%- set _ = result[enc].update({host: cmdb}) -%}
+          {%- endfor -%}
+          {{ result }}
+      delegate_to: localhost
+      run_once: true
+
+    - name: Get enclosures with all blades having CMDB Update = "T"
+      set_fact:
+        enclosures_all_cmdb_updated: >-
+          {%- set result = [] -%}
+          {%- for enc, blades in cmdb_status_by_enclosure.items() -%}
+            {%- set all_cleaned = blades.values() | select('equalto', 'T') | list | length == blades | length -%}
+            {%- if all_cleaned -%}
+              {%- set _ = result.append(enc) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ result }}
+      delegate_to: localhost
+      run_once: true
+
+    - name: Save enclosures_all_cmdb_updated to file
+      copy:
+        content: "{{ enclosures_all_cmdb_updated | to_nice_json }}"
+        dest: enclosures_ready.json
+      delegate_to: localhost
+      run_once: true
+
+- name: Create dynamic group for enclosures with CMDB updated
+  hosts: localhost
+  gather_facts: no
+  tasks:
+
+    - name: Read enclosure list from file
+      slurp:
+        src: enclosures_ready.json
+      register: slurp_data
+
+    - name: Decode JSON data
+      set_fact:
+        ready_enclosures_input: "{{ slurp_data.content | b64decode | from_json }}"
+
+
+    - name: Add ready enclosures to dynamic host group
+      add_host:
+        name: "{{ item }}"
+        groups: enclosures_ready
+      loop: "{{ ready_enclosures_input }}"
+
+
+    - name: Refresh so enclosures_ready actually exists
+      meta: refresh_inventory
+
+    - name: Debug inventory group after add_host
+      debug:
+        msg: "Enclosures ready: {{ groups['enclosures_ready'] | default([]) }}"
+      run_once: true
+
+
+
+- name: Refresh inventory after adding enclosures_ready
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Refresh inventory
+      meta: refresh_inventory
+      run_once: true
+
+- name: Debug - Enclosures Ready Group After Refresh
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Debug - Enclosures Group
+      debug:
+        msg: "Enclosures ready: {{ hostvars | dict2items | selectattr('value.group_names', 'search', 'enclosures_ready') | map(attribute='key') | list }}"
+      run_once: true
+
+    - name: Set target_hosts as enclosures_ready
+      set_fact:
+        target_hosts: "enclosures_ready"
+
+
+
+- name: Import Oneview LXCA deregister on Enclosure
+  import_playbook: main_oneview_xclarity_enclosure.yml
+  vars:
+    target_hosts: "enclosures_ready"
+  when: groups['enclosures_ready'] | default([]) | length > 0
+
+- import_playbook: main_idempotency_validator.yml      # check updated Azure table
+  vars:
+    target_hosts: "enclosures_ready"
+
+
+- name: Import Network cleanup on Enclosure
+  import_playbook: main_network.yml
+  vars:
+    target_hosts: "enclosures_ready"
+  when: groups['enclosures_ready'] | default([]) | length > 0
+
+- import_playbook: main_idempotency_validator.yml      # check updated Azure table
+  vars:
+    target_hosts: "enclosures_ready"
+
+
+
+- name: Import DCM Role for Enclosure
+  import_playbook: main_dcm.yml
+  vars:
+    target_hosts: "enclosures_ready"
+  when: groups['enclosures_ready'] | default([]) | length > 0
+
+
+- import_playbook: main_idempotency_validator.yml      # check updated Azure table
+  vars:
+    target_hosts: "enclosures_ready"
+
+
+- name: Import Storage Role for Enclosure
+  import_playbook: main_enclosure_storage.yml
+  vars:
+    target_hosts: "enclosures_ready"
+  when: groups['enclosures_ready'] | default([]) | length > 0
+
+
+- import_playbook: main_idempotency_validator.yml      # check updated Azure table
+  vars:
+    target_hosts: "enclosures_ready"
+
+
+
+
+
+- name: "Import CMDB update playbook for Enclosure if no failures"
+  import_playbook: main_cmdb_update.yml
+  vars:
+    target_hosts: "enclosures_ready"
+  when: groups['enclosures_ready'] | default([]) | length > 0
+
+# - import_playbook: main_idempotency_validator.yml      # check updated Azure table
+#   vars:
+#     target_hosts: "enclosures_ready"
+
+# - name: "Looging TR for Enclosure if no failures"
+#   import_playbook: main_logs.yml
+#   vars:
+#     target_hosts: "enclosures"
+
+- name: "Logging TR for Enclosure if no failures"
+  import_playbook: main_logs.yml
+  vars:
+    target_hosts_orig: "{{ target_hosts_enclosure }}"
+    # target_hosts_orig: "enclosures"
+    # target_hosts_orig: "{{hostvars.localhost.enclosure_hostnames}}"
+
+
+

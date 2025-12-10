@@ -1,0 +1,172 @@
+---
+# - name: "This playbook collect all logs of vm poweroff,power on and deletion after grace period"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:  
+#     file_gp_fail: "vm_hostname_failure_gp.yml"
+#     file_failure_poweron: "vm_hostname_failure_poweron.yml"
+#     file_failure_del: "vm_hostname_failure_del.yml"
+#     file_success_del: "vm_hostname_success_del.yml"
+#     graceperiod_flag: true
+#     poweroff: False 
+#     final_vm_gp: "final_vm_gp.yml"
+#     vm_logging_gp: "vm_log_gp.yml"
+#     vmdelete: False
+#     dns_check: true        
+         
+    
+#   ####collect logs####
+
+#   tasks:             
+    - name: "Handling collecting logs for logger"
+      block:
+
+        - name: Handle the error if failure vm file empty in vm poweroff after gp
+          block:
+
+            - set_fact:
+                file_gp_fail: "vm_hostname_failure_gp.yml"
+                file_failure_poweron: "vm_hostname_failure_poweron.yml"
+                file_failure_del: "vm_hostname_failure_del.yml"
+                file_success_del: "vm_hostname_success_del.yml" 
+                final_vm_gp: "final_vm_gp.yml"
+                vm_logging_gp: "vm_log_gp.yml"               
+
+            - name: Display the JSON file content
+              shell: cat record_vm_del.json
+              delegate_to: localhost
+              register: TR_result_del  
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                record_id_vm_del: "{{ TR_result_del.stdout[1:-1] }}"
+              delegate_to: localhost         
+
+            - meta: end_host
+              when: record_id_vm_del == ""                
+
+            - name: VM_host list
+              shell: cat vm_hostname_failure_gp.yml
+              delegate_to: localhost
+              register: vm_result_gp             
+
+            - name: save the vm list to a Variable as a Fact
+              set_fact:
+                vm_gp_fail: "{{ vm_result_gp.stdout }}" 
+              delegate_to: localhost
+
+            - name: "success log list"
+              shell: echo '{{vm_gp_fail}}' >> final_vm_gp.yml                     
+              delegate_to: localhost
+              when: vm_gp_fail != ""
+
+          rescue:
+            - debug:
+                msg: "exception occurred as file vm is empty in vm poweroff after gp for tr create"               
+
+
+        - name: Handle the error if failure vm powered on file empty in vm poweroff after gp
+          block:
+            - name: VM_host list
+              shell: cat vm_hostname_failure_poweron.yml
+              delegate_to: localhost
+              register: vm_result_gp_on             
+
+            - name: save the vm list to a Variable as a Fact
+              set_fact:
+                vm_gp_fail_on: "{{ vm_result_gp_on.stdout }}" 
+              delegate_to: localhost
+
+            - name: "success log list"
+              shell: echo '{{vm_gp_fail_on}}' >> final_vm_gp.yml                     
+              delegate_to: localhost
+              when: vm_gp_fail_on != ""          
+
+          rescue:
+            - debug:
+                msg: "exception occurred as file vm is empty in vm poweron for tr create"
+
+        - name: Handle the error if success vm deletion file empty in vm poweroff after gp
+          block:
+            - name: VM_host list
+              shell: cat vm_hostname_success_del.yml
+              delegate_to: localhost
+              register: vm_result           
+
+            - name: save the vm list to a Variable as a Fact
+              set_fact:
+                vm_gp_suc: "{{ vm_result.stdout }}" 
+              delegate_to: localhost
+
+            - name: "success log list"
+              shell: echo '{{vm_gp_suc}}' >> final_vm_gp.yml                     
+              delegate_to: localhost
+              when: vm_gp_suc != ""          
+
+          rescue:
+            - debug:
+                msg: "exception occurred as  success file vm is empty in vm poweroff after gp for tr create"
+
+        - name: Handle the error if failure vm file empty in vm deletion after gp
+          block:      
+
+            - name: VM_host list
+              shell: cat vm_hostname_failure_del.yml
+              delegate_to: localhost
+              register: vm_result_gp_del             
+
+            - name: save the vm list to a Variable as a Fact
+              set_fact:
+                vm_gp_fail_del: "{{ vm_result_gp_del.stdout }}" 
+              delegate_to: localhost
+
+            - name: "success log list"
+              shell: echo '{{vm_gp_fail_del}}' >> final_vm_gp.yml                     
+              delegate_to: localhost
+              when: vm_gp_fail_del != ""
+
+          rescue:
+            - debug:
+                msg: "exception occurred as file vm is empty in vm deletion after gp for tr create"               
+
+
+        - name: VM_host list
+          shell: cat final_vm_gp.yml
+          delegate_to: localhost
+          register: vmpoweroff_final_gp             
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            final_vmpoweroff_gp: "{{ vmpoweroff_final_gp.stdout_lines }}"
+          delegate_to: localhost       
+
+        - name: Find uniqe entries
+          shell: cat final_vm_gp.yml | sort -u | uniq -u | grep -v -e '^[[:space:]]*$' > vm_log_gp.yml
+          delegate_to: localhost 
+
+      rescue:
+        - debug:
+            msg: "Exception in vm poweroff logging module "          
+
+                  
+
+                                
+                
+
+      
+        
+
+        
+              
+
+                        
+    
+    
+   
+    
+
+    
+        
+    
+        
+    

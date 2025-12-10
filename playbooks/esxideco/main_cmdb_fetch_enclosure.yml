@@ -1,0 +1,81 @@
+---
+- name: "Filter hostlist for cmdb initial status fetch"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_enclosure
+        tasks_from: filter_hostlist_cmdb_check_status.yml
+
+- name: "Create TR for cmdb fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    bird_api: "{{ hostvars['localhost']['config_data']['bird_api'] }}"
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        bird_api: "{{ config_data.bird_api }}"
+        win_category: "{{ config_data.winaproach_category }}"
+        
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_enclosure
+        tasks_from: create_tr_cmdb_status_check.yml
+
+- name: "Cmdb Fech for initial In-Production Status"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  vars:
+    cmdb_url_update: "{{ hostvars['localhost']['config_data']['cmdb_url_update'] }}"
+  tasks: 
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_enclosure
+        tasks_from: cmdb_status_check.yml
+      # when: cmdb_fetch == "F" and cmdb_dup_check == "T"       
+      # when: cmdb_fetch == "F" and (fqdn_info != "F" and vcenter_info != "F")
+           
+
+
+- name: "Add info to TR for cmdb fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_system: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_enclosure
+        tasks_from: add_info_cmdb_status_check.yml
+
+# - name: "CMDB FETCH"
+#   hosts: all:vmdeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: cmdb fetch
+#       ansible.builtin.import_role:
+#         name: cmdb_fetch_bgp
+#         tasks_from: cmdb_stat_logging.yml
+
+# - name: "Logger for CMDB Fetch"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+    # cmdb_fetch_bgp: "F"
+    # graceperiod_flag: False
+    # info: ""
+#   tasks:
+#     - name: cmdb fetch
+#       ansible.builtin.import_role:
+#         name: cmdb_fetch_bgp
+#         tasks_from: logger_cmdb_stat.yml

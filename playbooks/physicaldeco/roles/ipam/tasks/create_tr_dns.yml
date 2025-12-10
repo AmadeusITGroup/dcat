@@ -1,0 +1,404 @@
+---    
+    - name: "Handling Create TR- Win@proach "
+      block: 
+
+        - set_fact:
+            dns_record_id: ""
+            dns_success: "dns_success.yml"
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""
+
+        # - name: Display the JSON file content
+        #   shell: cat idem_network_pre.json
+        #   delegate_to: localhost
+        #   register: result_app_cmdb_network
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     idem_dns_check_network_flag: "{{ result_app_cmdb_network.stdout }}" 
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: idem_dns_check_network_flag == "F"
+  
+
+        # - name: Display the JSON file content
+        #   shell: cat idem_dns_check.json
+        #   delegate_to: localhost
+        #   register: result_app_cmdb
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     idem_dns_check_flag: "{{ result_app_cmdb.stdout }}" 
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: idem_dns_check_flag == "T"       
+
+        - name: VM_host list
+          shell: cat host_list_ip_dns.yml
+          delegate_to: localhost
+          register: hostlist_vm              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            phy_hostlist: "{{ hostlist_vm.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: phy_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat bird_api.yml
+          delegate_to: localhost
+          register: result_bird
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            bird_api: "{{ result_bird.stdout }}" 
+          delegate_to: localhost                      
+
+        - name: TR creation for DNS / IPAM cleanup task 
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "dns cleanup"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: PHYSICAL DECO : DNS/IPAM Cleanup"
+            ci: "{{ phy_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id
+          delegate_to: localhost
+        
+        - set_fact:
+            dns_record_id: "{{ticket_id.id.ticketId}}"
+    
+
+        - copy:
+            content: '{{ dns_record_id|to_json }}'
+            dest: record_dns.json
+          delegate_to: localhost
+
+    
+      rescue:
+        - debug:
+            msg: "Failed to Create VM DECO - dns validation TR"
+
+    - name: "Handling Create TR- Win@proach  -retry 1"
+      block: 
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""
+
+        # - name: Display the JSON file content 
+        #   shell: cat idem_network_pre.json
+        #   delegate_to: localhost
+        #   register: result_app_cmdb_network
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     idem_dns_check_network_flag: "{{ result_app_cmdb_network.stdout }}" 
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: idem_dns_check_network_flag == "F"
+  
+
+        # - name: Display the JSON file content
+        #   shell: cat idem_dns_check.json
+        #   delegate_to: localhost
+        #   register: result_app_cmdb
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     idem_dns_check_flag: "{{ result_app_cmdb.stdout }}" 
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: idem_dns_check_flag == "T"
+
+        - name: Display the JSON file content
+          shell: cat record_dns.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            dns_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: dns_record_id == ""
+
+        - name: VM_host list
+          shell: cat host_list_ip_dns.yml
+          delegate_to: localhost
+          register: hostlist_vm              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            phy_hostlist: "{{ hostlist_vm.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: phy_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat bird_api.yml
+          delegate_to: localhost
+          register: result_bird
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            bird_api: "{{ result_bird.stdout }}" 
+          delegate_to: localhost                      
+
+        - name: TR creation for DNS / IPAM cleanup task 
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "dns cleanup"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: PHYSICAL DECO : DNS/IPAM Cleanup"
+            ci: "{{ phy_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id
+          delegate_to: localhost
+          when: dns_record_id == ""  
+
+        - set_fact:
+            dnsip_record_id: "{{ticket_id.id.ticketId}}"
+          when: dns_record_id == ""   
+         
+        - copy:
+            content: '{{ dnsip_record_id|to_json }}'
+            dest: record_dns.json
+          delegate_to: localhost
+          when: dns_record_id == "" 
+
+    
+      rescue:
+        - debug:
+            msg: "Failed to Create VM DECO - dns validation TR"
+
+    - name: "Handling Create TR- Win@proach retry 2"
+      block: 
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""
+
+        # - name: Display the JSON file content 
+        #   shell: cat idem_network_pre.json
+        #   delegate_to: localhost
+        #   register: result_app_cmdb_network
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     idem_dns_check_network_flag: "{{ result_app_cmdb_network.stdout }}" 
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: idem_dns_check_network_flag == "F"
+  
+
+        # - name: Display the JSON file content
+        #   shell: cat idem_dns_check.json
+        #   delegate_to: localhost
+        #   register: result_app_cmdb
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     idem_dns_check_flag: "{{ result_app_cmdb.stdout }}" 
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: idem_dns_check_flag == "T"
+
+        - name: Display the JSON file content
+          shell: cat record_dns.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            dns_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: dns_record_id == ""                           
+
+        - name: VM_host list
+          shell: cat host_list_ip_dns.yml
+          delegate_to: localhost
+          register: hostlist_vm              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            phy_hostlist: "{{ hostlist_vm.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: phy_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat bird_api.yml
+          delegate_to: localhost
+          register: result_bird
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            bird_api: "{{ result_bird.stdout }}" 
+          delegate_to: localhost                     
+
+        - name: TR creation for DNS / IPAM cleanup task 
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "dns cleanup"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: PHYSICAL DECO : DNS/IPAM Cleanup"
+            ci: "{{ phy_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id
+          delegate_to: localhost
+          when: dns_record_id == ""
+            
+        - set_fact:
+            dnsip_record_id: "{{ticket_id.id.ticketId}}"
+          when: dns_record_id == "" 
+    
+        
+        - copy:
+            content: '{{ dnsip_record_id|to_json }}'
+            dest: record_dns.json
+          delegate_to: localhost
+          when: dns_record_id == "" 
+
+    
+      rescue:
+        - debug:
+            msg: "Failed to Create PHY DECO - dns validation TR"            
+
+
+    - name: "Handling Start Implementation- Win@proach "
+      block:
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""
+
+
+        - name: Display the JSON file content
+          shell: cat record_dns.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            dns_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: dns_record_id == ""                            
+
+        - name: Sleep for 62 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 62
+          delegate_to: localhost           
+
+        - name: Start Implementation
+          winaproach:
+            system: prod
+            type: task_record
+            operation: start_implementation
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            fields:
+              task_id: "{{ dns_record_id }}"
+          register: start_implementation
+          delegate_to: localhost
+          
+    
+      rescue:
+        - debug:
+            msg: "Failed to Start Implementation on PHY DECO - DNS Validation TR :'{{ dns_record_id }}'"
+       

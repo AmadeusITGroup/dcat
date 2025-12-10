@@ -1,0 +1,58 @@
+---
+# - name: "Filter hostlist for NAS validate"
+#   hosts: all
+#   throttle: 1
+#   serial: 5 
+#   gather_facts: no
+#   vars:
+#     graceperiod_flag: ""
+#     nas_validate: ""
+#     vm_status_check_cmdb: ""  
+#     host_list: host_list_nas_validate.yml
+
+#   tasks:
+    - name: "Check entry for DECO server"
+      throttle: 1    
+      block:
+
+        - set_fact:
+            host_list: host_list_nas_validate.yml
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server"
+          azure_update_ref:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status
+          delegate_to: localhost
+               
+
+        - set_fact: 
+            nas_validate: '{{idem_status.module_update.nas_validate}}'
+
+        - set_fact: 
+            vm_status_check_cmdb: '{{idem_status.module_update.vm_status_check_cmdb}}'
+
+        - set_fact: 
+            filter_domain: '{{idem_status.module_update.filter_domain}}'                                 
+           
+
+        - name: "VM list"
+          shell: echo "{{ inventory_hostname }}," >> {{ host_list }}                   
+          delegate_to: localhost
+          when: nas_validate == "F" and vm_status_check_cmdb == "T" and filter_domain == 'MUCMSPDOM'                
+
+            
+      rescue:
+        - debug:
+            msg: "Failed to fetch hostlist for NAS validate"    
+

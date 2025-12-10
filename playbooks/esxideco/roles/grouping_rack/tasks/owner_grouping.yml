@@ -1,0 +1,43 @@
+---
+    - name: "Handling TR record_id for implementation and validation result"
+      throttle: 1
+      block:
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the connection string Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: filter the group names 
+          filter_group:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: "{{ inventory_hostname }}"
+            cmdb_server: "{{ cmdb_url_update }}"
+            user_name: "{{ emdb_username }}"
+            pass_word: "{{ emdb_password }}"
+            #instance_id: ''
+          delegate_to: localhost
+          register: host_group
+
+        - name: print the owner group
+          debug:
+            var: host_group
+
+        - set_fact:
+            owner_group: "{{host_group.Status}}"
+
+        - debug:
+            var: owner_group
+
+        - name: pushing the value to the file
+          shell: echo -e "{{ inventory_hostname }}\t{{owner_group}}" >> machinegroups.yml
+          delegate_to : localhost
+
+      rescue:
+        - debug:
+            msg: "Exception occurred"

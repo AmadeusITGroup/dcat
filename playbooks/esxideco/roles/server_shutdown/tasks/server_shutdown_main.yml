@@ -1,0 +1,1050 @@
+---
+
+
+    - name: Initiating Server Shutdown Command
+      throttle: 1
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_shutdown.json
+          delegate_to: localhost
+          register: TR_result_shutdown_esxi
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_shutdown_esxi: "{{ TR_result_shutdown_esxi.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: record_id_shutdown_esxi == ""   
+
+        - set_fact:
+            shutdown_success: "shutdown_success.yml"
+            shutdown_failure: "shutdown_failure.yml"
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server from Azure"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"                        
+          register: idem_status
+          delegate_to: localhost    
+
+        # - debug:
+        #     var: idem_status
+
+        - set_fact: 
+            shutdown_server: '{{idem_status.module_update.server_shutdown}}'                
+
+        - set_fact: 
+            san_info_fetch: '{{idem_status.module_update.san_info_fetch}}'   
+
+        - name: End play for this host
+          meta: end_host
+          when: san_info_fetch != "T" or shutdown_server != "F"
+
+
+        - set_fact: 
+            esxi_fqdn: '{{idem_status.module_update.fqdn_info}}' 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          run_once: true
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          run_once: true
+
+
+        # - name: "Identify local cdrom-free non-boot storage devices on ESXi"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: >
+        #       esxcli storage core device list |
+        #       awk '
+        #         !/^[[:space:]]/ {
+        #           if (dev && is_local && is_not_boot && dev !~ /cdrom/)
+        #             print dev;
+        #           dev = $1;
+        #           is_local = 0;
+        #           is_not_boot = 0;
+        #         }
+        #         /Is Local: true/ { is_local = 1 }
+        #         /Is Boot Device: false/ { is_not_boot = 1 }
+        #         END {
+        #           if (dev && is_local && is_not_boot && dev !~ /cdrom/)
+        #             print dev;
+        #         }'
+        #   register: non_boot_disks
+        #   delegate_to: localhost
+
+        - name: "Identify local cdrom-free non-boot storage devices on ESXi"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: >
+              esxcli storage core device list | awk '
+              !/^[[:space:]]/ {
+                if (dev && is_local && is_not_boot && device_type !~ /CD-ROM/)
+                  print dev;
+                dev = $1;
+                is_local = 0;
+                is_not_boot = 0;
+                device_type = "";
+              }
+              /Is Local: true/ { is_local = 1 }
+              /Is Boot Device: false/ { is_not_boot = 1 }
+              /Device Type:/ {
+                gsub(/^ +/, "", $0);
+                split($0, parts, ": ");
+                device_type = parts[2];
+              }
+              END {
+                if (dev && is_local && is_not_boot && device_type !~ /CD-ROM/)
+                  print dev;
+              }'
+          register: non_boot_disks
+          delegate_to: localhost
+
+        - name: Split non-boot disks into a list
+          set_fact:
+            non_boot_disk_list: "{{ non_boot_disks.output.splitlines() }}"
+          when: non_boot_disks is defined and non_boot_disks.output is defined and non_boot_disks.output | length > 0
+
+
+        - name: Loop through each non-boot disk to get full block info
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device list -d {{ item }}"
+          loop: "{{ non_boot_disk_list }}"
+          register: non_boot_device_blocks
+          delegate_to: localhost
+          when: non_boot_disk_list is defined and non_boot_disk_list | length > 0
+
+
+
+        - name: Collect Devfs Paths for non-boot disks
+          set_fact:
+            non_boot_devfs_paths: "{{ (non_boot_devfs_paths | default([])) + (item.output | regex_search('Devfs Path:\\s*(\\S+)', '\\1') | default('') | list) }}"
+          when:
+            - item is defined
+            - item.output is defined
+            - item.output | regex_search('Devfs Path:\\s*(\\S+)', '\\1') is not none
+          loop: "{{ non_boot_device_blocks.results }}"
+
+
+        - name: “Get partition table for each non-boot devfs path”
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            # command: "partedUtil getptbl /vmfs/devices/disks/{{ item }}"
+            command: "partedUtil getptbl '{{ item }}'"
+          loop: "{{ non_boot_devfs_paths }}"
+          register: non_boot_parted_tables
+          delegate_to: localhost
+          when: non_boot_devfs_paths is defined and non_boot_devfs_paths | length > 0
+
+
+        # - name: Build list of partition deletion tasks per device
+        #   set_fact:
+        #     non_boot_partition_deletion_tasks: >-
+        #       {{ non_boot_partition_deletion_tasks | default([]) +
+        #         (
+        #           item.0.output.split('\n')
+        #             | select('match','^[0-9]+')
+        #             | map('regex_search','^([0-9]+)','\\1')
+        #             | map('regex_replace','^(.*)$',
+        #                 'partedUtil delete /vmfs/devices/disks/' ~ item.1 ~ ' \\1')
+        #             | list
+        #         )
+        #       }}
+        #   loop: "{{ non_boot_parted_tables.results | zip(non_boot_devfs_paths) | list }}"
+        #   loop_control:
+        #     label: "{{ item.1 }}"
+        #   when:
+        #     - non_boot_parted_tables is defined
+        #     - non_boot_parted_tables.results is defined
+        #     - non_boot_parted_tables.results | length > 0
+        #     - non_boot_devfs_paths is defined
+        #     - non_boot_devfs_paths | length > 0
+        #     - item.0.output is defined
+        #     - item.1 is defined
+
+
+        - name: Build list of partition deletion tasks per device
+          set_fact:
+            non_boot_partition_deletion_tasks: >-
+              {{ non_boot_partition_deletion_tasks | default([]) +
+                (
+                  item.0.output.split('\n')
+                    | select('match','^[0-9]+')
+                    | map('regex_search','^([0-9]+)','\\1')
+                    | map('regex_replace','^(.*)$',
+                        'partedUtil delete ' ~ item.1 ~ ' \\1')
+                    | list
+                )
+              }}
+          loop: "{{ non_boot_parted_tables.results | zip(non_boot_devfs_paths) | list }}"
+          loop_control:
+            label: "{{ item.1 }}"
+          when:
+            - item.0.output is defined
+            - item.1 is defined
+          
+
+        # - name: "Extract VMFS volume labels from extents info"
+        #   set_fact:
+        #     vmfs_volumes_list: "{{ vmfs_extents_info.results | map(attribute='output') | map('trim') | list }}"
+        #   when: vmfs_extents_info is defined and vmfs_extents_info.results is defined and vmfs_extents_info.results | length > 0
+
+        # - name: "Unmount VMFS datastore for each non-boot disk"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: "esxcli storage filesystem unmount -l '{{ vmfs_volumes_list[loop.index0] | trim }}'"
+        #   loop: "{{ non_boot_disk_list }}"
+        #   loop_control:
+        #     index_var: loop_index0
+        #   when: >
+        #     non_boot_disk_list is defined and
+        #     non_boot_disk_list | length > 0 and
+        #     vmfs_volumes_list is defined and
+        #     vmfs_volumes_list | length > loop_index0 and
+        #     vmfs_volumes_list[loop.index0] | trim != ''
+        #   delegate_to: localhost
+
+
+        # - name: Build list of partition deletion tasks per device
+        #   set_fact:
+        #     non_boot_partition_deletion_tasks: "{{ non_boot_partition_deletion_tasks | default([]) + deletion_cmds }}"
+        #   vars:
+        #     devfs_path: "{{ item.1 | trim }}"
+        #     output_lines: "{{ (item.0.output | default('')).split('\n') }}"
+        #     partition_lines: "{{ output_lines[2:] | select('match', '^\\d+') | list }}"
+        #     partition_numbers: "{{ partition_lines | map('regex_search', '^(\\d+)', '\\1') | map('first') | map('trim') | select('defined') | list }}"
+        #     deletion_cmds: "{{ partition_numbers | map('regex_replace', '^(.*)$', 'partedUtil delete ' ~ devfs_path ~ ' \\1') | map('replace','\n',' ') | map('trim') | list }}"
+        #   loop: "{{ non_boot_parted_tables.results | zip(non_boot_devfs_paths | default([])) | list }}"
+        #   when:
+        #     - item.0 is defined
+        #     - item.0.output is defined
+        #     - item.0.output | length > 0
+        #     - (item.0.output.split('\n') | length) > 2
+
+
+        - name: Debug deletion commands
+          debug:
+            # msg: "{{ non_boot_partition_deletion_tasks }}"
+            msg: "{{ non_boot_partition_deletion_tasks | default([]) }}"
+
+
+        - name: Delete all partitions on non-boot disks
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "{{ item }}"
+          loop: "{{ non_boot_partition_deletion_tasks }}"
+          register: deletion_results
+          delegate_to: localhost
+          # when: non_boot_partition_deletion_tasks | length > 0
+          when: non_boot_partition_deletion_tasks is defined and non_boot_partition_deletion_tasks | length > 0
+
+
+
+
+        # - name: Log Success for Local Storage Devices Fetch
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Local storage devices fetched successfully {{ local_disks.output }}" >> {{ shutdown_success }} 
+        #   delegate_to: localhost
+        #   # when: "'Successfully' in local_disks.msg"
+        #   when: local_disks.status == 'success'
+        #   # when: local_disks.rc == 0
+
+        # - name: Log Failure for Local Storage Devices Fetch
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to fetch local storage devices for {{ inventory_hostname }}" >> {{ shutdown_failure }} 
+        #   delegate_to: localhost
+        #   when: local_disks.status == 'failure'
+
+        # - meta: end_host
+        #   when: local_disks.status == 'failure'
+
+
+
+
+# ===========================================================================================================================
+# Detaching Disk after partition deletion
+
+        - name: "Identify local storage uuid on ESXi"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device list | awk -F ': ' '/Is Local: true/ {dev_path=$2} /Other UIDs:/ {gsub(/^ +/, \"\"); uids=$2} /Is Boot Device: false/ {if (dev_path && dev_path !~ /cdrom/ && uids ~ /^vml./) print uids}'"
+          register: local_disks_uuid
+          delegate_to: localhost
+
+
+
+        - name: "Set local disks uuid list"
+          set_fact:
+            local_disks_uuid_list: "{{ local_disks_uuid.output.split('\n') | reject('equalto', '') | list }}"  # Reject empty strings
+          when: local_disks_uuid is defined and local_disks_uuid.output is defined and local_disks_uuid.output | length > 0
+
+
+
+        - name: "Disable local disk"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device set --device {{ item }} --state off"
+          loop: "{{ local_disks_uuid_list }}"
+          # when: local_disks_uuid_list | length > 0
+          when: local_disks_uuid_list is defined and local_disks_uuid_list | length > 0
+          delegate_to: localhost
+          register: disable_disk_results
+          ignore_errors: yes
+
+        - name: Identify disks in the detached list
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device detached list | awk '/^vml\\./ {print $1}'"
+          register: detached_disks
+          delegate_to: localhost
+
+        - name: Build list of detached UUIDs
+          set_fact:
+            detached_uuid_list: "{{ detached_disks.output.split('\n') | reject('equalto','') | list }}"
+          when:
+            - detached_disks is defined
+            - detached_disks.output is defined
+            - detached_disks.output | length > 0
+
+        - name: Remove only truly detached local disks
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device detached remove -d {{ item }}"
+          loop: "{{ detached_uuid_list }}"
+          register: detach_disk_results
+          ignore_errors: yes
+          delegate_to: localhost
+          when:
+            - detached_uuid_list is defined
+            - detached_uuid_list | length > 0
+
+
+        # - name: "Remove detached local disk from ESXi"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: "esxcli storage core device detached remove -d {{ item }}"
+        #   loop: "{{ local_disks_uuid_list }}"
+        #   # when: local_disks_uuid_list | length > 0
+        #   when: local_disks_uuid_list is defined and local_disks_uuid_list | length > 0
+        #   delegate_to: localhost
+        #   register: detach_disk_results
+        #   ignore_errors: yes
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+
+        - name: Log Success for Local Disk Deletion
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Local storage devices disabled and removed successfully: {{ detach_disk_results.results | map(attribute='msg') | list | join(', ') }}" >> {{ shutdown_success }}
+          delegate_to: localhost
+          when:
+            - detach_disk_results is defined
+            - detach_disk_results.results is defined
+            # - detach_disk_results.results | selectattr('rc', 'equalto', 0) | list | length == detach_disk_results.results | length
+            - detach_disk_results.results | selectattr('status', 'equalto', 'success') | list | length == detach_disk_results.results | length
+
+
+        - name: Log Failure for Local Disk Deletion
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - One or more local disk detach operations failed: {{ detach_disk_results.results | selectattr('status', 'equalto', 'failure') | map(attribute='msg') | list | join(', ') }}" >> {{ shutdown_failure }}
+          delegate_to: localhost
+          when:
+            - detach_disk_results is defined
+            - detach_disk_results.results is defined
+            # - detach_disk_results.results | selectattr('rc', 'ne', 0) | list | length > 0
+            - detach_disk_results.results | selectattr('failed', 'equalto', true) | list | length > 0
+
+
+        - meta: end_host
+          when:
+            - detach_disk_results is defined
+            - detach_disk_results.results is defined
+            # - detach_disk_results.results | selectattr('rc', 'ne', 0) | list | length > 0
+            - detach_disk_results.results | selectattr('failed', 'equalto', true) | list | length > 0
+
+
+
+# ========================================================================================================================
+# # For Boot Device
+# ========================================================================================================================
+
+        # - name: "Identify local Boot storage devices on ESXi"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: >
+        #       esxcli storage core device list |
+        #       awk '
+        #         !/^[[:space:]]/ {
+        #           if (dev && is_local && is_boot && dev !~ /cdrom/)
+        #             print dev;
+        #           dev = $1;
+        #           is_local = 0;
+        #           is_boot = 0;
+        #         }
+        #         /Is Local: true/ { is_local = 1 }
+        #         /Is Boot Device: true/ { is_boot = 1 }
+        #         END {
+        #           if (dev && is_local && is_boot && dev !~ /cdrom/)
+        #             print dev;
+        #         }'
+        #   register: boot_disks
+        #   delegate_to: localhost
+
+
+        # - name: Wait until ESXi boot device is visible
+        # - name: "Identify local Boot storage devices on ESXi"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: >
+        #       esxcli storage core device list |
+        #       awk '
+        #         !/^[[:space:]]/ {
+        #           if (dev && is_local && is_boot && dev !~ /cdrom/)
+        #             print dev;
+        #           dev = $1;
+        #           is_local = 0;
+        #           is_boot = 0;
+        #         }
+        #         /Is Local: true/ { is_local = 1 }
+        #         /Is Boot Device: true/ { is_boot = 1 }
+        #         END {
+        #           if (dev && is_local && is_boot && dev !~ /cdrom/)
+        #             print dev;
+        #         }'
+        #   register: boot_disks
+        #   until: boot_disks.stdout != ""
+        #   retries: 6       # e.g. wait for up to 60 seconds
+        #   delay: 10
+        #   delegate_to: localhost
+        #   changed_when: false
+
+
+        # - name: "Identify local Boot storage devices on ESXi"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: >
+        #       esxcli storage core device list |
+        #       awk '
+        #         !/^[[:space:]]/ {
+        #           if (dev && is_local && is_boot && dev !~ /cdrom/)
+        #             print dev;
+        #           dev = $1;
+        #           is_local = 0;
+        #           is_boot = 0;
+        #         }
+        #         /Is Local: true/ { is_local = 1 }
+        #         /Is Boot Device: true/ { is_boot = 1 }
+        #         # Fallback case: detect USB/SDRAID boot device (mpx.vmhba32 etc.)
+        #         dev ~ /^mpx.vmhba32/ { is_boot = 1 }
+        #         END {
+        #           if (dev && is_local && is_boot && dev !~ /cdrom/)
+        #             print dev;
+        #         }'
+        #   register: boot_disks
+        #   until: boot_disks.output is defined and boot_disks.output | trim != ""
+        #   retries: 6
+        #   delay: 10
+        #   delegate_to: localhost
+        #   changed_when: false
+
+        # - name: "Identify local Boot storage devices on ESXi"
+        #   ssh_check_esxi_with_pass:
+        #     hostname: "{{ esxi_fqdn }}"
+        #     username: "{{ remote_username }}"
+        #     password: "{{ remote_password }}"
+        #     command: >
+        #       esxcli storage core device list |
+        #       awk '
+        #         !/^[[:space:]]/ {
+        #           if (dev && is_local && is_boot && dev !~ /cdrom/)
+        #             print dev;
+        #           dev = $1;
+        #           is_local = 0;
+        #           is_boot = 0;
+        #         }
+        #         /Is Local: true/ { is_local = 1 }
+        #         /Is Boot Device: true/ { is_boot = 1 }
+        #         END {
+        #           if (dev && is_local && is_boot && dev !~ /cdrom/)
+        #             print dev;
+        #         }'
+        #   register: boot_disks
+        #   until: boot_disks.output is defined and boot_disks.output | trim != ""
+        #   retries: 6
+        #   delay: 10
+        #   delegate_to: localhost
+        #   changed_when: false
+
+        - name: "Identify local Boot storage devices on ESXi"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: >
+              esxcli storage core device list |
+              awk '
+                !/^[[:space:]]/ {
+                  if (dev && is_local && is_boot && dev !~ /cdrom/)
+                    print dev;
+                  dev = $1;
+                  is_local = 0;
+                  is_boot = 0;
+                }
+                /Is Local: true/ { is_local = 1 }
+                /Is Boot Device: true/ { is_boot = 1 }
+                END {
+                  if (dev && is_local && is_boot && dev !~ /cdrom/)
+                    print dev;
+                }'
+          register: boot_disks
+          delegate_to: localhost
+          changed_when: false
+
+
+        - name: "Check if boot device was detected"
+          debug:
+            msg: "Boot device(s): {{ boot_disks.output }}"
+          failed_when: false
+
+        - name: "Reboot ESXi (Immediate)"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli system shutdown reboot -d 10 -r 'Immediate reboot triggered after boot device check failure'"
+          async: 1
+          poll: 0
+          ignore_errors: true
+          register: reboot_result
+          delegate_to: localhost
+          when: boot_disks.output is not defined or boot_disks.output | trim == ""
+
+        - name: "Wait for ESXi to reboot"
+          wait_for:
+            host: "{{ esxi_fqdn }}"
+            port: 22
+            delay: 60        # initial wait before starting checks
+            timeout: 900     # total wait time (15 minutes)
+          delegate_to: localhost
+          when: boot_disks.output is not defined or boot_disks.output | trim == ""
+
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+          when: boot_disks.output is not defined or boot_disks.output | trim == ""
+
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+          when: boot_disks.output is not defined or boot_disks.output | trim == ""
+
+        - name: "Check entry for DECO server from Azure"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"                        
+          register: idem_status
+          delegate_to: localhost    
+          when: boot_disks.output is not defined or boot_disks.output | trim == ""
+
+        - set_fact: 
+            v_center_before: '{{idem_status.module_update.vcenter_info}}'
+          when: boot_disks.output is not defined or boot_disks.output | trim == ""
+
+
+        - name: "Construct vCenter FQDN for specific known short hostnames"
+          set_fact:
+            fqdn_vc: "{{ v_center_before }}.vclassic.net"
+          when: 
+            - v_center_before is defined
+            - v_center_before is search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|MUCAMNAZ1|MUCAMNVCPA1|MUCAMNVCPA2|MUCAMNAZ2|MUCAMNVCPB1|MUCAMNVCPB2|MUCAMNAZ3|MUCAMNVCPC1|MUCAMNVCPC2")
+            - v_center_before is not search("\\.vclassic\\.net$")
+            - boot_disks.output is not defined or boot_disks.output | trim == ""
+
+
+        - name: "Construct vCenter FQDN for standard/default cases"
+          set_fact:
+            fqdn_vc: "{{ v_center_before }}.muc.msp.net"
+          when:
+            - v_center_before is defined
+            - v_center_before is not search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|MUCAMNAZ1|MUCAMNVCPA1|MUCAMNVCPA2|MUCAMNAZ2|MUCAMNVCPB1|MUCAMNVCPB2|MUCAMNAZ3|MUCAMNVCPC1|MUCAMNVCPC2")
+            - v_center_before is not search("\\.muc\\.msp\\.net$")
+            - boot_disks.output is not defined or boot_disks.output | trim == ""
+
+
+
+
+        # - name: Ensure vCenter FQDN does not contain protocol
+        #   set_fact:
+        #     v_center_fqdn: "{{ vcenter_url | regex_replace('^https?://', '') }}"
+
+        - name: Debug variables before running vCenter host facts
+          debug:
+            msg:
+              - "vCenter FQDN: {{ fqdn_vc }}"
+          when: fqdn_vc is defined
+
+
+        - name: Disable ESXi Shell Interactive Timeout
+          community.vmware.vmware_host_config_manager:
+            hostname: "{{ fqdn_vc }}"
+            username: "{{ vcenter_username }}"
+            password: "{{ vcenter_password }}"
+            validate_certs: no
+            esxi_hostname: "{{ esxi_fqdn }}"
+            options:
+              UserVars.ESXiShellInteractiveTimeOut: "0"
+          delegate_to: localhost
+          # loop: "{{ associated_cis }}"
+          register: interactive_timeout_status
+          when: boot_disks.output is not defined or boot_disks.output | trim == ""
+
+
+        - name: Set ESXi Shell Auto-Disable Timeout
+          community.vmware.vmware_host_config_manager:
+            hostname: "{{ fqdn_vc }}"
+            username: "{{ vcenter_username }}"
+            password: "{{ vcenter_password }}"
+            validate_certs: no
+            esxi_hostname: "{{ esxi_fqdn }}"
+            options:
+              UserVars.ESXiShellTimeOut: "0"
+          delegate_to: localhost
+          # loop: "{{ associated_cis }}"
+          register: shell_timeout_status
+          when: boot_disks.output is not defined or boot_disks.output | trim == ""
+
+
+        - name: Start SSH service on ESXi host
+          community.vmware.vmware_host_service_manager:
+            hostname: "{{ fqdn_vc }}"
+            username: "{{ vcenter_username }}"
+            password: "{{ vcenter_password }}"
+            validate_certs: false
+            esxi_hostname: "{{ esxi_fqdn }}"
+            service_name: TSM-SSH
+            state: restart
+          delegate_to: localhost
+          # loop: "{{ associated_cis }}"
+          register: ssh_service_status
+          when: boot_disks.output is not defined or boot_disks.output | trim == ""
+
+
+        - name: "Retry boot disk identification after reboot"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: >
+              esxcli storage core device list |
+              awk '
+                !/^[[:space:]]/ {
+                  if (dev && is_local && is_boot && dev !~ /cdrom/)
+                    print dev;
+                  dev = $1;
+                  is_local = 0;
+                  is_boot = 0;
+                }
+                /Is Local: true/ { is_local = 1 }
+                /Is Boot Device: true/ { is_boot = 1 }
+                END {
+                  if (dev && is_local && is_boot && dev !~ /cdrom/)
+                    print dev;
+                }'
+          register: boot_disks_after_reboot
+          retries: 6
+          delay: 10
+          delegate_to: localhost
+          changed_when: false
+          when: boot_disks.output is not defined or boot_disks.output | trim == ""
+
+
+        - name: "Get full block for the boot device"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli storage core device list -d {{ boot_disks.output | trim }}"
+          register: boot_usb_device_block
+          delegate_to: localhost
+          when: boot_disks.output is defined
+
+        - name: Parse size and devfs path safely
+          set_fact:
+            boot_device_size: >-
+              {% set size_line = boot_usb_device_block.output.splitlines() | select('search', 'Size:') | first | default('') %}
+              {% if size_line %}
+                {{ size_line.split('Size:')[1] | trim | int(default=0) }}
+              {% else %}
+                0
+              {% endif %}
+            boot_usb_device_devfs: >-
+              {% set devfs_line = boot_usb_device_block.output.splitlines() | select('search', 'Devfs Path:') | first | default('') %}
+              {% if devfs_line %}
+                {{ devfs_line.split('Devfs Path:')[1] | trim }}
+              {% else %}
+                ''
+              {% endif %}
+          delegate_to: localhost
+          when: boot_usb_device_block.output is defined and boot_usb_device_block.output != ''
+
+        - name: Set boot_device_accessible safely
+          set_fact:
+            boot_device_accessible: "{{ (boot_device_size | int) > 0 and (boot_usb_device_devfs | length > 0) }}"
+          delegate_to: localhost
+          
+        - name: Debug extracted values
+          debug:
+            msg:
+              size: "{{ boot_device_size }} (type={{ boot_device_size | type_debug }})"
+              devfs: "{{ boot_usb_device_devfs }} (type={{ boot_usb_device_devfs | type_debug }})"
+              accessible: "{{ boot_device_accessible }}"
+          delegate_to: localhost
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        # - name: Log Failure for USB Boot Partition Detection
+        #   shell: |
+        #     echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to detect valid USB boot partition" >> {{ shutdown_failure }}
+        #   delegate_to: localhost
+        #   when: boot_usb_device_block is defined and 
+        #         (boot_usb_device_block.output is search('Status:\\s*dead') or boot_usb_device_block.output is search('Size:\\s*0'))
+
+        # - meta: end_host
+        #   when: boot_usb_device_block is defined and 
+        #         (boot_usb_device_block.output is search('Status:\\s*dead') or boot_usb_device_block.output is search('Size:\\s*0'))
+
+        - name: Log failure for invalid boot device
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }},  [ERROR] - Invalid boot device detected (size={{ boot_device_size }}, devfs='{{ boot_usb_device_devfs }}')"  >> {{ shutdown_failure }}
+          when: not boot_device_accessible
+          
+        - meta: end_host
+          when: not boot_device_accessible
+
+
+
+        - name: Extract the Devfs Path of the USB device
+          set_fact:
+            boot_usb_device_devfs: "{{ (boot_usb_device_block.output | regex_search('Devfs Path:\\s*(\\S+)', '\\1')) | first }}"
+          when: boot_usb_device_block.output is defined
+
+
+        - name: Extract Display Name of the USB device (for confirmation)
+          set_fact:
+            boot_usb_display_name: "{{ boot_usb_device_block.output | regex_search('Display Name:\\s*(.+)', '\\1') }}"
+          when: boot_usb_device_block.output is defined
+
+
+
+        - name: Display USB boot device details
+          debug:
+            msg: "Found USB boot device: {{ boot_usb_display_name }} at {{ boot_usb_device_devfs }}"
+
+        - name: Get partition table from partedUtil
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "partedUtil getptbl '{{ boot_usb_device_devfs }}'"
+          register: parted_table
+          delegate_to: localhost
+          when: boot_usb_device_devfs is defined
+
+
+        - name: Find systemPartition line from parted output
+          set_fact:
+            boot_partition_line: >-
+              {{ parted_table.output.splitlines() | select('search', 'systemPartition') | list | first }}
+          when: parted_table.output is defined
+
+
+        - name: Extract boot partition number
+          set_fact:
+            boot_partition_number: "{{ boot_partition_line.split()[0] }}"
+          when: boot_partition_line is defined
+
+        - name: Delete the boot partition
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: >
+              partedUtil delete {{ boot_usb_device_devfs }} {{ boot_partition_number }}
+          register: delete_partition_result
+          delegate_to: localhost
+          when: boot_partition_number is defined and boot_usb_device_devfs is defined
+
+        - name: Get partition table after deletion
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: >
+              partedUtil getptbl {{ boot_usb_device_devfs }}
+          register: table_after_deletion
+          delegate_to: localhost
+          when: boot_usb_device_devfs is defined
+
+
+        - name: "DEBUG - Boot partition and stdout values"
+          debug:
+            msg: |
+              boot_partition_number: {{ boot_partition_number }}
+              stdout: {{ table_after_deletion.output | default('NOT SET') }}
+        
+        # - name: DEBUG - Boot partition and stdout values
+        #   debug:
+        #     msg: |
+        #       boot_partition_number: {{ boot_partition_number }}
+        #       stdout: {{ table_after_deletion.output | default('NOT SET') }}
+
+          
+        - name: ERROR- Debugging
+          debug:
+            msg: "Boot partition {{ boot_partition_number }} still exists on {{ boot_usb_device_devfs }}! Cannot Proceed with Shutdown!"
+          when:
+            - boot_partition_number is defined
+            - table_after_deletion.output is defined
+            - table_after_deletion.output | regex_search('^' ~ boot_partition_number ~ '\\s', multiline=True) is not none
+                
+                
+        # - name: Display partition deletion output
+        #   debug:
+        #     var: delete_partition_result.output_lines
+        #   when: delete_partition_result is defined and delete_partition_result.output_lines is defined
+
+        - name: SUCCESS- Debugging
+          debug:
+            msg: "Boot partition {{ boot_partition_number }} successfully deleted. Proceeding with server shutdown."
+          when:
+            - boot_partition_number is defined
+            - table_after_deletion.output is defined
+            - table_after_deletion.output | regex_search('^' ~ boot_partition_number ~ '\\s', multiline=True) is none
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: Log Success for USB Boot Partition Deletion
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [INFO] - USB boot partition deleted successfully: {{ delete_partition_result.msg | default('Operation succeeded') }}" >> {{ shutdown_success }}
+          delegate_to: localhost
+          when:
+            - boot_partition_number is defined
+            - table_after_deletion.output is defined
+            - table_after_deletion.output | regex_search('^' ~ boot_partition_number ~ '\\s', multiline=True) is none
+
+        - name: Log Failure for USB Boot Partition Deletion
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to delete USB boot partition: {{ delete_partition_result.msg | default('No error message') }}" >> {{ shutdown_failure }}
+          delegate_to: localhost
+          when:
+            - boot_partition_number is defined
+            - table_after_deletion.output is defined
+            - table_after_deletion.output | regex_search('^' ~ boot_partition_number ~ '\\s', multiline=True) is not none
+
+        - meta: end_host
+          when:
+            - boot_partition_number is defined
+            - table_after_deletion.output is defined
+            - table_after_deletion.output | regex_search('^' ~ boot_partition_number ~ '\\s', multiline=True) is not none
+
+
+
+      #   - name: "Wipe /boot and system partitions"
+      #     ssh_check_esxi_with_pass:
+      #       hostname: "{{ esxi_fqdn }}"
+      #       username: "{{ remote_username }}"
+      #       password: "{{ remote_password }}"
+      #       command: |
+      #         rm -rf bootbank/*
+      #         rm -rf /vmfs/volumes/BOOTBANK*
+
+      # # Another directory
+      #     register: wipe_partitions
+      #     delegate_to: localhost
+# ===========================================================================================================================================================================
+# Poweroff
+# ===========================================================================================================================================================================
+
+
+        - name: "Shutdown ESXi (Immediate)"
+          ssh_check_esxi_with_pass:
+            hostname: "{{ esxi_fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "esxcli system shutdown poweroff -d 10 -r 'Immediate shutdown after boot partition wipe'"
+          register: shutdown_result
+          delegate_to: localhost
+
+
+        # - name: "Debug: Show immediate shutdown result"
+        #   debug:
+        #     var: shutdown_result
+
+        - name: "Fail if immediate shutdown failed"
+          fail:
+            msg: "Critical Error: Failed to shutdown ESXi host {{ esxi_fqdn }}."
+          when:
+            - shutdown_result is defined
+            - shutdown_result.status is defined
+            - shutdown_result.status != 'success'
+          # when: shutdown_result.status == 'failure'
+
+        - name: Wait for a short period after initiating shutdown"
+          pause:
+            seconds: 15
+          when:
+            - shutdown_result is defined
+            - shutdown_result.status is defined
+            - shutdown_result.status == 'success'
+          # when: shutdown_result.status == 'success'
+
+        - name: "Check if ESXi host is down after shutdown"
+          wait_for:
+            host: "{{ esxi_fqdn }}"
+            port: 22
+            state: stopped  # Wait for the port to stop accepting connections
+            timeout: 60     # Wait for up to 60 seconds
+          register: check_down_result
+          ignore_errors: yes # Allow this task to fail
+          delegate_to: localhost
+
+
+        - name: Wait for host to become unreachable (indicating shutdown)
+          wait_for:
+            host: "{{ esxi_fqdn }}"
+            port: 22
+            state: absent
+            timeout: 60 # Adjust timeout as needed
+          # when: shutdown_result.changed or (shutdown_result.rc == 0)
+          delegate_to: localhost
+          when:
+            - shutdown_result is defined
+            - shutdown_result.status is defined
+            - shutdown_result.status == 'success'
+
+        
+
+        - name: Log Failure for ESXi Shutdown
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Failed to shutdown ESXi host or confirm it is down." >> {{ shutdown_failure }}
+          delegate_to: localhost
+          when:
+            - shutdown_result is not defined or shutdown_result.status is not defined or shutdown_result.status != 'success'
+              or check_down_result is not defined or (check_down_result.failed is defined and check_down_result.failed)
+
+
+
+        - meta: end_host
+          when:
+            - shutdown_result is not defined or shutdown_result.status is not defined or shutdown_result.status != 'success'
+              or check_down_result is not defined or (check_down_result.failed is defined and check_down_result.failed)
+
+
+        - name: Log Success for ESXi Shutdown
+          shell: |
+            echo "{{ inventory_hostname }}, {{ time }}, [INFO] - ESXi shutdown initiated successfully. Confirmed host is down." >> {{ shutdown_success }}
+          delegate_to: localhost
+          when:
+            - shutdown_result is defined
+            - shutdown_result.status is defined
+            - shutdown_result.status == 'success'
+            - check_down_result is defined
+            - check_down_result.failed is not defined or check_down_result.failed == false
+
+
+        - name: "update entry for DECO server for Server Shutdown"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "server_shutdown"
+            status: "T"           
+          register: update_status_info_state
+          delegate_to: localhost
+          when:
+          - shutdown_result is defined
+          - shutdown_result.status is defined
+          - shutdown_result.status == 'success'
+          - check_down_result is defined
+          - check_down_result.failed is not defined or check_down_result.failed == false
+
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for Shutdown module"  
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Failure information to file in rescue block"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Kindly check server shutdown module for esxi servers" >> {{ shutdown_failure }}                    
+          delegate_to: localhost

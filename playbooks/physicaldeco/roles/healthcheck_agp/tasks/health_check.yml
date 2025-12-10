@@ -1,0 +1,269 @@
+---
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat cmdb_url_update.yml
+          delegate_to: localhost
+          register: result_cmdb_url_update
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            cmdb_url_update: "{{ result_cmdb_url_update.stdout }}" 
+          delegate_to: localhost      
+
+        - name: Check if remedy api up or not
+          uri:
+            url: "{{ cmdb_url_update }}/api/arsys/v1/entry" # http://{{ cmdb_url_update }}:8008/api/arsys/v1/entry   
+          register: result_remedy
+          until: "result_remedy.status == 200"
+          retries: 3
+          delay: 10
+          when: cmdb_url_update is search("{{CMDB_URL}}")
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: cmdb_url_update is search("{{CMDB_URL}}") 
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: cmdb_url_update is search("{{CMDB_URL}}")           
+
+        - name: "Remedy status"
+          shell: echo "#Remedy - {{ time }}, [INFO], {{CMDB_URL}} is up and running, good to proceed with Physical Deco" >> check_remedy_success.yml
+          delegate_to: localhost
+          when: cmdb_url_update is search("{{CMDB_URL}}")       
+
+
+      rescue:
+        - debug:
+            msg: "Remedy is unavaiable to update CMDB"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp 
+          when: cmdb_url_update is search("{{CMDB_URL}}")  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: cmdb_url_update is search("{{CMDB_URL}}") 
+        
+        - name: "Remedy status"
+          shell: echo "!Remedy - {{ time }}, [ERROR], {{CMDB_URL}} is down currently after 3 retries needs attention" >> check_remedy.yml
+          delegate_to: localhost
+          when: cmdb_url_update is search("{{CMDB_URL}}")
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat cmdb_url_update.yml
+          delegate_to: localhost
+          register: result_cmdb_url_update
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            cmdb_url_update: "{{ result_cmdb_url_update.stdout }}" 
+          delegate_to: localhost      
+
+        - name: Check if remedy api up or not
+          uri:
+            url: "{{ cmdb_url_update }}/api/arsys/v1/entry" # http://{{ cmdb_url_update }}:8008/api/arsys/v1/entry
+          register: result_remedy
+          until: "result_remedy.status == 200"
+          retries: 3
+          delay: 10
+          when: cmdb_url_update is search("{{CMDB_URL}}")
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: cmdb_url_update is search("{{CMDB_URL}}")   
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: cmdb_url_update is search("{{CMDB_URL}}")             
+
+        - name: "Remedy status"
+          shell: echo "#Remedy - {{ time }}, [INFO], {{ cmdb_url_update }} is up and running, good to proceed with VM deco trigger 1" >> check_remedy_success.yml   
+          delegate_to: localhost
+          when: cmdb_url_update is search("{{CMDB_URL}}")         
+
+
+      rescue:
+        - debug:
+            msg: "Remedy is unavaiable to update CMDB"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: cmdb_url_update is search("{{CMDB_URL}}") 
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: cmdb_url_update is search("{{CMDB_URL}}")            
+
+        - name: "Remedy status"
+          shell: echo "!Remedy - {{ time }}, [ERROR], {{ cmdb_url_update }} is down currently after 3 retries needs attention" >> check_remedy.yml   
+          delegate_to: localhost
+          when: cmdb_url_update is search("{{CMDB_URL}}") 
+           
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat cmdb_rtu.yml
+          delegate_to: localhost
+          register: result_cmdb_rtu
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            cmdb_rtu: "{{ result_cmdb_rtu.stdout }}" 
+          delegate_to: localhost       
+
+        - name: Check if cmdbrtu api up or not
+          uri:
+            url: https://{{ cmdb_rtu }}                
+          register: result_cmdb
+          until: "result_cmdb.status == 200"
+          retries: 3
+          delay: 10
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "cmdb_rtu status"
+          shell: echo "#cmdb_rtu - {{ time }}, [INFO], "{{CMDB_URL}}"  is up and running, good to proceed with Physical Deco" >> check_remedy_success.yml   
+          delegate_to: localhost           
+
+      rescue:
+        - debug:
+            msg: "cmdb-RTU is unavaiable"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "cmdb_rtu status"
+          shell: echo "!cmdb_rtu - {{ time }}, [ERROR], "{{CMDB_URL}}"  is down currently after 3 retries needs attention" >> check_remedy.yml   
+          delegate_to: localhost      
+
+
+    # - name: "Deco Health check status"
+    #   block:
+
+    #     - name: Display the JSON file content
+    #       shell: cat ipam_grid.yml
+    #       delegate_to: localhost
+    #       register: result_ipam_grid
+
+    #     - name: save the Json data to a Variable as a Fact
+    #       set_fact:
+    #         ipam_grid: "{{ result_ipam_grid.stdout }}" 
+    #       delegate_to: localhost  
+
+
+    #     - name: Check if Infoblox api up or not
+    #       uri:
+    #         url: https://{{ ipam_grid }}
+    #         validate_certs: no 
+    #       register: result_ipamm
+    #       until: "result_ipamm.status == 200"
+    #       retries: 3
+    #       delay: 10
+
+    #     - name: Get timestamp from the system
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp  
+                      
+    #     - set_fact:
+    #         time: "{{tstamp.stdout}}"            
+
+    #     - name: "IPAM status"
+    #       shell: echo "#Infoblox - {{ time }}, [INFO], {{ ipam_grid }} IPAM_grid is up and running, good to proceed with Physical Deco" >> check_ipam_success.yml   
+    #       delegate_to: localhost            
+
+    #   rescue:
+    #     - debug:
+    #         msg: "Infoblox api unavaiable"
+
+    #     - name: Get timestamp from the system
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp  
+                      
+    #     - set_fact:
+    #         time: "{{tstamp.stdout}}"            
+
+    #     - name: "IPAM status"
+    #       shell: echo "!Infoblox - {{ time }}, [ERROR], {{ ipam_grid }} ipam_grid is down currently after 3 retries needs attention" >> check_ipam.yml   
+    #       delegate_to: localhost
+
+
+    # - name: "Deco Health check status"
+    #   block:
+
+    #     - name: Display the JSON file content
+    #       shell: cat dns_grid.yml
+    #       delegate_to: localhost
+    #       register: result_dns_grid
+
+    #     - name: save the Json data to a Variable as a Fact
+    #       set_fact:
+    #         dns_grid: "{{ result_dns_grid.stdout }}" 
+    #       delegate_to: localhost       
+
+    #     - name: Check if Infoblox api up or not
+    #       uri:
+    #         url: https://{{ dns_grid }}
+    #         validate_certs: no       
+    #       register: result_ipam
+    #       until: "result_ipam.status == 200"
+    #       retries: 3
+    #       delay: 10
+
+    #     - name: Get timestamp from the system
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp  
+                      
+    #     - set_fact:
+    #         time: "{{tstamp.stdout}}"            
+
+    #     - name: "IPAM status"
+    #       shell: echo "#Infoblox - {{ time }}, [INFO], {{ dns_grid }} dns_grid is up and running, good to proceed with Physical Deco" >> check_ipam_success.yml   
+    #       delegate_to: localhost           
+
+    #   rescue:
+    #     - debug:
+    #         msg: "Infoblox api unavaiable"
+
+    #     - name: Get timestamp from the system
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp  
+                      
+    #     - set_fact:
+    #         time: "{{tstamp.stdout}}"            
+
+    #     - name: "IPAM status"
+    #       shell: echo "!Infoblox - {{ time }}, [ERROR], {{ dns_grid }} dns_grid is down currently after 3 retries needs attention" >> check_ipam.yml   
+    #       delegate_to: localhost
+                   

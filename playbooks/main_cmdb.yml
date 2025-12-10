@@ -1,0 +1,95 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    associated_cis: "{{ associated_cis }}"
+    graceperiod_flag: "{{ graceperiod_flag }}"
+    ritm_number: "{{ ritm_number }}"
+    requester_name: "{{ requester_name }}"
+    requester_group: "{{ requester_group }}"
+    retention_days: "{{ retention_days }}"
+    azure_client_id: '{{ az_client_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+
+  tasks: 
+
+  - name: Display input JSON
+    set_fact:
+      serial: 20 #15 
+
+  - name: register env information
+    debug: 
+      msg: "{{ serial }}"
+    register: serial_number
+
+  - name: Display input JSON
+    set_fact:
+      jsondata: "{{ associated_cis }}"
+      
+  - name: fetch host details
+    gather_host:
+      host_info: "{{ jsondata| to_json }}"
+    register: host_list
+
+  - name: display data
+    debug:
+      var: host_list
+
+  - name: Concatenate a list to string
+    set_fact:
+      my_string: "{{ host_list.host_list | join(',') }}"
+
+
+  - name: Add hosts to vmdeco group
+    add_host:
+      hostname: "{{ item }}"
+      groups: deco
+    loop: '{{ host_list.host_list }}'
+
+
+  - name: register env information
+    debug: 
+      msg: "{{ env }}"
+    register: env_data
+  
+     
+- import_playbook: workflow/main_cmdb_update.yml
+  vars:
+    host_list: "{{ host_list }}"
+    serial_number: "{{ serial_number }}"
+    associated_cis: "{{ associated_cis }}"
+    requester_name: "{{ requester_name }}"
+    requester_group: "{{ requester_group }}"
+    retention_days: "{{ retention_days }}"
+    pillar: "{{ pillar }}"
+    mit_ticket: "{{ mit_ticket }}"    
+    ritm_number: "{{ ritm_number }}"  
+    cr: "{{ cr }}" 
+    graceperiod_flag: "{{ graceperiod_flag }}"
+    env: "{{env_data}}"
+    azure_client_id: '{{ az_client_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"
+    paccount_username: "{{ pAccount_username }}"
+    paccount_password: "{{ pAccount_password }}"
+    infoblox_username: "{{ infoblox_username }}"
+    infoblox_password: "{{ infoblox_password }}"
+    emdb_username: "{{ emdb_username }}" 
+    emdb_password: "{{ emdb_password }}"
+    remote_username: "{{ secret }}"
+    remote_keyfile: "{{ secret_key }}"   
+    auth_username: "{{ auth_username }}"
+    auth_password: "{{ auth_password }}"
+    btmp_user: "{{ si_username }}"
+    btmp_password: "{{ si_password }}"
+    win_user: "{{ elk_user }}"
+    win_password: "{{ elk_password }}"        
+    synergon_username: "{{ synergon_username }}"
+    synergon_password: "{{ synergon_password }}"
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}"     
+  no_log: true
+  run_once: True 

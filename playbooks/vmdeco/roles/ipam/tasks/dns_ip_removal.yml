@@ -1,0 +1,388 @@
+---
+    - name: "IPAM cleanup "
+      throttle: 1
+      block:
+
+        - set_fact:
+            nios_provider:
+              host: "{{ dns_grid }}"
+              username: "{{ infoblox_username }}"
+              password: "{{ infoblox_password }}"
+            hostname: "{{ inventory_hostname }}"
+            dns_success: "vm_dns_success.yml"
+            win_dns_success: "vm_dns_win_success.yml"
+            dns_failed: "vm_dns_failure.yml"
+            graceperiod_flag: True
+            dns_check: "F"
+            nas_check: "T"
+
+        - name: Display the JSON file content
+          shell: cat record_dns.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            dns_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: dns_record_id == ""       
+
+        - name: "Gather OS information associated with the given VM"
+          vmware_guest_info:
+            hostname: '{{ v_center_gp }}'
+            username: '{{ paccount_username }}'
+            password: '{{ paccount_password}}'
+            name: "{{ vm_deletion_name }}"
+            validate_certs: no
+            datacenter: ""
+          delegate_to: localhost            
+          register: dns_vmfacts
+
+        - set_fact:
+            dns_os_detail_result: '{{ dns_vmfacts.instance.hw_guest_full_name | lower }}'
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server"
+          azure_update_ref:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status
+          delegate_to: localhost 
+
+        - set_fact: 
+            dns_os_detail_result: '{{idem_status.module_update.os}}'
+          when: dns_os_detail_result is not search("linux|windows")                
+        
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+           time: "{{tstamp.stdout}}" 
+
+
+        - name: fetching IP address of the input server
+          ansible.builtin.debug:
+            msg: "{{ lookup('community.general.dig', '{{ fqdn }}')}}" 
+          register: ip_fetch_result
+          delegate_to: localhost 
+
+        - set_fact:
+            ip_address: '{{ ip_fetch_result.msg  }}'
+ 
+        - set_fact:
+            dns_status: "{{ hostname }}, {{ time }}, [INFO], IP/Records Already removed"
+          when: ip_address == "NXDOMAIN"
+
+        - set_fact:
+            iprelease_status: "{{ hostname }}, {{ time }}, [INFO], IP/Records Already removed"
+          when: ip_address == "NXDOMAIN"
+
+        - name: Release the IP
+          iprelease:
+            host: "{{ inventory_hostname }}"
+            ipaddress: "{{ ip_address }}"
+            ipam: "{{ ipam_grid }}"
+            username: "{{ infoblox_username }}"
+            password: "{{ infoblox_password }}"
+            view: "{{ ipam_network_view }}"
+          register: iprelease_status
+          delegate_to: localhost
+          when: ip_address != "NXDOMAIN"
+
+        - set_fact:
+            dns_status: "{{ hostname }}, {{ time }}, {{ iprelease_status.Status}}"
+          when: ip_address != "NXDOMAIN"
+
+        - name: "set IP release status"
+          shell: echo "{{ dns_status }}" >> {{ dns_success }}                  	
+          delegate_to: localhost
+          when: dns_os_detail_result is search("windows") and iprelease_status is not search("ERROR")
+
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ dns_status }}" >> vm_dns_failure.yml                  
+          delegate_to: localhost
+          when: dns_status is search("ERROR")
+
+          # when: (host_removal.status is search("record removal failed") or host_removal.status is search("Exception")) and host_record is defined
+
+        - set_fact:
+            dns_status: "{{ hostname }}, {{ time }}, [INFO], IP released and status set to UNUSED for IP: {{ ip_address }} on host : {{ fqdn }} - windows"
+          when: dns_os_detail_result is search("windows") and iprelease_status is not search("ERROR")
+
+        - name: "set windows DNS status"
+          shell: echo "{{ dns_status }}" >> {{ win_dns_success }}                  	
+          delegate_to: localhost
+          when: dns_os_detail_result is search("windows") and iprelease_status is not search("ERROR")
+          
+        - name: "update entry for DECO server"
+          azure_update_module_vals:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "dns"
+            status: "T"            
+          register: update_status
+          delegate_to: localhost
+          when: dns_os_detail_result is search("windows") and iprelease_status is not search("ERROR")
+
+        - meta: end_host
+          when: dns_status is search("ERROR")
+
+        - meta: end_host
+          when: dns_os_detail_result is search("windows")
+
+        - name: Check IPAM host record exist in infoblox
+          set_fact:
+            host_record: "{{ lookup('nios', 'record:host', filter={'name': fqdn}, provider=nios_provider) }}"
+          delegate_to: local
+          tags: normal
+         
+
+        - name: Check IPAM ptr record exist in infoblox
+          set_fact:
+            ptr_record: "{{ lookup('nios', 'record:ptr', filter={'ptrdname': fqdn}, provider=nios_provider) }}"
+          delegate_to: local
+          tags: normal     
+
+
+        - name: Check IPAM A record exist in infoblox
+          set_fact:
+            a_record: "{{ lookup('nios', 'record:a', filter={'name': fqdn}, provider=nios_provider) }}"
+          delegate_to: local
+          tags: normal
+
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+           time: "{{tstamp.stdout}}" 
+
+
+        - set_fact:
+            dns_status: "{{ hostname }}, {{ time }}, [INFO], DNS Records Not Available for Host {{ fqdn }}"
+          #when: (host_record is not defined) and (ptr_record is not defined) and (a_record is not defined)
+          when: (host_record|length < 2) and (ptr_record|length <2 ) and (a_record|length <2 )
+          
+        - name: "update entry for DECO server"
+          azure_update_module_vals:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "dns"
+            status: "T"            
+          register: update_status
+          delegate_to: localhost
+          when: (host_record|length < 2) and (ptr_record|length <2 ) and (a_record|length <2 )
+   
+
+        - name: "DNS update"
+          shell: echo "{{ dns_status }}" >> {{ dns_success }}                  	
+          delegate_to: localhost
+          #when: (host_record is not defined) and (ptr_record is not defined) and (a_record is not defined)
+          when: (host_record|length < 2) and (ptr_record|length < 2 ) and (a_record|length < 2)
+
+          
+
+        - meta: end_host
+          #when: (host_record is not defined) and (ptr_record is not defined) and (a_record is not defined)
+          when: (host_record|length < 2) and (ptr_record|length < 2 ) and (a_record|length < 2)
+
+
+        # - name: Fetch IPaddress of the host
+        #   set_fact:
+        #     ipaddress: "{{ host_record.ansible_facts.hostrecord['ipv4addrs'][0]['ipv4addr'] }}"
+        #   when: host_record
+        #   ignore_errors: yes
+
+        # - name: Check current IP address exist in infoblox
+        #   set_fact:
+        #     iprecord: "{{ lookup('nios', 'record:host', filter={'ipv4addr': ipaddress }, provider=nios_provider) }}"
+        #   delegate_to: localhost
+        #   tags: normal
+        #   when: host_record
+        #   ignore_errors: yes
+            
+        # - name: print the IP address
+        #   debug:
+        #     msg: 
+        #       - "{{ iprecord }}"
+        #   tags: normal
+        #   when: host_record
+        #   ignore_errors: yes
+
+
+        # - name: Delete host record
+        #   dns_record_removal:
+        #     hostname: "{{ fqdn }}"
+        #     username: "{{ infoblox_username }}"
+        #     password: "{{ infoblox_password }}"
+        #   delegate_to: localhost
+        #   register: host_removal
+        #   when: host_record is defined  
+
+        # - debug:
+        #     var: host_removal 
+
+
+        - name: Delete host record
+          ipam_record_removal:
+            hostname: "{{ fqdn }}"
+            ipam: "{{ dns_grid }}"
+            username: "{{ infoblox_username }}"
+            password: "{{ infoblox_password }}"
+            dns_view: "{{ dns_network_view }}"
+            record_type: host
+          delegate_to: localhost
+          register: host_removal
+          when: host_record is defined
+        
+        - name: IPAM delete status
+          set_fact:
+            dns_status: "{{ hostname }}, {{ time }}, [INFO], {{ host_removal.status }}"
+          when: host_removal.status is search("record removed") or host_removal.status is search("record not available")
+
+        - name: "DNS update"
+          shell: echo "{{ dns_status }}" >> {{ dns_success }}                  	
+          delegate_to: localhost
+          when: host_removal.status is search("record removed") or host_removal.status is search("record not available")
+
+        - name: IPAM delete status
+          set_fact:
+            dns_status: "{{ hostname }}, {{ time }}, [ERROR], {{ host_removal.status }}"
+          when: (host_removal.status is search("record removal failed") or host_removal.status is search("Exception")) and host_record is defined  
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_ipam_stat_failure_agp.txt                    
+          delegate_to: localhost
+          when: (host_removal.status is search("record removal failed") or host_removal.status is search("Exception")) and host_record is defined
+
+        - name: "DNS update"
+          shell: echo "{{ dns_status }}" >> {{ dns_success }}                  	
+          delegate_to: localhost
+          when: (host_removal.status is search("record removal failed") or host_removal.status is search("Exception")) and host_record is defined
+
+        - name: Delete PTR record
+          ipam_record_removal:
+            hostname: "{{ fqdn }}"
+            ipam: "{{ dns_grid }}"
+            username: "{{ infoblox_username }}"
+            password: "{{ infoblox_password }}"
+            dns_view: "{{ dns_network_view }}"
+            record_type: ptr
+          delegate_to: localhost
+          register: ptr_removal
+          when: ptr_record is defined
+              
+           
+        - name: IPAM delete status
+          set_fact:
+            dns_status: "{{ hostname }}, {{ time }}, [INFO], {{ ptr_removal.status }}"
+          when: ptr_removal.status is search("record removed") or ptr_removal.status is search("record not available")
+
+        - name: "DNS update"
+          shell: echo "{{ dns_status }}" >> {{ dns_success }}                  	
+          delegate_to: localhost
+          when: ptr_removal.status is search("record removed") or ptr_removal.status is search("record not available")
+
+        - name: IPAM delete status
+          set_fact:
+            dns_status: "{{ hostname }}, {{ time }}, [ERROR], {{ ptr_removal.status }}"
+          when: (ptr_removal.status is search("record removal failed") or ptr_removal.status is search("Exception")) and ptr_record is defined
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_ipam_stat_failure_agp.txt                    
+          delegate_to: localhost
+          when: (ptr_removal.status is search("record removal failed") or ptr_removal.status is search("Exception")) and ptr_record is defined
+
+        - name: "DNS update"
+          shell: echo "{{ dns_status }}" >> {{ dns_success }}                  	
+          delegate_to: localhost
+          when: (ptr_removal.status is search("record removal failed") or ptr_removal.status is search("Exception")) and ptr_record is defined
+
+        - name: Delete A record
+          ipam_record_removal:
+            hostname: "{{ fqdn }}"
+            ipam: "{{ dns_grid }}"
+            username: "{{ infoblox_username }}"
+            password: "{{ infoblox_password }}"
+            dns_view: "{{ dns_network_view }}"
+            record_type: a
+          delegate_to: localhost
+          register: a_removal
+          when: a_record is defined
+
+        - name: IPAM delete status
+          set_fact:
+            dns_status: "{{ hostname }}, {{ time }}, [INFO], {{ a_removal.status }}"
+          when: a_removal.status is search("record removed") or a_removal.status is search("record not available") 
+
+        - name: "DNS update"
+          shell: echo "{{ dns_status }}" >> {{ dns_success }}                  	
+          delegate_to: localhost
+          when: a_removal.status is search("record removed") or a_removal.status is search("record not available") 
+
+        - name: IPAM delete status
+          set_fact:
+            dns_status: "{{ hostname }}, {{ time }}, [ERROR], {{ a_removal.status }}"
+          when: (a_removal.status is search("record removal failed") or a_removal.status is search("Exception")) and a_record is defined
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_ipam_stat_failure_agp.txt                    
+          delegate_to: localhost
+          when: (a_removal.status is search("record removal failed") or a_removal.status is search("Exception")) and a_record is defined
+
+        - name: "DNS update"
+          shell: echo "{{ dns_status }}" >> {{ dns_success }}                  	
+          delegate_to: localhost
+          when: (a_removal.status is search("record removal failed") or a_removal.status is search("Exception")) and a_record is defined         
+
+        - name: "update entry for DECO server"
+          azure_update_module_vals:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "dns"
+            status: "T"           
+          register: update_status
+          delegate_to: localhost
+          when: dns_status is not search("ERROR")
+                      
+      rescue:
+        - debug:
+            var: host_removal
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+           time: "{{tstamp.stdout}}" 
+  
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_ipam_stat_failure_agp.txt                    
+          delegate_to: localhost
+          
+        - set_fact:
+            dns_error: "{{ hostname }}, {{ time }}, [ERROR], :Unable to Release IP / Remove DNS records for {{ hostname }} - from IPAM"
+          #when: host_record                  
+                                     
+        - name: "VM host list"
+          shell: echo "{{ dns_error }}" >> {{ dns_failed }}                	
+          delegate_to: localhost
+          #when: host_record 

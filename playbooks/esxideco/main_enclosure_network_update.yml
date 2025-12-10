@@ -1,0 +1,130 @@
+- name: "cmdb check for blades before moving to Enclosure"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no
+  vars:
+    synergon_url: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+    instanceid: ""
+  tasks:
+
+    - name: Fetch ESXi details
+      enclosure_synergon_data_fetch:
+        enclosure: "{{ inventory_hostname }}"
+        synergon_api: "{{ synergon_url }}"
+      delegate_to: localhost
+      register: esxi_data
+
+    - name: Extract Blades from fetched data
+      set_fact:
+        all_blades: "{{ esxi_data.esxi_details | map(attribute='ci_name') | list }}"
+
+    - name: Debug - Show fetched Blades
+      debug:
+        var: all_blades
+
+    - name: "Mark enclosure as failed if no blades"
+      set_fact:
+        cmdb_failed: true
+      when: all_blades | length == 0
+
+
+    # # Fail if no blades OR cmdb_update contains "F"
+    # - name: "Mark enclosure as failed if no blades or any Blade has 'F' in cmdb_update"
+    #   set_fact:
+    #     cmdb_failed: true
+    #   when:
+    #     - all_blades | length == 0 or (cmdb_update is defined and "'F' in cmdb_update")
+
+
+    - name: "Check CMDB entry for each Blade"
+      azure_update_ref_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{ item }}"
+      register: idem_status
+      delegate_to: localhost
+      loop: "{{ all_blades }}"
+      when: all_blades | length > 0
+
+    - name: "Set cmdb_update for all blades"
+      set_fact:
+        cmdb_update: "{{ idem_status.results | map(attribute='module_update.cmdb_update') | list }}"
+      when: all_blades | length > 0
+
+    - name: Debug cmdb_update result
+      debug:
+        var: cmdb_update
+      when: all_blades | length > 0
+
+    - name: "Mark enclosure as failed if any Blade has 'F' in cmdb_update"
+      set_fact:
+        cmdb_failed: true
+      when:
+        - all_blades | length > 0
+        - cmdb_update is defined
+        - "'F' in cmdb_update"
+
+    - name: Debug cmdb_failed result
+      debug:
+        var: cmdb_failed
+      when: cmdb_failed is defined
+
+    - name: "Add passing enclosures to enclosures_ready group"
+      add_host:
+        name: "{{ inventory_hostname }}"
+        groups: enclosures_ready
+      when: cmdb_failed is not defined
+
+
+
+    # - name: "Set cmdb_update for all blades"
+    #   set_fact:
+    #     cmdb_update: "{{ idem_status.results | map(attribute='module_update.cmdb_update') | list }}"
+
+    # - name: Debug cmdb_update result
+    #   debug:
+    #     var: cmdb_update
+
+    # # Fail if no blades OR cmdb_update contains "F"
+    # - name: "Mark enclosure as failed if no blades or any Blade has 'F' in cmdb_update"
+    #   set_fact:
+    #     cmdb_failed: true
+    #   when: all_blades | length == 0 or (cmdb_update is defined and 'F' in cmdb_update)
+
+
+
+    # # - name: "Mark enclosure as failed if any Blade has 'F' in cmdb_update"
+    # #   set_fact:
+    # #     cmdb_failed: true
+    # #   when: "'F' in cmdb_update"
+
+    # - name: Debug cmdb_failed result
+    #   debug:
+    #     var: cmdb_failed
+    #   when: cmdb_failed is defined
+
+    # - name: "Add passing enclosures to enclosures_ready group"
+    #   add_host:
+    #     name: "{{ inventory_hostname }}"
+    #     groups: enclosures_ready
+    #   when: cmdb_failed is not defined
+
+- name: Import Network cleanup on Enclosure
+  import_playbook: main_network.yml
+  vars:
+    target_hosts: "enclosures_ready"
+  when: groups['enclosures_ready'] | default([]) | length > 0
+
+# - name: Import Network cleanup on Enclosure
+#   # import_playbook: esxideco/main_network.yml
+#   import_playbook: main_network.yml
+#   vars:
+#     network_username: '{{ ar_username }}'    
+#     network_password: '{{ ar_token }}'
+#     target_hosts: "enclosures_ready"
+#   when: cmdb_failed is not defined or not cmdb_failed
+
+
+# - name: "Import CMDB update playbook if no failures"
+#   import_playbook: main_cmdb_update.yml
+#   vars:
+#     target_hosts: "enclosures"
+#   when: cmdb_failed is not defined or not cmdb_failed

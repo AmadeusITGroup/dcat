@@ -1,0 +1,92 @@
+---
+- name: "ipam cleanup"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: filter_hostlist_dns_ip_removal.yml
+
+- name: "Create TR for ipam cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    # dns: "F"
+    # graceperiod_flag: True
+    bird_api: "{{ hostvars['localhost']['config_data']['bird_api'] }}"
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        bird_api: "{{ config_data.bird_api }}"
+        win_category: "{{ config_data.winaproach_category }}"
+        
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: create_tr_dns.yml
+
+
+- name: "Ipam cleanup"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no   
+  vars:
+    dns_grid: "{{ hostvars['localhost']['config_data']['dns_grid'] }}"
+    ipam_grid: "{{ hostvars['localhost']['config_data']['ipam_grid'] }}"
+    cmdb_url_update: "{{ hostvars['localhost']['config_data']['cmdb_url_update'] }}"
+    ipam_network_view: "{{ hostvars['localhost']['config_data']['ipam_network_view'] }}"
+    synergon_url: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+    dns_network_view: "{{ hostvars['localhost']['config_data']['dns_network_view'] }}"
+
+  tasks: 
+
+    # - name: Set DNS and CMDB variables from config_data
+    #   set_fact:
+    #     dns_grid: "{{ config_data.dns_grid }}"
+    #     ipam_grid: "{{ config_data.ipam_grid }}"
+    #     cmdb_url_update: "{{ config_data.cmdb_url_update }}"
+    #     ipam_network_view: "{{ config_data.ipam_network_view }}"
+    #     synergon_url: "{{ config_data.synergon_url }}"
+
+        
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: dns_ip_removal.yml
+
+
+- name: "Add info TR for ipam cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    # graceperiod_flag: True
+    # dns: "F"
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: add_info_dns.yml
+
+    # - name: ipam cleanup
+    #   ansible.builtin.import_role:
+    #     name: ipam
+    #     tasks_from: logger_dns.yml
+
+    # - name: ipam cleanup
+    #   ansible.builtin.import_role:
+    #     name: ipam
+    #     tasks_from: dns_windows_tr.yml
+
+    # - name: ipam cleanup
+    #   ansible.builtin.import_role:
+    #     name: ipam
+    #     tasks_from: dns_logging.yml

@@ -1,0 +1,216 @@
+
+    - name: handle the error for nfs storage export policy file
+      throttle: 1
+      block:
+        - set_fact:
+            check_export_rule_index: ""
+            nfs_vserver_name: "" 
+            export_policy_name: ""                 
+            export_rule_index: ""  
+            nfs_volume: "" 
+            check_acl: ""    
+
+        - name: awx creds username to var
+          set_fact:
+            pAccount_user: "{{ synergon_username }}"
+          delegate_to: localhost
+
+        - name: awx creds password to var
+          set_fact:
+            pAccount_pass: "{{ synergon_password }}"
+          delegate_to: localhost 
+
+################################# EXTRACTING VARS FOR RULE GATHERING AND DELETION ########################################################
+        - set_fact:
+            nfs_vserver_name: "{{ nfs_export_policy_name.0}}"
+
+        - set_fact:
+            export_policy_name: "{{ nfs_export_policy_name.1}}"
+
+        - set_fact:
+            export_rule_index: "{{ nfs_export_policy_name.2}}"
+         
+
+##################################### GATHERING RULES FOR DELETION- CLIENTMATCH BASED ON VM NAME ########################################################################
+        - name: Gathering  nfs export policy  and rule information
+          nas_rule_info_gather:
+            username: "{{ pAccount_user }}"
+            password: "{{ pAccount_pass }}"
+            storage_box: "{{ nas_hostname }}"
+            v_server:  "{{ nfs_vserver_name }}"
+            policy_name: "{{ export_policy_name }}"
+            vm_name: "{{ client_match }}"
+          delegate_to: localhost
+          register: rule_result_gather        
+
+
+        - name: "NAS logs"
+          shell: echo "{{ rule_result_gather.rule_info_output }}" >> nas_info_gather.txt
+          delegate_to: localhost
+                                 
+####################################### RULE DELETION MODULE #################################################################  
+        - name: Delete Export Policy Rule
+          netapp.ontap.na_ontap_export_policy_rule:           
+            name: "{{ export_policy_name }}"
+            rule_index: "{{ export_rule_index }}"
+            vserver: "{{ nfs_vserver_name}}"
+            hostname: "{{ nas_hostname }}"
+            username: "{{ pAccount_user }}"
+            password:  "{{ pAccount_pass }}"
+            state: absent  
+            https: yes
+            validate_certs: no
+          delegate_to: localhost
+          register: rule_deletion_result                   
+          when:  export_rule_index != "" and nfs_vserver_name is not search "-mc"  
+
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                    
+        - set_fact:
+            time: "{{tstamp.stdout}}" 
+
+################################ LOG SUCCESS AND FAILURE FOR RULE DELETION ########################################################
+        - name: "Logging SUCCESS for rule deletion"
+          shell: echo "  {{ inventory_hostname }}, {{ time }}, [INFO], rules deleted from {{export_policy_name}} of volume in {{ nas_hostname }}." >> {{file_success}}                    
+          delegate_to: localhost
+          when: rule_deletion_result.changed == true 
+
+        - name: "Logging FAILURE for rule deletion"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Exception occurred while deleting rules from {{export_policy_name}} of volume in {{ nas_hostname }}." >> {{file_failure}}                    
+          delegate_to: localhost
+          when: 
+            - nfs_vserver_name is not search "-mc"
+            - rule_deletion_result is not defined or rule_deletion_result.changed == false
+
+        - name: "Logging Failure due to vserver type"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], Cannot modify the -mc nfs vservers hence deletion is skipped." >> {{file_success}}                    
+          delegate_to: localhost
+          when: nfs_vserver_name is search "-mc" 
+         
+#################################### VALIDATE IF EXPORT POLICY IS EMPTY ########################################################
+        - name: checking if export policy is empty
+          nas_vol_rule_empty_check:
+            username: "{{ pAccount_user }}"
+            password: "{{ pAccount_pass }}"
+            storage_box: "{{ nas_hostname }}"
+            v_server: "{{ nfs_vserver_name }}"
+            policy_name: "{{ export_policy_name }}"
+          delegate_to: localhost
+          register: check_empty_ontap_result
+          when: rule_deletion_result is defined and rule_deletion_result.changed == true
+
+        - set_fact:      
+            check_export_rule_index : "{{check_empty_ontap_result.vol_rule_output.0}}"
+          when: rule_deletion_result is defined and rule_deletion_result.changed == true 
+
+        - set_fact:      
+            nfs_volume : "{{ check_empty_ontap_result.vol_rule_output.0}}"
+          when:  check_export_rule_index is defined and check_export_rule_index is not search ("Rules EXIST") and check_export_rule_index != ""           
+        
+        - name: "rules validation info before volume offline"
+          shell: echo "{{ check_empty_ontap_result.vol_rule_output.1}}" >> nas_validation_check_volume.txt
+          delegate_to: localhost
+          when : check_export_rule_index is defined and check_export_rule_index is search ("Rules EXIST") and check_export_rule_index != ""                   
+
+# ################################### ACL CHECK ON LINUX SERVERS FOR VOLUMES BEFORE OFFLINING ##############################################
+        - name: check if acl is present in the specific
+          nas_fetch_cifs_acl_empty:
+            username: "{{ pAccount_user }}"
+            password: "{{ pAccount_pass }}"
+            storage_box: "{{ nas_hostname }}"
+            vol_name: "{{  nfs_volume }}"        
+          delegate_to: localhost
+          register: acl_check  
+          when: check_export_rule_index is defined and check_export_rule_index is not search ("Rules EXIST") and check_export_rule_index != ""
+           
+        - set_fact:
+            check_acl: "{{ acl_check.acl_output.0 }}"
+          when: check_export_rule_index is defined and check_export_rule_index is not search ("Rules EXIST") and check_export_rule_index != ""         
+
+        - name: "cifs validation info before volume offline"
+          shell: echo "{{ acl_check.acl_output.1}}" >> nas_validation_check_volume.txt
+          delegate_to: localhost
+          when : check_acl is defined and check_acl is search "ACL EXIST" and check_export_rule_index != ""
+        
+
+#####################################  UNMOUNT JUNCTION PATH ################################################
+        - name: Unmount the volume from junction_path 
+          na_ontap_volume:
+            state: present
+            name: "{{ nfs_volume }}"
+            vserver: "{{ nfs_vserver_name }}"
+            junction_path: ''
+            hostname: "{{ nas_hostname }}"
+            username: "{{ pAccount_user }}"
+            password:  "{{ pAccount_pass }}"
+            https: true
+            validate_certs: false
+          delegate_to: localhost
+          register: junctionpath_unmount_result  
+          when:  check_acl is defined and check_acl is search ("NO ACL") 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                     
+        - set_fact:
+            time: "{{tstamp.stdout}}"                          
+
+#################################### LOG SUCCESS AND FAILURE FOR UNMOUNTING ########################################################
+        # ADD INFO TO SUCCESS LOG FILE
+        - name: "Add info to success file"
+          shell: echo " {{ inventory_hostname }}, {{ time }}, [INFO], Access removal and unmounting done for volume {{ nfs_volume }} in {{ nas_hostname }} storage box." >> {{file_success}}                    
+          delegate_to: localhost 
+          when: junctionpath_unmount_result is defined and junctionpath_unmount_result.changed == true
+
+        # ADD VMS TO BE TAKEN OFFLINE TO STORAGE TEAM TR
+        - name: "Add to storage TR list"
+          shell: echo " {{ inventory_hostname }}- {{ nfs_volume }} in {{ nas_hostname }} NAS filer" >> {{vm_nas_proceed}}                    
+          delegate_to: localhost 
+          when: junctionpath_unmount_result is defined and junctionpath_unmount_result.changed == true                                                                                                                
+
+############################################## EXCEPTION HANDLING ######################################################################################
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for nfs_storage_deletion module" 
+          #ignore_errors: yes 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                    
+        - set_fact:
+            time: "{{tstamp.stdout}}"          
+
+        - name: "Logging FAILURE for nfs storage export policy file"
+          shell: echo "{{ inventory_hostname }},{{ time }}, [ERROR],Exception occurred,check errors for module nfs storage export policy file,storage box {{ nas_hostname }},policy name {{ export_policy_name }}"  >> {{file_failure}}                    
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "update entry for DECO server"
+          azure_update_module_vals:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "nasstorage"
+            status: "F"            
+          register: update_status
+          delegate_to: localhost           
+        
+
+      

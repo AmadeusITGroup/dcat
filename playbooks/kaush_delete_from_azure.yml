@@ -1,0 +1,74 @@
+---
+- name: Test
+  hosts: localhost
+  gather_facts: no
+
+  tasks: 
+
+  #  - name: "update entry for DECO server for fqdn "
+  #    azure_update_module_vals_phy:
+  #      connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatprod;AccountKey=YKhcajEr0C2kMCFJFPqKfjXrwTVwQ/Wo/QZWpiT29PHGVUdGrveC/gi8P5LxnbUaCfeQx0u4noOf+AStzFsfaw==;EndpointSuffix=core.windows.net"
+  #      hostname: "bsp60121"
+  #      module_name: "san_cleanup"
+  #      status: "T"          
+  #    register: update_status_state_file
+  #    delegate_to: localhost
+
+  #  - debug:
+  #      var: update_status_state_file
+
+
+  #  - name: "update entry for DECO server for fqdn "
+  #    azure_update_module_vals_phy:
+  #      connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatprod;AccountKey=YKhcajEr0C2kMCFJFPqKfjXrwTVwQ/Wo/QZWpiT29PHGVUdGrveC/gi8P5LxnbUaCfeQx0u4noOf+AStzFsfaw==;EndpointSuffix=core.windows.net"
+  #      hostname: "bsp60129"
+  #      module_name: "san_cleanup"
+  #      status: "T"          
+  #    register: update_status_state_file
+  #    delegate_to: localhost
+
+  #  - debug:
+  #      var: update_status_state_file
+
+    - name: Remove entry from Azure Table
+      check_azure_statefile_and_delete:
+        # connection_string: "DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=mykey;TableEndpoint=myendpoint"
+        # connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatprod;AccountKey=YKhcajEr0C2kMCFJFPqKfjXrwTVwQ/Wo/QZWpiT29PHGVUdGrveC/gi8P5LxnbUaCfeQx0u4noOf+AStzFsfaw==;EndpointSuffix=core.windows.net"
+        connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatdev;AccountKey=p0GybDYuCXIFrNDCnO7drvoA0PieEwdrkEOJMoonf0UFMBWw//km5DqES942kyJ7NjZ4V+VShZXJ+ASttmsS3w==;EndpointSuffix=core.windows.net"
+        table_name: "PhysicalServerDetails"
+        partition_key: "ob"
+        row_key: "ob7dx100"
+      register: result
+
+    - name: Show deletion result
+      debug:
+        var: result
+  
+    - name: Remove entry from Azure Table
+      check_azure_statefile_and_delete:
+        # connection_string: "DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=mykey;TableEndpoint=myendpoint"
+        connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatdev;AccountKey=p0GybDYuCXIFrNDCnO7drvoA0PieEwdrkEOJMoonf0UFMBWw//km5DqES942kyJ7NjZ4V+VShZXJ+ASttmsS3w==;EndpointSuffix=core.windows.net"
+        # connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatprod;AccountKey=YKhcajEr0C2kMCFJFPqKfjXrwTVwQ/Wo/QZWpiT29PHGVUdGrveC/gi8P5LxnbUaCfeQx0u4noOf+AStzFsfaw==;EndpointSuffix=core.windows.net"
+        table_name: "PhysicalServerDetails"
+        partition_key: "ob"
+        row_key: "ob7dx301"
+      register: result
+
+    - name: Show deletion result
+      debug:
+        var: result
+
+    - name: Remove entry from Azure Table
+      check_azure_statefile_and_delete:
+        # connection_string: "DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=mykey;TableEndpoint=myendpoint"
+        connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatdev;AccountKey=p0GybDYuCXIFrNDCnO7drvoA0PieEwdrkEOJMoonf0UFMBWw//km5DqES942kyJ7NjZ4V+VShZXJ+ASttmsS3w==;EndpointSuffix=core.windows.net"
+        # connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatdev;AccountKey=p0GybDYuCXIFrNDCnO7drvoA0PieEwdrkEOJMoonf0UFMBWw//km5DqES942kyJ7NjZ4V+VShZXJ+ASttmsS3w==;EndpointSuffix=core.windows.net"
+        # connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatprod;AccountKey=YKhcajEr0C2kMCFJFPqKfjXrwTVwQ/Wo/QZWpiT29PHGVUdGrveC/gi8P5LxnbUaCfeQx0u4noOf+AStzFsfaw==;EndpointSuffix=core.windows.net"
+        table_name: "hostDetails"
+        partition_key: "mu"
+        row_key: "mucdsgt2019"
+      register: result
+
+    - name: Show deletion result
+      debug:
+        var: result

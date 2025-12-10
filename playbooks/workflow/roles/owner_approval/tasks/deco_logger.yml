@@ -1,0 +1,38 @@
+---             
+    - name: "Handling TR"
+      throttle: 1
+      block:
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT : DECO - Ownership approval workflow"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"           
+            severity: "4"
+            overview: "DECO - Ownership approval workflow"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+
+        - set_fact:
+            record_logger: "{{ create_tr_output.record_id }}"
+
+        - debug:
+            var: record_logger 
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_logger }}"
+          register: add_document
+          delegate_to: localhost                
+
+      rescue:
+        - debug:
+            msg: "DECO flow unable to categorize group for host"

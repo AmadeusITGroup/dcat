@@ -1,0 +1,9 @@
+---
+- name: "State File Execution - Idempotency"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks:
+    - name: Run idempotency validator
+      ansible.builtin.import_role:
+        name: idem
+        tasks_from: idempotency_validator.yml

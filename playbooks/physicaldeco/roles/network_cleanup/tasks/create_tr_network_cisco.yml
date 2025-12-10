@@ -1,0 +1,142 @@
+---
+# - name: "This playbook is to Create TR"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:   
+#     csv: "sw_cisco_info.csv"
+#     record_id_net: ""
+#     network: False
+#     graceperiod_flag: true
+#     nas_check: true
+#     network_failure: "network_failure.yml" 
+
+
+#       #### TR creatation#####  
+      
+    
+#   tasks:    
+    - name: "Handling Create TR- Win@proach "
+      block: 
+
+        - name: VM_host list
+          shell: cat cisco_sw_list.yml
+          delegate_to: localhost
+          register: cisco_sw_list              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            cisco_sw_list: "{{ cisco_sw_list.stdout }}" 
+          delegate_to: localhost
+
+        - meta: end_host
+          when: cisco_sw_list == ""              
+    
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: Physical Deco - Network Switch port details - Cisco"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO" #"OIPSVSE"   #"DINFDECO"            
+            severity: "4"
+            overview: "Physical DECO - Network Switch port details - Cisco"
+            parent_id: "{{ cr }}"            
+            username: "DecoP112686" #"{{ winaproach_username }}"     
+            password: "opFCtCpIMzmC" #"{{ winAproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+        
+        - set_fact:
+            record_net_cisco: "{{create_tr_output.record_id}}"
+             
+
+        - copy:
+            content: '{{ record_net_cisco|to_json }}'
+            dest: record_net_cisco.json
+          delegate_to: localhost
+  
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_net_cisco }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Failed to Create Physical DECO - Network Switch port details - Cisco TR"
+
+    # - name: "Handling Create TR- Win@proach "
+    #   block:          
+    
+    #     - name: "Custom module [CREATE TR]"
+    #       create_tr:
+    #         record_type: "TR"
+    #         title: "Physical DECO - Network Switch port details - Arista"
+    #         assignee_name: "DecoP112686"
+    #         assignee_group: "DINFDECO" #"OCISSFS"   #"DINFDECO"            
+    #         severity: "4"
+    #         overview: "Physical DECO - Network Switch port details - Arista"
+    #         parent_id: "{{ cr }}"            
+    #         username: "DecoP112686" #"{{ winaproach_username }}"     
+    #         password: "opFCtCpIMzmC" #"{{ winAproach_password }}"
+    #       delegate_to: localhost  
+    #       no_log: False
+    #       register: create_tr_output
+        
+    #     - set_fact:
+    #         record_net_arista: "{{create_tr_output.record_id}}"
+             
+
+    #     - copy:
+    #         content: '{{ record_net_arista|to_json }}'
+    #         dest: record_net_arista.json
+    #       delegate_to: localhost
+
+    #   rescue:
+    #     - debug:
+    #         msg: "Failed to Create Physical DECO - Network Switch port details - Arista TR"            
+
+
+    # - name: "Handling Start Implementation- Win@proach "
+    #   block: 
+
+    #     - name: Display the JSON file content
+    #       shell: cat record_net.json
+    #       delegate_to: localhost
+    #       register: TR_result
+    
+    #     - name: save the Json data to a Variable as a Fact
+    #       set_fact:
+    #         record_net: "{{ TR_result.stdout | from_json }}" 
+    #       delegate_to: localhost        
+
+    #     - meta: end_host
+    #       when: record_net == ""                            
+
+    #     - name: Sleep for 62 seconds and continue with play
+    #       ansible.builtin.wait_for:
+    #         timeout: 62
+    #       delegate_to: localhost           
+
+    #     - name: Start Implementation
+    #       winaproach:
+    #         system: prod
+    #         type: task_record
+    #         operation: start_implementation
+    #         username: "CDCDt105263"  #"{{ winaproach_username }}"
+    #         password: "qYGqXsarkorb"  #"{{ winAproach_password }}"
+    #         fields:
+    #           task_id: "{{ record_net }}"
+    #       register: start_implementation
+    #       delegate_to: localhost
+
+    #     - name: dump test output
+    #       debug:
+    #         msg: '{{ start_implementation }}'           
+    
+    #   rescue:
+    #     - debug:
+    #         msg: "Failed to Start implementation on VM DECO - Network IP details TR :'{{ record_net }}'"

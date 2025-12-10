@@ -1,0 +1,132 @@
+---             
+    - name: "Handling TR"
+      throttle: 1
+      block:
+        - set_fact:
+            logger_file: "deco_results.yml"
+            provided_host: "{{ inventory_hostname }}"
+
+        - set_fact:
+            data: "{{ item.value }}"            
+        
+        - name: "Custom module [CREATE TR]"
+          block:
+            - name: "Create TR"
+              create_tr:
+                record_type: "TR"
+                title: "CSTY:DECO:DCAT : DECO - Server Owner Approval"
+                assignee_name: "DecoP112686"
+                assignee_group: "{{ item.key }}"
+                severity: "4"
+                overview: "CSTY:DECO:DCAT - Server Owner Approval"
+                parent_id: "{{ cr }}"
+                username: "{{ winaproach_username }}"
+                password: "{{ winaproach_password }}"
+              delegate_to: localhost
+              no_log: False
+              register: create_tr_output
+          rescue:
+            - name: "Debugging"
+              debug:
+               msg: "Failed to create TR with assignee group- {{ item.key }}. Creating TR with requester group- {{ requester_group }}."
+            - name: "Create TR"
+              create_tr:
+                record_type: "TR"
+                title: "CSTY:DECO:DCAT : DECO - Server Owner Approval"
+                assignee_name: "DecoP112686"
+                assignee_group: "{{ requester_group }}"
+                severity: "4"
+                overview: "CSTY:DECO:DCAT - Server Owner Approval"
+                parent_id: "{{ cr }}"
+                username: "{{ winaproach_username }}"
+                password: "{{ winaproach_password }}"
+              delegate_to: localhost
+              no_log: False
+              register: create_tr_output
+            - name: "write data to file"
+              shell: echo "Tried assigning ticket to {{ item.key }} and DCAT automation was unable to assign ticket, assigned ticket to {{ requester_group }}" >> {{ logger_file }}
+              delegate_to: localhost
+
+        - set_fact:
+            record_owner: "{{ create_tr_output.record_id }}"
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_owner }}"
+          register: add_document
+          delegate_to: localhost            
+
+
+        - set_fact:
+            my_string: "{{ data  | join('\n') }}"
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the Servers submitted for DECO - kindly validate and confirm"
+            form3: "NOTE: Do close the TR if good to proceed with the DECO"
+            form4: "***********************************************************************"            
+        - set_fact:
+            owner_group_content: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ form4 +'\n'+ my_string }}"
+
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{record_owner}}"
+            message: "{{ owner_group_content }}"             
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}" 
+          delegate_to: localhost
+          register: add_msg_output
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}" 
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost                             
+
+        - name: "Check entry for DECO server"
+          final_owner_tr:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ record_owner }}"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}"
+          loop: "{{ data }}"  
+          register: owner_tr_add
+          delegate_to: localhost 
+
+        # - name: Check snow api call back
+        #   update_snow:
+        #     action: Phase1
+        #     ritm_number: "{{ ritm_number }}"
+        #     status: Running
+        #     comments: Server owner approval TR {{record_logger}} is created. The server owner needs to provide the approval and then, close the TR stating that the servers mentioned can be decommissioned. 
+        #     username: "{{ SN_USERNAME }}"
+        #     password: "{{ SN_PASSWORD }}"
+        #   delegate_to: localhost
+        #   run_once: True  
+        #   register: api_result
+
+        - debug:
+            var: owner_tr_add 
+
+      rescue:
+        - debug:
+            msg: "DECO flow unable to categorize group for host"

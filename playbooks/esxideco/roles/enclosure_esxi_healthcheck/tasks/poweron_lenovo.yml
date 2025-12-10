@@ -1,0 +1,189 @@
+    # ---------------------------- #
+    # CHECK BLADE STATUS TASKS
+    # ---------------------------- #
+    - name: Check Blade Status on Lenovo Enclosure
+      block:
+        - name: Check Blade Status on Lenovo Enclosure
+          ssh_check_esxi_with_pass:
+            hostname: "{{ inventory_hostname }}.muc.net"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "info -T system:blade[{{ item }}]"
+          register: blade_status
+          delegate_to: localhost
+          retries: 3
+          delay: 5
+          until: blade_status is succeeded
+          loop: "{{ range(1, 15) | list }}"
+          loop_control:
+            label: "Blade [{{ item }}]"
+
+        # - name: Debug Blade Status Register
+        #   debug:
+        #     var: blade_status
+            
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+
+        - set_fact:
+            time: "{{ tstamp.stdout }}"
+
+        # Log success for status check
+        - name: Log Successful Blade Status Check
+          shell: echo "#Lenovo Blade [{{ item.item }}] - {{ time }} , [INFO], Blade status check successful for {{ inventory_hostname }} " >> lenovo_blade_success.yml
+          delegate_to: localhost
+          loop: "{{ blade_status.results }}"
+          when: item is succeeded
+          loop_control:
+            label: "Blade [{{ item.item }}]"
+
+      rescue:
+        # Log SSH connection errors during status check
+        - name: Log SSH Connection Error During Blade Status Check
+          shell: echo "!Lenovo Blade [{{ item.item }}] - {{ time }} , [ERROR], Failed to connect to blade for {{ inventory_hostname }}" >> lenovo_blade_fail.yml
+          delegate_to: localhost
+          loop: "{{ blade_status.results }}"
+          when: item.failed
+          loop_control:
+            label: "Blade [{{ item.item }}]"
+
+    # ---------------------------- #
+    # INITIALIZE BLADE CATEGORIES
+    # ---------------------------- #
+    - name: Initialize Blade Categories
+      set_fact:
+        powered_on: []
+        powered_off: []
+        empty_bays: []
+
+    # ---------------------------- #
+    # EXTRACT NODE NAMES AND CATEGORIZE
+    # ---------------------------- #
+
+    - name: Extract Node Name from Output
+      set_fact:
+        node_name: "{{ item.output | regex_search('Name: Node \\d+ \\( (.*?) \\)', '\\1') | default('Unknown') }}"
+      when:
+        - item.output is defined
+        - "'Name: Node' in item.output"
+      loop: "{{ blade_status.results }}"
+      register: node_names
+
+
+
+
+    # - name: Extract Node Name from Output
+    #   set_fact:
+    #     node_name: "{{ item.output | regex_search('Name: Node \\d+ \\( (.*?) \\)', '\\1') | first | default('Unknown') }}"
+    #   when:
+    #     - item.output is defined
+    #     - "'Name: Node' in item.output"
+    #   loop: "{{ blade_status.results }}"
+    #   register: node_names
+
+    - name: Sort Powered On Blades
+      set_fact:
+        powered_on: "{{ powered_on + [item.ansible_facts.node_name] }}"
+      when:
+        - item.item.output is defined
+        - "'Power On Time:' in item.item.output"
+        - "'Power On Time: 0' not in item.item.output"
+      loop: "{{ node_names.results }}"
+
+    # - name: Sort Powered Off Blades
+    #   set_fact:
+    #     powered_off: "{{ powered_off + [item.ansible_facts.node_name] }}"
+    #   when:
+    #     - item.item.output is defined
+    #     - "'Power On Time: 0' in item.item.output"
+    #   loop: "{{ node_names.results }}"
+
+    - name: Sort Powered Off Blades
+      set_fact:
+        powered_off: "{{ powered_off + [item.item] }}"
+      when:
+        - item.output is defined
+        - "'Power On Time: 0' in item.output"
+      loop: "{{ blade_status.results }}"
+
+
+    - name: Sort Empty Bays
+      set_fact:
+        empty_bays: "{{ empty_bays + [item.item] }}"
+      when:
+        - item.output is defined
+        - "'The target bay is empty.' in item.output"
+      loop: "{{ blade_status.results }}"
+
+    # ---------------------------- #
+    # DISPLAY RESULTS
+    # ---------------------------- #
+    - name: Display Results
+      debug:
+        msg: |
+          Powered On Nodes: {{ powered_on }}
+          Powered Off Nodes: {{ powered_off }}
+          Empty Bays: {{ empty_bays }}
+
+    # ---------------------------- #
+    # SET AUTO POWER POLICY TO MANUAL
+    # ---------------------------- #
+    - name: Set Auto Power Policy to Manual for Populated Blades
+      ssh_check_esxi_with_pass:
+        hostname: "{{ inventory_hostname }}.muc.net"
+        username: "{{ remote_username }}"
+        password: "{{ remote_password }}"
+        command: "power -ap manual -T blade[{{ item }}]"
+      loop: "{{ range(1, 15) | difference(empty_bays | map('int')) | list }}"
+      register: auto_power_policy_results
+      delegate_to: localhost
+      ignore_errors: true
+      loop_control:
+        label: "Set Manual Power Policy for Blade [{{ item }}]"
+
+    # ---------------------------- #
+    # POWER ON BLADE TASKS
+    # ---------------------------- #
+    - name: Power On Blades That Are Currently Off
+      block:
+        - name: Power On Blade
+          ssh_check_esxi_with_pass:
+            hostname: "{{ inventory_hostname }}.muc.net"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "power -on -T system:blade[{{ item }}]"
+          loop: "{{ powered_off }}"
+          register: power_on_results
+          delegate_to: localhost
+          loop_control:
+            label: "Powering Blade [{{ item }}]"
+
+        # Log success for power on
+        - name: Log Success for Powered On Blades
+          shell: echo "#Blade [{{ item.item }}] - {{ time }} , [INFO], Blade successfully powered on for {{ inventory_hostname }}" >> lenovo_blade_success.yml
+          delegate_to: localhost
+          when: item is succeeded
+          loop: "{{ power_on_results.results }}"
+          loop_control:
+            label: "Blade [{{ item.item }}]"
+
+        # Log failure if power on fails
+        - name: Log Failure for Blades That Failed to Power On
+          shell: echo "!Blade [{{ item.item }}] - {{ time }} , [ERROR], Failed to power on blade for {{ inventory_hostname }}" >> lenovo_blade_fail.yml
+          delegate_to: localhost
+          when: item is failed
+          loop: "{{ power_on_results.results }}"
+          loop_control:
+            label: "Blade [{{ item.item }}]"
+
+      rescue:
+        # Log errors during power-on
+        - name: Log Error if Power On Command Fails
+          shell: echo "!Blade [{{ item.item }}] - {{ time }} , [ERROR], Failed to power on blade for {{ inventory_hostname }}" >> lenovo_blade_fail.yml
+          delegate_to: localhost
+          loop: "{{ power_on_results.results }}"
+          when: item.failed
+          loop_control:
+            label: "Blade [{{ item.item }}]"

@@ -1,0 +1,243 @@
+---   
+    - name: "Handling Create TR- Win@proach "
+      block:
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck != ""
+
+        - name: VM_host list
+          shell: cat host_list_poweron.yml
+          delegate_to: localhost
+          register: hostlist_vm              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_hostlist: "{{ hostlist_vm.stdout[:-1] }}" 
+          delegate_to: localhost  
+
+        - meta: end_host
+          when: vm_hostlist == ""           
+        
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: Physical DECO - Physical Poweron - ILO"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"   #"OCISSFS"            
+            severity: "4"
+            overview: "Physical DECO - Physical Poweron - ILO"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+        
+        - set_fact:
+            record_poweron: "{{create_tr_output.record_id}}"
+             
+
+        - copy:
+            content: '{{ record_poweron|to_json }}'
+            dest: record_for_poweron.json
+          delegate_to: localhost
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_poweron }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Failed to  Create PHYSICAL DECO  - PowerOn server from ILO TR"
+
+    - name: "Handling Create TR- Win@proach -1 "
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck != ""      
+
+        - name: VM_host list
+          shell: cat host_list_poweron.yml
+          delegate_to: localhost
+          register: hostlist_vm              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_hostlist: "{{ hostlist_vm.stdout[:-1] }}" 
+          delegate_to: localhost  
+
+        - meta: end_host
+          when: vm_hostlist == ""            
+
+        - name: Display the JSON file content
+          shell: cat record_for_poweron.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_for_poweron: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost          
+
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: record_for_poweron == ""           
+        
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: Physical DECO - Physical Poweron - ILO"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"  #"OCISSFS"           
+            severity: "4"
+            overview: "Physical DECO - Physical Poweron - ILO"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+          when: record_for_poweron == "" 
+        
+        - set_fact:
+            record_poweron: "{{create_tr_output.record_id}}"
+          when: record_for_poweron == ""
+              
+
+        - copy:
+            content: '{{ record_poweron|to_json }}'
+            dest: record_for_poweron.json
+          delegate_to: localhost
+          when: record_for_poweron == "" 
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_poweron }}"
+          register: add_document
+          delegate_to: localhost
+          when: record_for_poweron == "" 
+
+      rescue:
+        - debug:
+            msg: "Failed to  Create PHYSICAL DECO  - poweron Agent Removal TR"
+
+    - name: "Handling Create TR- Win@proach -2"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck != ""      
+
+        - name: VM_host list
+          shell: cat host_list_poweron.yml
+          delegate_to: localhost
+          register: hostlist_vm              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_hostlist: "{{ hostlist_vm.stdout[:-1] }}" 
+          delegate_to: localhost  
+
+        - meta: end_host
+          when: vm_hostlist == ""           
+
+
+        - name: Display the JSON file content
+          shell: cat record_for_poweron.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_for_poweron: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost          
+
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: record_for_poweron == ""           
+        
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: Physical DECO - Physical Poweron - ILO"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO" #"OCISSFS"            
+            severity: "4"
+            overview: "Physical DECO - Physical Poweron - ILO"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+          when: record_for_poweron == "" 
+        
+        - set_fact:
+            record_poweron: "{{create_tr_output.record_id}}"
+          when: record_for_poweron == ""   
+            
+
+        - copy:
+            content: '{{ record_poweron|to_json }}'
+            dest: record_for_poweron.json
+          delegate_to: localhost
+          when: record_for_poweron == "" 
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_poweron }}"
+          register: add_document
+          delegate_to: localhost
+          when: record_for_poweron == "" 
+
+      rescue:
+        - debug:
+            msg: "Failed to Create Physical DECO - PowerOn server from ILO TR"

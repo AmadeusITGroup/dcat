@@ -1,0 +1,962 @@
+---
+# - name: "This playbook is to create PTR for PYHSICAL deco service health check"
+#   hosts: localhost
+#   gather_facts: no
+            
+        
+#   tasks:      
+#####################################################################################################################        
+    # - name: "Handling PTR record_id for PYHSICAL deco"
+    #   block:
+
+      #   - name: Display the JSON file content
+      #     shell: cat record_healthcheck.json
+      #     delegate_to: localhost
+      #     register: TR_result_healthcheck  
+
+      #   - name: save the Json data to a Variable as a Fact
+      #     set_fact:
+      #       record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+      #     delegate_to: localhost
+
+      #   - meta: end_host
+      #     when: record_id_healthcheck == ""           
+
+        # - name: Display the JSON file content
+        #   shell: cat check_artifacts.yml
+        #   delegate_to: localhost
+        #   register: result_check_arti
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     check_artifacts: "{{ result_check_arti.stdout }}" 
+        #   delegate_to: localhost        
+
+
+        # - set_fact:
+        #     form1: "***********************************************************************"
+        #     form2: "Below are the artifacts repository error which needs support"
+        #     form3: "***********************************************************************"
+        # - set_fact:
+        #     content_check_artifacts: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_artifacts }}"
+        #   when: check_artifacts != ""
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+      #   - name: Display the JSON file content
+      #     shell: cat winaproach_category.yml
+      #     delegate_to: localhost
+      #     register: result_winaproach_category
+
+      #   - name: save the Json data to a Variable as a Fact
+      #     set_fact:
+      #       win_category: "{{ result_winaproach_category.stdout }}" 
+      #     delegate_to: localhost
+
+      #   - name: Display the JSON file content
+      #     shell: cat ptr_system.yml
+      #     delegate_to: localhost
+      #     register: result_ptr_system
+
+      #   - name: save the Json data to a Variable as a Fact
+      #     set_fact:
+      #       ptr_sys: "{{ result_ptr_system.stdout }}" 
+      #     delegate_to: localhost                    
+
+      #         ############################################################################################################
+      #   - name: read yaml file from the specific location 
+      #     set_fact:
+      #       file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+      #   - name: split the file content
+      #     set_fact:
+      #       lines: "{{file_content.split('\n')}}"
+
+      #   - name: convert the lines in the file to dict
+      #     set_fact:
+      #       res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+      #     loop: "{{ lines }}"
+
+
+      #   - name: find which key is preset in the log
+      #     set_fact: 
+      #       present_key: "{{ present_key | default([]) + [item] }}"
+      #     loop: "{{ res_dict.keys() }}"
+      #     #when: content_check_artifacts is defined and item in content_check_artifacts
+
+      #   - name: print the corresponded  value of the key present
+      #     set_fact:
+      #       allowner_name: "{{ allowner_name | default({}) | combine({item:res_dict[item]}) }}"
+      #     loop: "{{ present_key }}"
+      #     #when: content_check_artifacts is defined
+
+      #   - name: all owners with format
+      #     set_fact:
+      #       all_owner_Final: | 
+      #         {% for key,value in allowner_name.items()%}
+      #         {{ key }} : {{ value }}
+      #         {% endfor %}
+      #     #when: content_check_artifacts is defined
+
+      #   - set_fact:
+      #       Requester_group: "Requester_group: {{requester_group}}"
+      #       Requester_name: "Requester_name: {{requester_name}}"
+
+      #   - name: "writing output to File"
+      #     shell: echo -e "{{content_check_artifacts}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final}}" > groups_ptr.yml
+      #     delegate_to: localhost
+      #     #when: content_check_artifacts is defined
+
+      #   - name: Display the JSON file content
+      #     shell: cat groups_ptr.yml
+      #     delegate_to: localhost
+      #     register: result_groups
+      #     #when: content_check_artifacts is defined
+
+      #   - name: save the Json data to a Variable as a Fact
+      #     set_fact:
+      #       support_groups: "{{ result_groups.stdout }}" 
+      #     delegate_to: localhost
+      #     when: content_check_artifacts is defined
+
+
+      #   - name: Create PTR
+      #     problem_tr:
+      #       win_url: "WIN@PROACH_URL"
+      #       username: "DecoP112686"
+      #       password: "opFCtCpIMzmC"
+      #       ptr_title: "PHYSICAL DECO: Service health check artifacts repo referring to failed TR - {{ record_id_healthcheck }}"
+      #       tr_map: "{{ record_id_healthcheck }}"
+      #       assignee_group: "DINFDECO"  
+      #       ptr_logs: "{{ support_groups }}"
+      #       winaproach_category: "{{ win_category }}"
+      #       ptr_system: "{{ ptr_sys }}"         
+      #     register: ptr_check_artifacts 
+      #     when: check_artifacts != ""
+
+      #   - name: Update TR with PTR
+      #     tr_overview:
+      #       win_url: "WIN@PROACH_URL"
+      #       username: "DecoP112686"
+      #       password: "opFCtCpIMzmC"
+      #       task_id: "{{ record_id_healthcheck }}"
+      #       prob_id: "{{ ptr_check_artifacts.id }}"                   
+      #     register: update_overview  
+      #     when: check_artifacts != "" 
+
+      # rescue:
+      #   - debug:
+      #       msg: "Exception occurred PTR service health check - artifacts repo"                               
+############################################################################################################
+
+    - name: "Handling PTR record_id for PYHSICAL deco"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""       
+
+        - name: Display the JSON file content
+          shell: cat check_ipam.yml
+          delegate_to: localhost
+          register: result_check_ipam
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ipam: "{{ result_check_ipam.stdout }}" 
+          delegate_to: localhost       
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the IPAM API error which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_check_ipam: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_ipam }}"
+          when: check_ipam != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost                    
+
+              ############################################################################################################
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key1: "{{ present_key1 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_check_ipam is defined and item in content_check_ipam
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name1: "{{ allowner_name1 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key1 }}"
+          when: content_check_ipam is defined 
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final1: | 
+              {% for key,value in allowner_name1.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_check_ipam is defined 
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_check_ipam}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final1}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_check_ipam is defined 
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups1
+          when: content_check_ipam is defined 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups1: "{{ result_groups1.stdout }}" 
+          delegate_to: localhost 
+          when: content_check_ipam is defined 
+
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            ptr_title: "PYHSICAL DECO: Service health check IPAM API referring to failed TR - {{ record_id_healthcheck }}"
+            tr_map: "{{ record_id_healthcheck }}"
+            assignee_group: "DINFDECO" #"OCISNEAC"  
+            ptr_logs: "{{ support_groups1 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_check_ipam 
+          when: check_ipam != ""
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ inventory_hostname }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_check_ipam.id }}"
+            event: "PYHSICAL DECO: Service health check IPAM API failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}"  
+          register: ptr_add
+          when: check_ipam != ""
+
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            task_id: "{{ record_id_healthcheck }}"
+            prob_id: "{{ ptr_check_ipam.id }}"                   
+          register: update_overview  
+          when: check_ipam != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - IPAM"                               
+############################################################################################################
+
+    - name: "Handling PTR record_id for PYHSICAL deco"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""       
+
+        - name: Display the JSON file content
+          shell: cat san_switches_fail.yml
+          delegate_to: localhost
+          register: result_check_san
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_san_fail: "{{ result_check_san.stdout }}" 
+          delegate_to: localhost     
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the Storage SAN Switches error which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_check_san: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_san_fail }}"
+          when: check_san_fail != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost                    
+
+              ############################################################################################################
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key2: "{{ present_key2 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_check_san is defined and item in content_check_san
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name2: "{{ allowner_name2 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key2 }}"
+          when: content_check_san is defined 
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final2: | 
+              {% for key,value in allowner_name2.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_check_san is defined 
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_check_san}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final2}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_check_san is defined 
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups2
+          when: content_check_san is defined 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups2: "{{ result_groups2.stdout }}" 
+          delegate_to: localhost
+          when: content_check_san is defined 
+
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            ptr_title: "PYHSICAL DECO: Service health check Storage SAN Switches referring to failed TR - {{ record_id_healthcheck }}"
+            tr_map: "{{ record_id_healthcheck }}"
+            assignee_group: "DINFDECO" #"OSX04SMG"  
+            ptr_logs: "{{ support_groups2 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_check_san_fail
+          when: check_san_fail != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ inventory_hostname }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_check_san_fail.id }}"
+            event: "PYHSICAL DECO: Service health check Storage SAN Switches failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}"  
+          register: ptr_add
+          when: check_san_fail != ""
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            task_id: "{{ record_id_healthcheck }}"
+            prob_id: "{{ ptr_check_san_fail.id }}"                   
+          register: update_overview  
+          when: check_san_fail != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - Storage NAS"                               
+############################################################################################################
+
+
+    - name: "Handling PTR record_id for PYHSICAL deco"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""       
+
+        - name: Display the JSON file content
+          shell: cat check_remedy.yml
+          delegate_to: localhost
+          register: result_check_remedy
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy: "{{ result_check_remedy.stdout }}" 
+          delegate_to: localhost    
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the BMC remedy(CMDB) error which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_check_remedy: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_remedy }}"
+          when: check_remedy != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost                    
+
+              ############################################################################################################
+ 
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key3: "{{ present_key3 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_check_remedy is defined and item in content_check_remedy
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name3: "{{ allowner_name3 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key3 }}"
+          when: content_check_remedy is defined 
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final3: | 
+              {% for key,value in allowner_name3.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_check_remedy is defined 
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_check_remedy}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final3}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_check_remedy is defined 
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups3
+          when: content_check_remedy is defined 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups3: "{{ result_groups3.stdout }}" 
+          delegate_to: localhost
+          when: content_check_remedy is defined 
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            ptr_title: "PYHSICAL DECO: Service health check BMC remedy(CMDB) referring to failed TR - {{ record_id_healthcheck }}"
+            tr_map: "{{ record_id_healthcheck }}"
+            assignee_group: "DINFDECO" #"DINFDECO"  
+            ptr_logs: "{{ support_groups3 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_check_remedy
+          when: check_remedy != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ inventory_hostname }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_check_remedy.id }}"
+            event: "PYHSICAL DECO: Service health check BMC remedy(CMDB) failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}"  
+          register: ptr_add
+          when: check_remedy != ""
+
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            task_id: "{{ record_id_healthcheck }}"
+            prob_id: "{{ ptr_check_remedy.id }}"                   
+          register: update_overview  
+          when: check_remedy != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - BMC remedy(CMDB)"                               
+############################################################################################################
+
+    - name: "Handling PTR record_id for PYHSICAL deco"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""       
+
+        - name: Display the JSON file content
+          shell: cat network_healthcheck_fail.yml
+          delegate_to: localhost
+          register: result_network_healthcheck_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            network_healthcheck_fail: "{{ result_network_healthcheck_fail.stdout }}" 
+          delegate_to: localhost 
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the Network jump server issue details which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_network_healthcheck_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ network_healthcheck_fail }}"
+          when: network_healthcheck_fail != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost                    
+
+              ############################################################################################################
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key4: "{{ present_key4 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_network_healthcheck_fail is defined and item in content_network_healthcheck_fail
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name4: "{{ allowner_name4 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key4 }}"
+          when: content_network_healthcheck_fail is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final4: | 
+              {% for key,value in allowner_name4.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_network_healthcheck_fail is defined
+
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_network_healthcheck_fail}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final4}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_network_healthcheck_fail is defined
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups4
+          when: content_network_healthcheck_fail is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups4: "{{ result_groups4.stdout }}" 
+          delegate_to: localhost
+          when: content_network_healthcheck_fail is defined
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            ptr_title: "PYHSICAL DECO: Service health check Network jump server referring to failed TR - {{ record_id_healthcheck }}"
+            tr_map: "{{ record_id_healthcheck }}"
+            assignee_group: "DINFDECO"  
+            ptr_logs: "{{ support_groups4 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_network_healthcheck_fail
+          when: network_healthcheck_fail != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ inventory_hostname }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_network_healthcheck_fail.id }}"
+            event: "PYHSICAL DECO: Service health check Network jump server failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}"  
+          register: ptr_add
+          when: network_healthcheck_fail != ""
+
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            task_id: "{{ record_id_healthcheck }}"
+            prob_id: "{{ ptr_network_healthcheck_fail.id }}"                   
+          register: update_overview  
+          when: network_healthcheck_fail != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - Network"                               
+############################################################################################################
+    - name: "Handling PTR record_id for PYHSICAL deco"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""           
+
+        - name: Display the JSON file content
+          shell: cat phy_fqdn_fail.yml
+          delegate_to: localhost
+          register: result_check_fqdn
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_fqdn: "{{ result_check_fqdn.stdout }}" 
+          delegate_to: localhost        
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the FQDN error which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_check_fqdn: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_fqdn }}"
+          when: check_fqdn != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost                    
+
+
+              ############################################################################################################
+
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key5: "{{ present_key5 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_check_fqdn is defined and item in content_check_fqdn
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name5: "{{ allowner_name5 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key5 }}"
+          when: content_check_fqdn is defined 
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final5: | 
+              {% for key,value in allowner_name5.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_check_fqdn is defined 
+
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_check_fqdn}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final5}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_check_fqdn is defined 
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups5
+          when: content_check_fqdn is defined 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups5: "{{ result_groups5.stdout }}" 
+          delegate_to: localhost
+          when: content_check_fqdn is defined 
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            ptr_title: "PHYSICAL DECO: Service health check FQDN validation failed TR - {{ record_id_healthcheck }}"
+            tr_map: "{{ record_id_healthcheck }}"
+            assignee_group: "DINFDECO"  
+            ptr_logs: "{{ support_groups5 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_check_fqdn 
+          when: check_fqdn != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ inventory_hostname }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_check_fqdn.id }}"
+            event: "PYHSICAL DECO: Service health check FQDN validation failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}"  
+          register: ptr_add
+          when: check_fqdn != ""
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            task_id: "{{ record_id_healthcheck }}"
+            prob_id: "{{ ptr_check_fqdn.id }}"                   
+          register: update_overview  
+          when: check_fqdn != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - FQDN check"                                                          
+############################################################################################################
+                             
+
+    - name: "updating record health"
+      block:
+
+        - name: "Set header"
+          shell: echo > record_healthcheck.json        
+          run_once: true
+          delegate_to: localhost
+          when: check_artifacts == "" and check_ipam == "" and check_san_fail == "" and check_remedy == "" and network_healthcheck_fail == "" and check_fqdn == ""
+ 
+
+      rescue:
+        - debug:
+            msg: "record health update"                               
+############################################################################################################

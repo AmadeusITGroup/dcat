@@ -1,0 +1,96 @@
+---
+# - name: "This playbook collect all logs"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:  
+#     file_success: "vm_dns_success.yml"
+#     file_exception: "vm_dns_failure.yml"
+#     graceperiod_flag: true
+#     dns_check: False
+#     nas_check: true
+      
+                    
+#   ####collect logs####
+
+#   tasks:             
+    - name: "Handling node list, TR and retention days"
+      block: 
+
+        - set_fact:
+            file_success: "phy_dns_success.yml"
+            file_exception: "phy_dns_failure.yml"
+            graceperiod_flag: True
+            dns_check: "F"
+            nas_check: "T"
+
+        - name: Display the JSON file content
+          shell: cat record_dns.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            dns_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: dns_record_id == ""                                                   
+      
+        - name: VM_host list
+          shell: cat vm_dns_success.yml
+          delegate_to: localhost
+          register: success_dns             
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            dns_success: "{{ success_dns.stdout }}" 
+          delegate_to: localhost
+
+        - name: "success log list"
+          shell: echo "{{dns_success}}" >> final_dns.yml                     
+          delegate_to: localhost
+          when: dns_success != ""
+
+
+        - name: VM_host list
+          shell: cat vm_dns_failure.yml
+          delegate_to: localhost
+          register: failure_dns             
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            dns_failure: "{{ failure_dns.stdout }}" 
+          delegate_to: localhost
+
+        - name: "success log list"
+          shell: echo "{{dns_failure}}" >> final_dns.yml                     
+          delegate_to: localhost
+          when: dns_failure != ""         
+        
+
+        - name: Find uniqe entries
+          shell: cat final_dns.yml | sort -u | uniq -u | grep -v -e '^[[:space:]]*$' > dns_log.yml
+          delegate_to: localhost 
+
+      rescue:
+        - debug:
+            var: dns_failure          
+
+                  
+
+  
+
+        
+              
+
+                        
+    
+    
+   
+    
+
+    
+        
+    
+        
+    

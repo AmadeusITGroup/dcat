@@ -1,0 +1,261 @@
+---
+  - name: "VM master playbook"
+    hosts: all:vmdeco
+    gather_facts: no
+    vars:
+      graceperiod_flag: "{{ graceperiod_flag }}"
+      input: "{{ lookup('file','config.json') | from_json }}"
+      env_data: "{{ env_data }}"
+      prod_box_c: ""
+      prod_box_d: ""
+      prod_box_e: ""
+      prod_box_f: ""
+      prod_box_g: ""
+      dev_box_a: ""
+      dev_box_b: ""
+      
+    tasks:     
+    - name: set env data
+      set_fact:
+        env_data: "{{ hostvars.localhost.env_data.msg }}"
+
+
+####### the below commented lines need to be enabled only if instance id is provided externally from service now #############
+    # - name: Parse JSON data to filter instance id from snow
+    #   set_fact:
+    #     host_instances: "{{ associated_cis }}"
+
+    # - name: Filter host-specific information
+    #   set_fact:
+    #     host_info: "{{ host_instances | selectattr('hosts', 'equalto', inventory_hostname) | list }}"
+
+    # - name: Filtering instance ID for specific hosts
+    #   set_fact:
+    #     instanceid: "{% if host_info | length > 0 and host_info[0].instance_id is defined %}{{ host_info[0].instance_id }}{% else %}{% endif %}"
+    #   when: host_info | length > 0                
+
+    - name: set DEV env variable
+      set_fact:
+        state_file: "{{ input.dev.state_file_url }}"
+        lookup_file: "{{ input.dev.lookup_file }}"
+        ipam_grid: "{{ input.dev.ipam_grid }}" 
+        synergon_url: "{{ input.dev.synergon_url }}" 
+        cmdb_url_update: "{{ input.dev.cmdb_url_update }}" 
+        nas_box: "{{ input.dev.nas_box }}"
+        ipam_network_view: "{{ input.dev.ipam_network_view }}"
+        dns_grid: "{{ input.dev.dns_grid }}"
+        dns_network_view: "{{ input.dev.dns_network_view }}"
+        dev_box_a: "{{ input.dev.dev_box_a }}"
+        dev_box_b: "{{ input.dev.dev_box_b }}"
+        winaproach_category: "{{ input.dev.winaproach_category }}"
+        ptr_system: "{{ input.dev.ptr_system }}"
+        bird_api: "{{ input.dev.bird_api }}"
+        storage_account_name: "{{ input.dev.storage_account_name }}"
+        resource_group: "{{ input.dev.resource_group }}"
+        azure_subscription_id: "{{ input.dev.azure_subscription_id }}"
+        awx_instance: "{{ input.dev.awx_instance }}"
+      run_once: True
+      delegate_to: localhost
+      when: env_data == "dev"
+
+    - name: set PROD env variable
+      set_fact:
+        state_file: "{{ input.prod.state_file_url }}"
+        lookup_file: "{{ input.prod.lookup_file }}"
+        ipam_grid: "{{ input.prod.ipam_grid }}"
+        synergon_url: "{{ input.prod.synergon_url }}"
+        cmdb_url_update: "{{ input.prod.cmdb_url_update }}"
+        ipam_network_view: "{{ input.prod.ipam_network_view }}"
+        dns_network_view: "{{ input.prod.dns_network_view }}"
+        dns_grid: "{{ input.prod.dns_grid }}"
+        nas_box: "{{ input.prod.nas_box }}"
+        prod_box_c: "{{ input.prod.prod_box_c }}"
+        prod_box_d: "{{ input.prod.prod_box_d }}"
+        prod_box_e: "{{ input.prod.prod_box_e }}"
+        prod_box_f: "{{ input.prod.prod_box_f }}"
+        prod_box_g: "{{ input.prod.prod_box_g }}"
+        winaproach_category: "{{ input.prod.winaproach_category }}"
+        ptr_system: "{{ input.prod.ptr_system }}"
+        bird_api: "{{ input.prod.bird_api }}" 
+        storage_account_name: "{{ input.prod.storage_account_name }}"
+        resource_group: "{{ input.prod.resource_group }}"
+        azure_subscription_id: "{{ input.prod.azure_subscription_id }}"
+        awx_instance: "{{ input.prod.awx_instance }}"
+      run_once: True
+      delegate_to: localhost                                       
+      when: env_data == "prod"
+
+    - name: "data check"
+      shell: echo "{{ storage_account_name }}" >> storage_account_name.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false 
+
+    - name: "data check"
+      shell: echo "{{ awx_instance }}" >> awx_instance.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ resource_group }}" >> resource_group.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false 
+    
+    - name: "data check"
+      shell: echo "{{ azure_subscription_id }}" >> azure_subscription_id.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false 
+
+    - name: "data check"
+      shell: echo "{{ winaproach_category }}" >> winaproach_category.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false 
+
+    - name: "data check"
+      shell: echo "{{ ptr_system }}" >> ptr_system.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false      
+
+    - name: "data check"
+      shell: echo "{{ state_file }}" >> state_file.yml
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ synergon_url }}" >> synergon_url.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+
+    - name: "data check"
+      shell: echo "{{ cmdb_url_update }}" >> cmdb_url_update.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false      
+
+
+    - name: "data check"
+      shell: echo "{{ nas_box }}" >> nas_box.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ ipam_grid }}" >> ipam_grid.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ dns_grid }}" >> dns_grid.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+
+    - name: "data check"
+      shell: echo "{{ prod_box_c }}" >> prod_box_c.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ prod_box_d }}" >> prod_box_d.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ prod_box_e }}" >> prod_box_e.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ prod_box_f }}" >> prod_box_f.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ prod_box_g }}" >> prod_box_g.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false      
+
+
+    - name: "data check"
+      shell: echo "{{ dev_box_a }}" >> dev_box_a.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false 
+
+    - name: "data check"
+      shell: echo "{{ dev_box_b }}" >> dev_box_b.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ bird_api }}" >> bird_api.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false 
+
+  - import_playbook: main_azure_conn_string.yml
+                                                        
+  - import_playbook: main_populate_files.yml
+
+  - import_playbook: main_idempotency_validator.yml
+
+  - import_playbook: main_validate_qualify_vm.yml
+    when: graceperiod_flag == "False"  
+
+  - import_playbook: main_healthcheck_bgp.yml
+    when: graceperiod_flag == "False"
+
+  - import_playbook: main_idempotency_validator.yml
+    when: graceperiod_flag == "False"
+
+  - import_playbook: main_fqdn_validation.yml
+    when: graceperiod_flag == "False"
+
+  - import_playbook: main_idempotency_validator.yml
+    when: graceperiod_flag == "False"
+  
+  - import_playbook: main_instanceid_fetch.yml
+    when: graceperiod_flag == "False"  
+
+  - import_playbook: main_idempotency_validator.yml
+    when: graceperiod_flag == "False"
+  
+  - import_playbook: main_dts_netapp_filter_domain.yml
+    when: graceperiod_flag == "False" 
+
+  - import_playbook: main_idempotency_validator.yml
+    when: graceperiod_flag == "False"
+    
+  - import_playbook: main_cmdb_fetch.yml    
+    when: graceperiod_flag == "False"
+
+  - import_playbook: main_idempotency_validator.yml
+    when: graceperiod_flag == "False"
+  
+  - import_playbook: main_nas_validation.yml
+    when: graceperiod_flag == "False"
+
+  - import_playbook: main_idempotency_validator.yml
+    when: graceperiod_flag == "False"
+
+  - import_playbook: main_vm_poweroff.yml
+    when: graceperiod_flag == "False"
+
+  - import_playbook: main_logs_bgp.yml
+    when: graceperiod_flag == "False"

@@ -1,0 +1,47 @@
+---
+- name: "Firewall Cleanup"
+  hosts: physicaldeco
+  gather_facts: no 
+  tasks: 
+    - name: firewall cleanup
+      ansible.builtin.import_role:
+        name: firewall_cleanup
+        tasks_from: filter_hostlist_firewall.yml
+
+- name: "Create TR for firewall cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_for_firewall: ""
+    graceperiod_flag: True
+  tasks:        
+    - name: firewall cleanup
+      ansible.builtin.import_role:
+        name: firewall_cleanup
+        tasks_from: create_tr_for_firewall.yml
+
+- name: "Firewall Cleanup"
+  hosts: physicaldeco
+  gather_facts: no
+  tasks: 
+    - name: firewall cleanup
+      ansible.builtin.import_role:
+        name: firewall_cleanup
+        tasks_from: firewall_decommissioning_info.yml
+      when: cmdb_update_status == "T"
+      # when: (firewall_status == "F") and firewall_status is defined and (check_backup_status == "T") and check_backup_status is defined
+      # firewall_status and check_backup_status are defined in create_tr_for_firewall.yml
+
+
+- name: "Add info TR for firewall clean up"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_for_firewall: ""
+    graceperiod_flag: true
+    synergon_api: ""
+  tasks:
+    - name: firewall cleanup
+      ansible.builtin.import_role:
+        name: firewall_cleanup
+        tasks_from: add_info_for_firewall.yml

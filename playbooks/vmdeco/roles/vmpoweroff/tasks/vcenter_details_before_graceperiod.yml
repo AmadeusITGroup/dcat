@@ -1,0 +1,86 @@
+---
+    - name: handle the error before grace period vcenter search for vm
+      throttle: 1 
+      block: 
+        - set_fact: 
+            file_failure_vc: "vc_hostname_failure.yml" 
+
+        - name: "Test custom module fetch vcenter details before grace period"
+          fetch_vcentre:
+            vmname: '{{ inventory_hostname }}'     
+            synergon_api: '{{ synergon_url }}'
+            instance_id_vm: '{{ instanceid }}'
+          delegate_to: localhost
+          register: vcenter_output                     
+          until: '"Successfully" in vcenter_output.msg or "Unable to find" in vcenter_output.msg or "duplicate entries" in vcenter_output.msg'
+          retries: 3
+          delay: 30
+
+        - debug:
+            var: vcenter_output
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}" 
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_poweroff_validate_failure.txt                    
+          delegate_to: localhost    
+          when: '"Successfully" not in vcenter_output.msg'
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{vcenter_output.msg}}" >> {{file_failure_vc}}                    
+          delegate_to: localhost 
+          when: '"Successfully" not in vcenter_output.msg'
+
+        - meta: end_host
+          when: '"Successfully" not in vcenter_output.msg' 
+
+        - set_fact:
+            v_center_before: "{{vcenter_output.vcenter}}" 
+            v_center_msg: "{{vcenter_output.msg}}"
+            v_uuid: "{{vcenter_output.uuid_vm}}"
+
+        - set_fact:
+            fqdn_vc: ""         
+    
+        - set_fact:
+            fqdn_vc: .muc.msp.net
+          when: v_center_before is not search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|MUCAMNAZ1|MUCAMNVCPA1|MUCAMNVCPA2|MUCAMNAZ2|MUCAMNVCPB1|MUCAMNVCPB2|MUCAMNAZ3|MUCAMNVCPC1|MUCAMNVCPC2") and v_center_before is not search(".muc.msp.net")
+
+        - set_fact:
+            fqdn_vc: .vclassic.net
+          when: v_center_before is search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|MUCAMNAZ1|MUCAMNVCPA1|MUCAMNVCPA2|MUCAMNAZ2|MUCAMNVCPB1|MUCAMNVCPB2|MUCAMNAZ3|MUCAMNVCPC1|MUCAMNVCPC2") and v_center_before is not search(".vclassic.net")
+
+
+        - set_fact:
+            v_center: "{{ v_center_before ~ fqdn_vc }}"
+
+      rescue: 
+        - name: when the before grace period module throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for vcentre_details module in before grace period in vmpoweroff module"
+
+##################################################################################
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"    
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_poweroff_validate_failure.txt                    
+          delegate_to: localhost                
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{vcenter_output.msg}}" >> {{file_failure_vc}}                    
+          delegate_to: localhost            
+
+
+

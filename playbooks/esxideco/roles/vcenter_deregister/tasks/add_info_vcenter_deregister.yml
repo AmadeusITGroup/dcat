@@ -1,0 +1,372 @@
+---        
+    - name: "Handling TR record_id for implementation and validation result"
+      block: 
+  ####################### Failure info gathering ########################## 
+        - name : handling error in the success block
+          block:
+                 
+            # - name: Display the JSON file content
+            #   shell: cat record_healthcheck.json
+            #   delegate_to: localhost
+            #   register: TR_result_healthcheck  
+
+            # - name: save the Json data to a Variable as a Fact
+            #   set_fact:
+            #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+            #   delegate_to: localhost
+
+            # - meta: end_host
+            #   when: record_id_healthcheck != ""         
+
+            # - name: Display the JSON file content
+            #   shell: cat record_healthcheck.json
+            #   delegate_to: localhost
+            #   register: TR_result_healthcheck  
+
+            # - name: save the Json data to a Variable as a Fact
+            #   set_fact:
+            #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+            #   delegate_to: localhost
+
+            # - meta: end_host
+            #   when: record_id_healthcheck != ""         
+
+            - name: Display the JSON file content
+              shell: cat record_vcenter.json
+              delegate_to: localhost
+              register: TR_result
+        
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                vcenter_record_id: "{{ TR_result.stdout[1:-1] }}" 
+              delegate_to: localhost         
+
+            - meta: end_host
+              when: vcenter_record_id == ""           
+
+            - name: Display the JSON file content
+              shell: cat vcenter_failure.yml
+              delegate_to: localhost
+              register: result_vcenter_fail
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_vcenter_fail_v: "{{ result_vcenter_fail.stdout }}" 
+              delegate_to: localhost  
+               
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are the Server vcenter Deregister Failure results"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_vcenter_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_vcenter_fail_v }}"
+              when:  result_vcenter_fail_v != ""
+          
+            - name: " Merge Failure information to to single final file"
+              shell: echo "{{ content_vcenter_fail }}" >> esxi_vcenter_final.yml                    
+              delegate_to: localhost
+              when:  result_vcenter_fail_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no failure file found and continue"
+
+#############  success info gathering ##########################
+        - name : handling error in the success block
+          block:
+            - name: Display the JSON file content
+              shell: cat vcenter_success.yml
+              delegate_to: localhost
+              register: result_vcenter_suc
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_vcenter_suc_v: "{{ result_vcenter_suc.stdout }}" 
+              delegate_to: localhost  
+    
+            
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are the Server vcenter Deregister Success results"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_vcenter_suc: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_vcenter_suc_v }}" 
+              when: result_vcenter_suc_v != ""
+
+
+            - name: " Merge Success information to single final file "
+              shell: echo "{{content_vcenter_suc}}" >> esxi_vcenter_final.yml                   
+              delegate_to: localhost
+              when: result_vcenter_suc_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no success file found and continue"
+
+##########################  merging both failure and success results ###########################
+
+        - name: Display the JSON file content
+          shell: cat esxi_vcenter_final.yml 
+          delegate_to: localhost
+          register: result_vcenter_fin
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            result_vcenter_fin_v: "{{ result_vcenter_fin.stdout }}" 
+          delegate_to: localhost  
+
+
+        - name: Display the JSON file content
+          shell: cat record_vcenter.json
+          delegate_to: localhost
+          register: TR_result
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_vcenter: "{{ TR_result.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        # - name: Display the JSON file content
+        #   shell: cat winaproach_category.yml
+        #   delegate_to: localhost
+        #   register: result_winaproach_category
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     win_category: "{{ result_winaproach_category.stdout }}" 
+        #   delegate_to: localhost
+
+        # - name: Display the JSON file content
+        #   shell: cat ptr_system.yml
+        #   delegate_to: localhost
+        #   register: result_ptr_system
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     ptr_sys: "{{ result_ptr_system.stdout }}" 
+        #   delegate_to: localhost          
+
+        - name: read yaml file from the specific location 
+          set_fact:
+            file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        - name: split the file content
+          set_fact:
+            lines: "{{file_content.split('\n')}}"
+
+        - name: convert the lines in the file to dict
+          set_fact:
+            res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+          loop: "{{ lines }}"
+
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key: "{{ present_key | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_vcenter_fail is defined and item in content_vcenter_fail
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name: "{{ allowner_name | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key }}"
+          when: content_vcenter_fail is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final: | 
+              {% for key,value in allowner_name.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_vcenter_fail is defined
+
+        - set_fact:
+            Requester_group: "Requester_group: {{requester_group}}"
+            Requester_name: "Requester_name: {{requester_name}}"
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_vcenter_fail}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_vcenter_fail is defined
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups
+          when: content_vcenter_fail is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups: "{{ result_groups.stdout }}" 
+          delegate_to: localhost
+          when: content_vcenter_fail is defined
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            ptr_title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO : vcenter deregister failure details with failed TR - {{ record_vcenter }}"
+            tr_map: "{{ record_vcenter }}"
+            assignee_group: "DINFDECO"  
+            ptr_logs: "{{ support_groups }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"          
+          register: ptr_out_vcenter
+          until: '"Successfully" in ptr_out_vcenter.msg'
+          retries: 3
+          delay: 10
+          when: result_vcenter_fin_v is search("ERROR") and result_vcenter_fin_v is not search("INFO")
+
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            task_id: "{{ record_vcenter }}"
+            prob_id: "{{ ptr_out_vcenter.id }}"                   
+          register: update_overview  
+          when: result_vcenter_fin_v is search("ERROR") and result_vcenter_fin_v is not search("INFO")             
+
+
+########################  closing implementation as failed  ############################################
+        - name: Implementation Failed that is closing the implementation as failed
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: fail_implementation
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            fields:
+              task_id: "{{ record_vcenter }}"
+              text: "{{ result_vcenter_fin_v }}"
+          register: fail_implementation  
+          when: result_vcenter_fin_v is search("ERROR") and result_vcenter_fin_v is not search("INFO")
+
+        
+############################################################################################################
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key1: "{{ present_key1 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_vcenter_fail is defined and item in content_vcenter_fail
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name1: "{{ allowner_name1 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key1 }}"
+          when: content_vcenter_fail is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final1: | 
+              {% for key,value in allowner_name1.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_vcenter_fail is defined
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_vcenter_fail}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final1}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_vcenter_fail is defined
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups1
+          when: content_vcenter_fail is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups1: "{{ result_groups1.stdout }}" 
+          delegate_to: localhost
+          when: content_vcenter_fail is defined
+
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            ptr_title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO : vCenter Deregister failure partially implemented TR - {{ record_vcenter }}"
+            tr_map: "{{ record_vcenter }}"
+            assignee_group: "DINFDECO"  
+            ptr_logs: "{{ support_groups1 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"          
+          register: ptr_out_vcenter
+          until: '"Successfully" in ptr_out_vcenter.msg'
+          retries: 3
+          delay: 10
+          when: result_vcenter_fin_v is search("ERROR") and result_vcenter_fin_v is search("INFO")
+
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            task_id: "{{ record_vcenter }}"
+            prob_id: "{{ ptr_out_vcenter.id }}"                   
+          register: update_overview  
+          when: result_vcenter_fin_v is search("ERROR") and result_vcenter_fin_v is search("INFO")            
+
+
+ ########################  Pending Partial implementation  ############################################
+        - name: Implementation partial that is closing the implementation as partial
+          tr_partial_imp:
+            win_url: "{{win_url}}"
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            task_id: "{{ record_vcenter }}"
+          register: partial_implement
+          when: result_vcenter_fin_v is search("ERROR") and result_vcenter_fin_v is search("INFO")
+
+# ########################  Close Partial implementation  ############################################
+        - name: Implementation partial that is closing the implementation as partial
+          tr_partial_close:
+            win_url: "{{win_url}}"
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            task_id: "{{ record_vcenter }}"
+            closing_comment: "{{ result_vcenter_fin_v }}"
+          register: close_partial_implement
+          when: result_vcenter_fin_v is search("ERROR") and result_vcenter_fin_v is search("INFO")
+
+
+############################################################################################################
+
+############################# closing implementation as success ####################            
+        - name: END Implementation that is closing the implementation as success
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: end_implementation
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            fields:
+                task_id: "{{ record_vcenter }}"
+                text: "{{ result_vcenter_fin_v }}"
+          register: end_implementation
+          when: result_vcenter_fin_v is not search("ERROR") and result_vcenter_fin_v is search("INFO")
+ 
+
+        - name: start Validate Implementation for closing the success TR
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: validate
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            fields:
+              task_id: "{{ record_vcenter }}"
+              text: "{{ result_vcenter_fin_v }}"
+          register: validation
+          when: result_vcenter_fin_v is not search("ERROR") and result_vcenter_fin_v is search("INFO") 
+
+        
+      rescue:
+        - debug:
+            msg: "Exception occurred so rescued the main tr result block for vcenter module" 

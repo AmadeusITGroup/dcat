@@ -1,0 +1,95 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    associated_cis: "{{ associated_cis }}"
+       
+  tasks: 
+
+  - name: Display input JSON
+    set_fact:
+      serial: 20 #15 
+
+  - name: register env information
+    debug: 
+      msg: "{{ serial }}"
+    register: serial_number
+
+  - name: Display input JSON
+    set_fact:
+      jsondata: "{{ associated_cis }}"
+
+  - name: fetch host details
+    gather_host:
+      host_info: "{{ jsondata| to_json }}"
+    register: host_list
+
+  - name: display data
+    debug:
+      var: host_list
+
+  - name: Add hosts to vmdeco group
+    add_host:
+      hostname: "{{ item }}"
+      groups: physicaldeco
+    loop: '{{ host_list.host_list }}'  
+
+  - set_fact:
+      phy_group: "{{ host_list.host_list}}"         
+ 
+
+  - name: register env information
+    debug: 
+      msg: "{{ env }}"
+    register: env_data
+  
+  - debug:
+      var: associated_cis
+         
+  - debug:
+      var: cr
+
+  - debug:
+      var: graceperiod_flag
+
+  - debug:
+      var: retention_days
+
+- import_playbook: physicaldeco/physicaldeco_san.yml
+  vars:
+    phy_group: "{{hostvars.localhost.phy_group}}"
+    serial_number: "{{ serial_number }}"
+    associated_cis: "{{ associated_cis }}"  
+    cr: "{{ cr }}" 
+    ritm_number: "{{ ritm_number }}"
+    graceperiod_flag: "{{ graceperiod_flag }}"
+    retention_days: "{{ retention_days }}"
+    requester_name: "{{ requester_name }}"
+    requester_group: "{{ requester_group }}"    
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"
+    phy_ssh_username: "{{ pAccount_username }}"
+    phy_ssh_password: "{{ pAccount_password }}"
+    infoblox_username: "{{ infoblox_username }}"
+    infoblox_password: "{{ infoblox_password }}"
+    emdb_username: "{{ emdb_username }}" 
+    emdb_password: "{{ emdb_password }}"
+    remote_username: "{{ secret }}"
+    remote_keyfile: "{{ secret_key }}"   
+    artifacts_user: "{{ auth_username }}"
+    artifacts_password: "{{ auth_password }}"
+    btmp_user: "{{ si_username }}"
+    btmp_password: "{{ si_password }}"
+    win_user: "{{ elk_user }}"
+    win_password: "{{ elk_password }}"        
+    synergon_username: "{{ synergon_username }}"
+    synergon_password: "{{ synergon_password }}"
+    network_username: '{{ ar_username }}'    
+    network_password: '{{ ar_token }}'
+    network_usergroup: "{{ lookup('env', 'VROPS_USERNAME') }}"
+    network_grouppass: "{{ lookup('env', 'VROPS_PASSWORD') }}" 
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}"   
+  no_log: true
+  run_once: True
+  when: phy_group | length > 0

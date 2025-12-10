@@ -1,0 +1,37 @@
+---
+- name: "Create TR for ESXI Filter"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: True
+  tasks:        
+    - name: backup cleanup
+      ansible.builtin.import_role:
+        name: esxi_filter_rack
+        tasks_from: create_tr_esxi_filter.yml
+
+- name: "ESXI Seggregation Check"
+  hosts: esxideco
+  gather_facts: no  
+  tasks: 
+    - name: ESXI Check
+      ansible.builtin.import_role:
+        name: esxi_filter_rack
+        tasks_from: esxi_filter.yml
+      
+
+- name: "Add info TR for backup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: true
+  tasks:
+    - name: backup cleanup
+      ansible.builtin.import_role:
+        name: esxi_filter_rack
+        tasks_from: add_info_esxi_filter.yml
+
+    # - name: backup
+    #   ansible.builtin.import_role:
+    #     name: backup_cleanup
+    #     tasks_from: logger_backup.yml

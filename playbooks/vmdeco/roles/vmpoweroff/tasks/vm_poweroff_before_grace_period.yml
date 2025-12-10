@@ -1,0 +1,154 @@
+---
+    - name: Handle the error
+      throttle: 1
+      block:
+
+        - set_fact:
+            file_failure: "vm_hostname_failure.yml"
+            file_success: "vm_hostname_success.yml"
+
+        # - name: Display the JSON file content
+        #   shell: cat record_vm_bgp.json
+        #   delegate_to: localhost
+        #   register: TR_result_rename  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_vm_bgp: "{{ TR_result_rename.stdout[1:-1] }}"
+        #   delegate_to: localhost         
+
+        # - meta: end_host
+        #   when: record_id_vm_bgp == "" 
+
+        - name: awx creds username to var
+          set_fact:
+            pAccount_user: "{{ paccount_username }}"
+          delegate_to: localhost
+
+        - name: awx creds password to var
+          set_fact:
+            paccount_password: "{{ paccount_password }}"
+          delegate_to: localhost
+
+        - set_fact:
+            vm_uuid: "{{ v_uuid }}"
+          when: v_uuid != ""  
+
+        - name: "Gather VM detailed information associated with the given VM"
+          vmware_guest_info:
+            hostname: '{{ v_center }}'          
+            username: "{{ pAccount_user }}"
+            password:  "{{ paccount_password }}"
+            name: "{{ inventory_hostname }}"      
+            validate_certs: no
+            datacenter: ""
+          delegate_to: localhost            
+          register: vmfacts 
+          when: v_uuid == ""
+
+        - set_fact:
+            vm_uuid: "{{vmfacts.instance.hw_product_uuid}}" 
+          when: v_uuid == ""
+
+        - name: "Set the state of  to poweroff" 
+          vmware_guest_powerstate:
+            hostname: '{{ v_center }}'
+            username: "{{ pAccount_user }}"
+            password:  "{{ paccount_password }}"
+            validate_certs: no
+           ###folder: "/{{ datacenter_name }} path if required"
+            #name: '{{ inventory_hostname }}'
+            uuid: "{{ vm_uuid }}"
+            state: powered-off
+          delegate_to: localhost
+          register: result            
+
+        - set_fact:
+            entry: "_to_be_deleted"
+            
+        - set_fact:
+            vm_new_name: "{{ inventory_hostname ~ entry }}"    
+
+        - name: "Renaming the vm based on the UUID fetched '{{ inventory_hostname }}' to {{ vm_new_name }} "
+          vmware_guest:
+            hostname: "{{ v_center }}"
+            username: "{{ pAccount_user }}"
+            password:  "{{ paccount_password }}"
+            validate_certs: no
+            #cluster: "{{ cluster_name,A1-CB-TEST01 }}"
+            uuid: "{{ vm_uuid }}"
+            name: "{{ vm_new_name }}"  ###or hw_product_uuid
+          delegate_to: localhost
+          register: new_name 
+
+        - set_fact:
+            vm_status: "{{new_name.instance.hw_power_status}}"         
+            vm_hd_name: "{{new_name.instance.hw_name}}"
+            vm_poweroff_msg: "Successfully completed VM poweroff and renaming "
+
+
+##################################################################
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"                         
+
+        - name: "VM host list"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], vm poweroff and rename of vm to {{vm_new_name}} before grace period has been completed successfully" >> {{file_success}}                    
+          delegate_to: localhost
+          when: '"to_be_deleted" in  vm_hd_name'
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "update entry for DECO server"
+          azure_update_module_vals:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "vm_poweroff_before_gp"
+            status: "T"            
+          register: update_status
+          delegate_to: localhost
+          when: '"to_be_deleted" in  vm_hd_name'
+        
+ 
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+             msg: "Exception occurred but rescued - check errors for vm_poweroff module"
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_poweroff_validate_failure.txt                    
+          delegate_to: localhost    
+
+        - set_fact:
+            vm_hd_name: "Failure message for server '{{ inventory_hostname }}':Exception occured,Kindly check errors in vm_poweroff module "
+            vm_poweroff_msg: "Failure message for server '{{ inventory_hostname }}':Exception occured,Kindly check errors in vm_poweroff module "
+            CMDB_RESULT: ""
+            output_delete: ""
+          #ignore_errors: yes 
+
+##################################################################
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"                               
+
+        - name: "VM host list"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR],Exception occured,Kindly check errors in vm poweroff module before grace period" >> {{file_failure}}                    
+          delegate_to: localhost
+
+            

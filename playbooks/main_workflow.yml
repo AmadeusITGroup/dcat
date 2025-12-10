@@ -1,0 +1,120 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    associated_cis: "{{ associated_cis }}"
+    graceperiod_flag: "{{ graceperiod_flag }}"
+    ritm_number: "{{ ritm_number }}"
+    requester_name: "{{ requester_name }}"
+    requester_group: "{{ requester_group }}"
+
+  pre_tasks:
+    - name: Set default for mit_ticket
+      set_fact:
+        mit_ticket_ref: "{{ mit_ticket | default('F') }}"
+
+  tasks: 
+
+  - name: Display input JSON
+    set_fact:
+      serial: 20 #15 
+
+  - name: register env information
+    debug: 
+      msg: "{{ serial }}"
+    register: serial_number
+
+  - name: Display input JSON
+    set_fact:
+      jsondata: "{{ associated_cis }}"
+      
+  - name: fetch host details
+    gather_host:
+      host_info: "{{ jsondata| to_json }}"
+    register: host_list
+
+  - name: display data
+    debug:
+      var: host_list
+
+  - name: register env information
+    debug: 
+      msg: "{{ env }}"
+    register: env_data
+
+  - name: fetch host details
+    check_windows_amaiisdom:
+      hosts: "{{ host_list.host_list }}"
+      cmdb_rtu: "{{CMDB_URL}}"
+    register: windows_amaiisdom_machines
+
+  - set_fact:
+      amaiisdomwindowsmachines: "{{ windows_amaiisdom_machines.status.amaiisdom_windows_machines }}"
+
+  - name: printing the windows machines
+    debug:
+      var: amaiisdomwindowsmachines
+
+  - name: Check snow api call back
+    update_snow:
+      action: Approval
+      ritm_number: "{{ ritm_number }}"
+      status: Rejected
+      comments: DCAT doesn't support windows AMAIISDOM servers. Kindly raise a deco request for the SPRINT team. POC - Niren EDISON, Anurag PATTANAYAK or Livya PAUL
+      username: "{{ lookup('env', 'SN_USERNAME') }}"
+      password: "{{ lookup('env', 'SN_PASSWORD') }}" 
+    delegate_to: localhost  
+    register: api_result
+    when: amaiisdomwindowsmachines != [] 
+
+  - name: Remove AMAIISDOM servers from host list
+    set_fact:
+      host_list:
+        host_list: "{{ host_list.host_list | difference(amaiisdomwindowsmachines) }}"
+    when: amaiisdomwindowsmachines != []
+
+  - name: "Freeze Check module"
+    freeze_check:
+      oms_url: '{{oms_url}}'
+      change_type_level1: "Infrastructure"
+      change_type_level2: " "
+      change_methods: " "
+      hosts: "{{ host_list.host_list }}"
+      environment: " "
+    delegate_to: localhost
+    register: freeze_information
+
+  - debug:
+      var: freeze_information.status.No_freeze
+
+  - name: Add hosts to vmdeco group
+    add_host:
+      hostname: "{{ item }}"
+      groups: vmdeco
+    loop: '{{ freeze_information.status.No_freeze }}'
+
+- name: Include main_approval playbook conditionally
+  import_playbook: workflow/main_approval.yml
+  vars:
+    serial_number: "10"
+    associated_cis: "{{ associated_cis }}"  
+    cr: "{{ cr }}"
+    ritm_number: "{{ ritm_number }}"
+    env: "{{env_data}}"
+    requester_name: "{{ requester_name }}"
+    requester_group: "{{ requester_group }}"
+    retention_days: 20
+    pillar: "{{ pillar }}"
+    mit_ticket: "{{ mit_ticket_ref }}"
+    azure_client_id: '{{ az_client_id }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}" 
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"
+    emdb_username: "{{ emdb_username }}" 
+    emdb_password: "{{ emdb_password }}"              
+  no_log: true
+  run_once: True
+

@@ -1,0 +1,58 @@
+---
+
+  - name: get TR details from win@proach
+    get_tr_data:
+      username: "{{ winaproach_username }}"
+      password: "{{ winaproach_password }}" 
+      win_target: "WIN@PROACH_URL"
+      tr: "{{ item }}"
+    loop: "{{ item.7 }}"
+    register: tr_status
+    delegate_to: localhost
+
+  - debug:
+      var: tr_status        
+
+  - name: Check snow api call back
+    update_snow:
+      action: Approval
+      ritm_number: "{{ item.0 }}"
+      status: Approved
+      comments: All approvals accquired from the owners proceeding with DECO
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost  
+    register: api_result
+    when: tr_status is not search("Closed as Cancelled")
+
+  - name: Check snow api call back
+    update_snow:
+      action: Approval
+      ritm_number: "{{ item.0 }}"
+      status: Rejected
+      comments: Approval TR has been cancelled {{ item.7 }} hence this request cannot be processed.
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost  
+    register: api_result
+    when: tr_status is search("Closed as Cancelled")    
+
+  - name: Run DECO pre-req template
+    trigger_deco:
+      cr: "{{ item.2 }}"
+      ci: "{{ item.1 }}"
+      requester_name: "{{ item.3 }}"
+      requester_group: "{{ item.4 }}"
+      retention_days: "{{ item.5 }}"
+      ritm_number: "{{ item.0 }}"
+      pillar: "{{ item.6 }}"
+      template_id: "13041"
+      awx: "{{AWX_URL}}"
+      user_name: "{{ auth_username }}"
+      pass_word: "{{ auth_password }}"      
+    register: trigger_log
+    delegate_to: localhost
+    when: tr_status is not search("Closed as Cancelled")
+
+  - debug:
+      var: trigger_log

@@ -1,0 +1,120 @@
+---
+
+- name: "ilo_reset filter host"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: ilo_reset filter host
+      ansible.builtin.import_role:
+        name: ilo_reset
+        tasks_from: filter_hostlist_ilo_reset.yml
+
+- name: "Create TR for ilo_reset cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    bird_api: "{{ hostvars['localhost']['config_data']['bird_api'] }}"
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+  tasks:
+
+    - name: Set local variables from config_data
+      set_fact:
+        bird_api: "{{ config_data.bird_api }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+        
+    - name: ilo_reset
+      ansible.builtin.import_role:
+        name: ilo_reset
+        tasks_from: create_tr_ilo.yml
+
+# ======================================================================================================
+# ILO Reset
+# ======================================================================================================
+
+- name: "ILO Reset"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no
+  vars: 
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+    domain_username: "{{ pAccount_username }}"
+    domain_password: "{{ pAccount_password }}"
+  tasks: 
+    - name: Ilo Reset
+      ansible.builtin.import_role:
+        name: ilo_reset
+        tasks_from: ilo_reset_main.yml
+
+
+# - name: "ILO Reset"
+#   hosts: "enclosures"
+#   gather_facts: no
+#   vars:
+#     synergon_url: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+#     remote_username: "root"
+#     remote_password: "N1Flheim!"  
+#   tasks:
+
+#     # - name: Set DNS and CMDB variables from config_data
+#     #   set_fact:
+#     #     synergon_url: "{{ config_data.synergon_url }}"
+
+#     - name: Display the JSON file content
+#       shell: cat private_endpoint_connection_string.yml
+#       delegate_to: localhost
+#       register: result_private_endpoint_connection_string
+
+#     - name: save the Json data to a Variable as a Fact
+#       set_fact:
+#         private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+#       delegate_to: localhost      
+            
+#     - name: "Check entry for DECO server for filter hostlist for ILO Reset"
+#       azure_update_ref_esxi:
+#         connection_string: "{{ private_endpoint_connection_string }}"
+#         hostname: "{{inventory_hostname}}"
+#       register: idem_status 
+#       delegate_to: localhost
+    
+
+#     # - set_fact: 
+#     #     cmdb_fetch: '{{idem_status.module_update.cmdb_fetch}}'  
+
+#     - set_fact: 
+#         esxi_type: '{{idem_status.module_update.esxi_type}}'  
+
+#     - name: ilo_reset Lenovo Blades
+#       ansible.builtin.import_role:
+#         name: ilo_reset
+#         tasks_from: ilo_reset_lenovo.yml
+#       when: esxi_type == "LenovoEnclosure"
+
+
+#     - name: ilo_reset HP Blades
+#       ansible.builtin.import_role:
+#         name: ilo_reset
+#         tasks_from: ilo_reset_hp.yml
+#       when: esxi_type == "HPEnclosure"
+
+# ======================================================================================================
+
+
+
+
+- name: "Add info TR for ilo_reset cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+        
+    - name: ilo_reset
+      ansible.builtin.import_role:
+        name: ilo_reset
+        tasks_from: add_info_ilo.yml

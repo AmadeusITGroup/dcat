@@ -1,0 +1,53 @@
+---
+- name: "Filter hostlist for storage info fetch"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: storage info fetch
+      ansible.builtin.import_role:
+        name: storage_fetch
+        tasks_from: filter_hostlist_storage_info_fetch.yml
+
+- name: "Create TR for storage info fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    # san_info_fetch: "F"
+    # graceperiod_flag: False
+    # cmdb_fetch_bgp: ""
+  tasks:
+    - name: storage info fetch
+      ansible.builtin.import_role:
+        name: storage_fetch
+        tasks_from: create_tr_storage_info_fetch.yml
+
+- name: "storage info fetch"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  vars:
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+  tasks:
+    - name: storage info fetch
+      ansible.builtin.import_role:
+        name: storage_fetch
+        tasks_from: san_storage_cleanup_info_gather.yml
+      # when: san_info_fetch == "F" and cmdb_fetch_bgp == "T"       
+
+- name: "Add info to TR for storage info fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+    - name: storage info fetch
+      ansible.builtin.import_role:
+        name: storage_fetch
+        tasks_from: add_info_storage_info_fetch.yml

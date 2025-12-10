@@ -1,0 +1,451 @@
+- name: Initialize empty list for all blades
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Set empty list for all blades
+      set_fact:
+        all_blades_combined: []
+
+- name: "cmdb duplicate check"
+  # hosts: "{{ target_hosts }}"
+  hosts: "enclosures"
+  gather_facts: no
+  vars:
+    synergon_url: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+  tasks:
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      register: result_private_endpoint_connection_string
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      delegate_to: localhost      
+            
+    - name: Try fetch blades from Azure for this enclosure (primary)
+      get_servers_by_enclosure:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        enclosure_name: "{{ inventory_hostname }}"
+      delegate_to: localhost
+      register: azure_enclosure_fetch
+      failed_when: false
+
+    - name: Debug Azure fetch result
+      debug:
+        var: azure_enclosure_fetch
+
+    - name: Decide whether to use Azure (non-empty hostnames excluding the enclosure, and no module failure)
+      set_fact:
+        use_azure: "{{ (azure_enclosure_fetch is defined)
+                       and (azure_enclosure_fetch.failed is not defined or azure_enclosure_fetch.failed == false)
+                       and (azure_enclosure_fetch.hostnames is defined)
+                       and ((azure_enclosure_fetch.hostnames | reject('equalto', inventory_hostname) | list | length) > 0) }}"
+
+    - name: Debug use_azure flag
+      debug:
+        var: use_azure
+
+    - name: Set enclosure_blades from Azure (exclude enclosure entry)
+      set_fact:
+        enclosure_blades: "{{ azure_enclosure_fetch.hostnames | reject('equalto', inventory_hostname) | list }}"
+      delegate_to: localhost
+      when: use_azure
+
+    - name: Debug enclosure_blades (Azure path - pre CMDB check)
+      debug:
+        var: enclosure_blades
+      when: use_azure
+
+    - name: Check CMDB update for each blade (Azure path only)
+      azure_update_ref_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{ item }}"
+      loop: "{{ enclosure_blades }}"
+      loop_control:
+        label: "{{ item }} ({{ inventory_hostname }})"
+      register: cmdb_check_results
+      delegate_to: localhost
+      when:
+        - use_azure
+        - enclosure_blades is defined
+        - enclosure_blades | length > 0
+
+    - name: Debug cmdb_check_results (Azure path)
+      debug:
+        var: cmdb_check_results
+      when: use_azure
+
+    - name: Filter Azure blades where CMDB update == "F"
+      set_fact:
+        enclosure_blades: "{{ cmdb_check_results.results
+                              | selectattr('module_update.cmdb_update', 'equalto', 'F')
+                              | map(attribute='item')
+                              | list }}"
+      delegate_to: localhost
+      when:
+        - use_azure
+        - cmdb_check_results is defined
+        - cmdb_check_results.results is defined
+
+    - name: Debug enclosure_blades (Azure path - post CMDB check)
+      debug:
+        var: enclosure_blades
+      when: use_azure
+
+
+
+
+
+# ===================================================================================================================
+
+
+
+
+
+
+    - name: "Check entry for DECO server for filter hostlist for cmdb duplicate list"
+      azure_update_ref_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+      register: idem_status 
+      delegate_to: localhost
+      when:
+        - not use_azure
+
+    - name: Save CMDB duplicate check flag
+      set_fact: 
+        cmdb_dup_check: "{{ idem_status.module_update.cmdb_dup_check }}"
+      when:
+        - not use_azure    
+
+    - name: Fetch ESXi details
+      enclosure_synergon_data_fetch:
+        enclosure: "{{ inventory_hostname }}"
+        synergon_api: "{{ synergon_url }}"
+      delegate_to: localhost
+      register: esxi_data
+      # when: cmdb_dup_check == "T"    
+      when:
+        - not use_azure        # ensures mutual exclusivity
+        - cmdb_dup_check == "T"              
+
+    - name: Debug esxi_data (Synergon path)
+      debug:
+        var: esxi_data
+      when:
+        - not use_azure
+        - cmdb_dup_check == "T"
+
+    - name: Store blades in hostvars (Synergon path)
+      set_fact:
+        enclosure_blades: "{{ esxi_data.esxi_details | map(attribute='ci_name') | list }}"
+      when:
+        - not use_azure        # ensures mutual exclusivity
+        - cmdb_dup_check == "T"
+        - esxi_data.esxi_details is defined
+
+    - name: Debug enclosure_blades (Synergon path final)
+      debug:
+        var: enclosure_blades
+      when:
+        - not use_azure
+        - cmdb_dup_check == "T"
+
+
+    # - name: Store blades in hostvars
+    #   set_fact:
+    #     enclosure_blades: "{{ esxi_data.esxi_details | map(attribute='ci_name') | list }}"
+    #   when:
+    #     - cmdb_dup_check == "T"
+    #     - esxi_data.esxi_details is defined 
+
+- name: Aggregate and add blades to group
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Aggregate all blades globally
+      set_fact:
+        all_blades_combined: "{{ all_blades_combined + hostvars[item]['enclosure_blades'] }}"
+      run_once: true
+      loop: "{{ groups['enclosures'] }}"
+      when: hostvars[item]['enclosure_blades'] is defined
+
+    - name: Debug - Show all fetched Blades
+      debug:
+        var: all_blades_combined
+      run_once: true
+
+    - name: Add blades to dynamic host group
+      add_host:
+        name: "{{ item }}"
+        groups: blades
+      loop: "{{ all_blades_combined }}"
+      run_once: true
+
+
+    - name: "Check entry for DECO server"
+      final_create_cr:
+        ci: "{{ item }}"
+        cr: "{{ cr }}"
+        connection_string: "{{ private_endpoint_connection_string }}"
+      register: create_cr_update
+      delegate_to: localhost
+      loop: "{{ groups['blades'] }}"
+      when: groups['blades'] is defined and (groups['blades'] | length) > 0
+
+
+    - debug:
+        var: create_cr_update
+      when: groups['blades'] is defined and (groups['blades'] | length) > 0
+
+
+
+    # - name: Define list of test blade hostnames
+    #   set_fact:
+    #     test_blade_hosts:
+    #       # - lfe80081pb01
+    #       # - lfe80081pb02
+    #       # - lfe80081pb03
+    #       # - lfe80081pb04
+    #       # - lfe80081pb05
+    #       # - lfe80081pb06
+    #       # - lfe80081pb07
+    #       # - lfe80081pb08
+    #       # - lfe80081pb09
+    #       # - lfe80081pb10
+    #       # - lfe80081pb11
+    #       # - lfe80081pb12
+    #       # - lfe80081pb13
+    #       # - lfe80081pb14
+    #       # - lfe80082pb08
+    #       # - lfe80072pb01
+    #       - lfe80072pb01
+    #       - lfe80072pb02
+    #       - lfe80072pb03
+    #       - lfe80072pb04
+    #       - lfe80072pb05
+    #       - lfe80072pb06
+    #       - lfe80072pb07
+    #       - lfe80072pb08
+    #       - lfe80072pb09
+    #       - lfe80072pb10
+    #       - lfe80072pb11
+    #       - lfe80072pb12
+    #       - lfe80072pb13
+    #       - lfe80072pb14
+    #   run_once: true
+
+    # - name: Add static test blades to 'blades' group
+    #   add_host:
+    #     name: "{{ item }}"
+    #     groups: blades
+    #   loop: "{{ test_blade_hosts }}"
+    #   run_once: true
+
+- name: Refresh inventory after adding blades
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Refresh inventory
+      meta: refresh_inventory
+      run_once: true
+
+- name: Debug - Blades Group After Refresh
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Debug - Blades Group
+      debug:
+        msg: "Blades in blades group: {{ hostvars | dict2items | selectattr('value.group_names', 'search', 'blades') | map(attribute='key') | list }}"
+      run_once: true
+
+    - name: Set target_hosts as blades
+      set_fact:
+        target_hosts: "blades"
+
+
+- import_playbook: main_groupingowners.yml
+  vars:
+    target_hosts: "blades"
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+
+- import_playbook: main_blades_healthcheck.yml
+  vars:
+    target_hosts: "blades"
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+
+
+
+
+- import_playbook: main_cmdb_check_duplicate_enclosure.yml
+  vars:
+    target_hosts: "blades"
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+
+- import_playbook: main_fqdn_vcenter_fetch.yml    # Update FQDN and vcenter
+  vars:
+    target_hosts: "blades"
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+
+- import_playbook: main_cmdb_fetch_enclosure.yml
+  vars:
+    target_hosts: "blades"
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+
+- import_playbook: main_server_info_gather.yml
+  vars:
+    target_hosts: "blades"
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+
+
+- import_playbook: main_storage_info_fetch.yml
+  vars:
+    target_hosts: "blades"
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+
+
+- import_playbook: main_server_shutdown.yml
+  vars:
+    target_hosts: "blades"
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+
+- import_playbook: main_oneview_xclarity.yml
+  vars:
+    target_hosts: "blades"
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+
+- import_playbook: main_ilo_reset.yml
+  vars:
+    target_hosts: "blades"
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+
+
+
+
+- import_playbook: main_ipam_cleanup.yml
+  vars:
+    target_hosts: "blades"
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+- import_playbook: main_vcenter_deregister.yml   # Deregister from vcenter
+  vars:
+    target_hosts: "blades"
+
+- import_playbook: main_idempotency_validator.yml      # check updated Azure table
+  vars:
+    target_hosts: "blades"
+
+
+
+-  import_playbook: main_cmdb_update.yml
+   vars:
+    target_hosts: "blades"
+
+- import_playbook: main_idempotency_validator.yml
+  vars:
+    target_hosts: "blades"
+
+
+
+- import_playbook: main_enclosure_filter.yml
+  vars:
+    target_hosts_enclosure: "enclosures"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+  # vars:
+  #   target_hosts: "{{ groups['enclosures'] }}"
+
+
+# - name: "Looging TR for Enclosure if no failures"
+#   import_playbook: main_logs.yml
+#   vars:
+#     target_hosts: "enclosures"
+
+
+
+
+# - import_playbook: main_idempotency_validator.yml      # check updated Azure table
+#   vars:
+#     target_hosts: "enclosures"
+
+
+
+

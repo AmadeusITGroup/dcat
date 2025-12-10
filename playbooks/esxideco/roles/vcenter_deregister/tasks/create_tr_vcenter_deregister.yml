@@ -1,0 +1,263 @@
+---    
+    - name: "Handling Create TR- Win@proach "
+      block:
+
+        - name: ESXi_host list
+          shell: cat host_list_vcenter.yml
+          delegate_to: localhost
+          register: hostlist_esxi              
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: esxi_hostlist == ""
+
+        # - name: Display the JSON file content
+        #   shell: cat winaproach_category.yml
+        #   delegate_to: localhost
+        #   register: result_winaproach_category
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     win_category: "{{ result_winaproach_category.stdout }}" 
+        #   delegate_to: localhost
+
+        # - name: Display the JSON file content
+        #   shell: cat bird_api.yml
+        #   delegate_to: localhost
+        #   register: result_bird
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     bird_api: "{{ result_bird.stdout }}" 
+        #   delegate_to: localhost                    
+
+        - name: TR creation for vCenter 
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "esxi vcenter deregister"    #"vcenter deregister"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO : vCenter Deregister"
+            ci: "{{ esxi_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id
+          delegate_to: localhost
+        
+        - set_fact:
+            vcenter_record_id: "{{ticket_id.id.ticketId}}"
+    
+
+        - copy:
+            content: '{{ vcenter_record_id|to_json }}'
+            dest: record_vcenter.json
+          delegate_to: localhost
+
+    
+      rescue:
+        - debug:
+            msg: "Failed to Create - vCenter Deregister TR"
+
+    - name: "Handling Create TR- Win@proach  -retry 1"
+      block: 
+
+    
+
+        - name: Display the JSON file content
+          shell: cat record_vcenter.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            vcenter_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: vcenter_record_id == ""
+
+        - name: ESXi_host list
+          shell: cat host_list_vcenter.yml
+          delegate_to: localhost
+          register: hostlist_esxi   
+                 
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: esxi_hostlist == ""
+
+        # - name: Display the JSON file content
+        #   shell: cat bird_api.yml
+        #   delegate_to: localhost
+        #   register: result_bird
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     bird_api: "{{ result_bird.stdout }}" 
+        #   delegate_to: localhost          
+
+        - name: TR creation for vCenter
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "esxi vcenter deregister"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO : vCenter Deregister"
+            ci: "{{ esxi_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id
+          delegate_to: localhost
+          when: vcenter_record_id == ""
+        
+        - set_fact:
+            vcenter_record_id: "{{ticket_id.id.ticketId}}"
+          when: vcenter_record_id == ""
+    
+        - copy:
+            content: '{{ vcenter_record_id|to_json }}'
+            dest: record_vcenter.json
+          delegate_to: localhost 
+          when: ticket_id is defined
+
+
+      rescue:
+        - debug:
+            msg: "Failed to Create -  vCenter Deregister TR"
+
+    - name: "Handling Create TR- Win@proach retry 2"
+      block: 
+   
+
+        - name: Display the JSON file content
+          shell: cat record_vcenter.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            vcenter_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: vcenter_record_id == ""
+
+        - name: ESXi_host list
+          shell: cat host_list_vcenter.yml
+          delegate_to: localhost
+          register: hostlist_esxi    
+                 
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: esxi_hostlist == ""
+
+        # - name: Display the JSON file content
+        #   shell: cat bird_api.yml
+        #   delegate_to: localhost
+        #   register: result_bird
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     bird_api: "{{ result_bird.stdout }}" 
+        #   delegate_to: localhost          
+
+        - name: TR creation for vCenter
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "esxi vcenter deregister"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO : vCenter Deregister"
+            ci: "{{ esxi_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id
+          delegate_to: localhost
+          when: vcenter_record_id == ""
+        
+        - set_fact:
+            vcenter_record_id: "{{ticket_id.id.ticketId}}"
+          when: vcenter_record_id == ""
+    
+        - copy:
+            content: '{{ vcenter_record_id|to_json }}'
+            dest: record_vcenter.json
+          delegate_to: localhost 
+          when: ticket_id is defined
+    
+      rescue:
+        - debug:
+            msg: "Failed to Create vCenter TR"            
+
+
+    - name: "Handling Start Implementation- Win@proach "
+      block:
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""
+
+
+        - name: Display the JSON file content
+          shell: cat record_vcenter.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            vcenter_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: vcenter_record_id == ""                            
+
+        - name: Sleep for 62 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 62
+          delegate_to: localhost           
+
+        - name: Start Implementation
+          winaproach:
+            system: prod
+            type: task_record
+            operation: start_implementation
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            fields:
+              task_id: "{{ vcenter_record_id }}"
+          register: start_implementation
+          delegate_to: localhost
+          
+    
+      rescue:
+        - debug:
+            msg: "Failed to Start Implementation on ESXi DECO - vCenter TR :'{{ vcenter_record_id }}'"
+       

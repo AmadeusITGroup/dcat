@@ -1,0 +1,22 @@
+{
+    "dev":{
+    "storage_account_name": "DEV_STORAGE_ACCOUNT_NAME",
+    "resource_group": "DEV_RESOURCE_GROUP",
+    "azure_subscription_id": "DEV_AZURE_SUBSCRIPTION_ID",
+    "awx_instance":"AWX_INSTANCE_FQDN",
+    "tsi_blob_account_url": "MICROSOFT_AZURE_BLOB_URL",
+    "tsi_blob_container_name": "MICROSOFT_AZURE_CONTAINER",
+    "pbi_blob_name": "MICROSOFT_AZURE_BLOB_NAME",
+    "cmdb_url_update": "{{CMDB_URL}}"
+    },
+    "prod":{
+    "storage_account_name": "PROD_STORAGE_ACCOUNT_NAME",
+    "resource_group": "PROD_RESOURCE_GROUP",
+    "azure_subscription_id": "PROD_AZURE_SUBSCRIPTION_ID",
+    "awx_instance":"AWX_INSTANCE_FQDN",
+    "tsi_blob_account_url": "MICROSOFT_AZURE_BLOB_URL",
+    "tsi_blob_container_name": "MICROSOFT_AZURE_CONTAINER",
+    "pbi_blob_name": "MICROSOFT_AZURE_BLOB_NAME",
+    "cmdb_url_update": "{{CMDB_URL}}"
+    }
+}

@@ -1,0 +1,547 @@
+############################################################################################################
+
+    - name: "Handling PTR record for vcenter API healthcheck"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""       
+
+        - name: Display the JSON file content
+          shell: cat vcenter_api_fail.yml
+          delegate_to: localhost
+          register: result_check_vcenter_api
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_api_fail: "{{ result_check_vcenter_api.stdout }}" 
+          delegate_to: localhost     
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the Vcenter Api connectivity error which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_check_api: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_api_fail }}"
+          when: check_api_fail != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+################################################################################
+
+        - name: read yaml file from the specific location 
+          set_fact:
+            file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        - name: split the file content
+          set_fact:
+            lines: "{{file_content.split('\n')}}"
+
+        - name: convert the lines in the file to dict
+          set_fact:
+            res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+          loop: "{{ lines }}"
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key1: "{{ present_key1 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_check_api is defined and item in content_check_api
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name1: "{{ allowner_name1 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key1 }}"
+          when: content_check_api is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final1: | 
+              {% for key,value in allowner_name1.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_check_api is defined
+
+        - set_fact:
+            Requester_group: "OSP000"  #  "Requester_group: {{requester_group}}"
+            Requester_name: "K Vance" #  "Requester_name: {{requester_name}}"
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_check_api}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final1}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_check_api is defined
+
+        - name: Display the Groups PTR file content 
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups1
+          when: content_check_api is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups1: "{{ result_groups1.stdout }}" 
+          delegate_to: localhost
+          when: content_check_api is defined
+
+        - name: Create PTR vCenter API
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+            # ptr_title: "PYHSICAL DECO: Service health check Storage SAN Switches referring to failed TR - {{ record_id_healthcheck }}"
+            ptr_title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO : Vcenter API Error failed TR - {{ record_id_healthcheck }}"
+            tr_map: "{{ record_id_healthcheck }}"
+            assignee_group: "OSP000" #"OSX04SMG"  
+            ptr_logs: "{{ support_groups1 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_check_api_fail
+          until: '"Successfully" in ptr_check_api_fail.msg'
+          retries: 3
+          delay: 10
+          when: check_api_fail != ""
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_healthcheck }}"
+            prob_id: "{{ ptr_check_api_fail.id }}"                   
+          register: update_overview  
+          when: check_api_fail != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - Vcenter API"                               
+############################################################################################################
+
+############################################################################################################
+
+
+    - name: "Handling PTR record for Maintenance_mode"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""       
+
+        - name: Display the JSON file content
+          shell: cat vcenter_host_facts_fail.yml
+          delegate_to: localhost
+          register: result_check_maint_mode
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_maint_mode: "{{ result_check_maint_mode.stdout }}" 
+          delegate_to: localhost    
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Following servers not in maintenance mode: needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_check_maint_mode: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_maint_mode }}"
+          when: check_maint_mode != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost            
+
+
+              ############################################################################################################
+
+        - name: read yaml file from the specific location 
+          set_fact:
+            file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        - name: split the file content
+          set_fact:
+            lines: "{{file_content.split('\n')}}"
+
+        - name: convert the lines in the file to dict
+          set_fact:
+            res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+          loop: "{{ lines }}"
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key2: "{{ present_key2 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_check_maint_mode is defined and item in content_check_maint_mode
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name2: "{{ allowner_name2 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key2 }}"
+          when: content_check_maint_mode is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final2: | 
+              {% for key,value in allowner_name2.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_check_maint_mode is defined
+
+        - set_fact:
+            Requester_group: "OSP000"  #  "Requester_group: {{requester_group}}"
+            Requester_name: "K Vance" #  "Requester_name: {{requester_name}}"
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_check_maint_mode}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final2}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_check_maint_mode is defined
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups2
+          when: content_check_maint_mode is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups2: "{{ result_groups2.stdout }}" 
+          delegate_to: localhost
+          when: content_check_maint_mode is defined
+
+        - name: Create PTR Maint Mode
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+            ptr_title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/BLADES DECO: Maint mode not set failed TR -{{ record_id_healthcheck }}"
+            tr_map: "{{ record_id_healthcheck }}"
+            assignee_group: "OSP000" #"OEA02SNM"  
+            ptr_logs: "{{ support_groups2 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_check_maint_mode
+          until: '"Successfully" in ptr_check_maint_mode.msg'
+          retries: 3
+          delay: 10
+          when: check_maint_mode != ""
+
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_healthcheck }}"
+            prob_id: "{{ ptr_check_maint_mode.id }}"                   
+          register: update_overview  
+          when: check_maint_mode != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - Maintenance Mode"                               
+############################################################################################################
+
+############################################################################################################
+
+    - name: "Handling PTR record for SSH and Shell enable"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""           
+
+        - name: Display the SSH and Shell fail file content
+          shell: cat esxi_ssh_shell_fail.yml
+          delegate_to: localhost
+          register: result_check_shell
+
+        - name: save the SSH fail data to a Variable as a Fact
+          set_fact:
+            check_shell: "{{ result_check_shell.stdout }}" 
+          delegate_to: localhost        
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the SSH and shell enable error which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_check_shell: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_shell }}"
+          when: check_shell != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+               
+              ############################################################################################################
+
+        - name: read yaml file from the specific location 
+          set_fact:
+            file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        - name: split the file content
+          set_fact:
+            lines: "{{file_content.split('\n')}}"
+
+        - name: convert the lines in the file to dict
+          set_fact:
+            res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+          loop: "{{ lines }}"
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key3: "{{ present_key3 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_check_shell is defined and item in content_check_shell
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name3: "{{ allowner_name3 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key3 }}"
+          when: content_check_shell is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final3: | 
+              {% for key,value in allowner_name3.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_check_shell is defined
+
+        - set_fact:
+            Requester_group: "OSP000"  #  "Requester_group: {{requester_group}}"
+            Requester_name: "K Vance" #  "Requester_name: {{requester_name}}"
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_check_shell}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final3}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_check_shell is defined
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups3
+          when: content_check_shell is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups3: "{{ result_groups3.stdout }}" 
+          delegate_to: localhost
+          when: content_check_shell is defined
+
+
+        - name: Create PTR Shell Enable
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}" 
+            ptr_title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO : Shell enable failed TR - {{ record_id_healthcheck }}"
+            tr_map: "{{ record_id_healthcheck }}"
+            assignee_group: "OSP000"  
+            ptr_logs: "{{ support_groups3 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_check_sssh
+          until: '"Successfully" in ptr_check_sssh.msg'
+          retries: 3
+          delay: 10
+          when: check_shell != ""
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_healthcheck }}"
+            prob_id: "{{ ptr_check_sssh.id }}"                   
+          register: update_overview  
+          when: check_shell != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - Shell check"
+                              
+############################################################################################################
+
+
+                              
+############################################################################################################
+
+    - name: "Handling PTR record for SSH healthcheck"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""           
+
+        - name: Display the SSH fail file content
+          shell: cat esxi_ssh_fail.yml
+          delegate_to: localhost
+          register: result_check_ssh
+
+        - name: save the SSH fail data to a Variable as a Fact
+          set_fact:
+            check_ssh: "{{ result_check_ssh.stdout }}" 
+          delegate_to: localhost        
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the SSH error which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_check_ssh: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_ssh }}"
+          when: check_ssh != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+              ############################################################################################################
+
+        - name: read yaml file from the specific location 
+          set_fact:
+            file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        - name: split the file content
+          set_fact:
+            lines: "{{file_content.split('\n')}}"
+
+        - name: convert the lines in the file to dict
+          set_fact:
+            res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+          loop: "{{ lines }}"
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key3: "{{ present_key3 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_check_ssh is defined and item in content_check_ssh
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name3: "{{ allowner_name3 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key3 }}"
+          when: content_check_ssh is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final3: | 
+              {% for key,value in allowner_name3.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_check_ssh is defined
+
+        - set_fact:
+            Requester_group: "OSP000"  #  "Requester_group: {{requester_group}}"
+            Requester_name: "K Vance" #  "Requester_name: {{requester_name}}"
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_check_ssh}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final3}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_check_ssh is defined
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups3
+          when: content_check_ssh is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups3: "{{ result_groups3.stdout }}" 
+          delegate_to: localhost
+          when: content_check_ssh is defined
+
+
+        - name: Create PTR SSH Check
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+            ptr_title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO : SSH validation failed TR - {{ record_id_healthcheck }}"
+            tr_map: "{{ record_id_healthcheck }}"
+            assignee_group: "OSP000"  
+            ptr_logs: "{{ support_groups3 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_check_sssh
+          until: '"Successfully" in ptr_check_sssh.msg'
+          retries: 3
+          delay: 10
+          when: check_ssh != ""
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_healthcheck }}"
+            prob_id: "{{ ptr_check_sssh.id }}"                   
+          register: update_overview  
+          when: check_ssh != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - SSH check"
+                              
+############################################################################################################

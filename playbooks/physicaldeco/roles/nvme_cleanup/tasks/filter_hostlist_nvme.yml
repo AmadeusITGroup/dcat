@@ -1,0 +1,42 @@
+---
+    - name: "Check entry for DECO server"
+      throttle: 1
+      block:
+        - set_fact:
+            host_list: host_list_nvme_cleanup.yml          
+                
+        - name: "Check entry for DECO server for filter hostlist for cmdb duplicate list"
+          azure_update_ref_phy:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+
+
+        # - set_fact: 
+        #     firewall_status: '{{ idem_status.module_update.firewall }}' 
+
+        # - set_fact: 
+        #     cmdb_stat_check_agp: '{{idem_status.module_update.cmdb_fetch_agp }}'
+        
+        - set_fact: 
+            check_backup_status: '{{idem_status.module_update.backup }}'
+
+        - set_fact: 
+            nvme_cleanup_status: '{{ idem_status.module_update.nvme_cleanup }}'
+
+        # - set_fact: 
+        #     cmdb_update_status: '{{idem_status.module_update.cmdb_update }}'      
+
+
+        - name: "VM list"
+          shell: echo "{{ inventory_hostname }}," >> {{ host_list }}                   
+          delegate_to: localhost
+          when: check_backup_status == "T" and nvme_cleanup_status != "T"
+          # when: firewall_status == "F" and check_backup_status == "T"
+                            
+
+      rescue:
+        - debug:
+            msg: "Failed to fetch nvme cleanup for servers"    
+

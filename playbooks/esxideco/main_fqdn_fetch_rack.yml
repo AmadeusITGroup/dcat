@@ -1,0 +1,65 @@
+---
+- name: "fqdn fetch filter hostlist for deco"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: fqdn fetch
+      ansible.builtin.import_role:
+        name: fqdn_fetch_esxi_rack
+        tasks_from: filter_hostlist_fetch_fqdn.yml
+
+- name: "Create TR for fetch fqdn"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_fetch_fqdn_ph: ""
+    graceperiod_flag: False
+  tasks:
+    - name: fqdn fetch
+      ansible.builtin.import_role:
+        name: fqdn_fetch_esxi_rack
+        tasks_from: create_tr_fqdn_fetch.yml
+
+- name: "fqdn info fetch"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: fqdn fetch info
+      ansible.builtin.import_role:
+        name: fqdn_fetch_esxi_rack
+        tasks_from: fetch_fqdn_esxi.yml
+      when: cmdb_dup_check == "T" and fqdn_info == "F"
+
+- name: "ADD info TR for fqdn fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_fetch_fqdn_ph: ""
+    graceperiod_flag: False
+  tasks:
+    - name: fqdn fetch info
+      ansible.builtin.import_role:
+        name: fqdn_fetch_esxi_rack
+        tasks_from: add_info_fqdn_fetch.yml
+
+# - name: "logging fqdn fetch"
+#   hosts: physicaldeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: fqdn fetch info
+#       ansible.builtin.import_role:
+#         name: fqdn_fetch_phy
+#         tasks_from: fqdn_fetch_logging.yml
+
+# - name: "Logger for fqdn fetch "
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+    # record_fetch_fqdn_ph: ""
+    # graceperiod_flag: False
+    # fqdn_info: "F"
+#   tasks:
+#     - name: fqdn fetch info
+#       ansible.builtin.import_role:
+#         name: fqdn_fetch_phy
+#         tasks_from: logger_fqdn_fetch.yml

@@ -1,0 +1,73 @@
+---
+- name: "cmdb fetch agp"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb fetch agp
+      ansible.builtin.import_role:
+        name: cmdb_fetch_agp
+        tasks_from: filter_hostlist_cmdb_check_agp.yml
+
+- name: "Create TR for cmdb fetch agp"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_id_cmdb_stat: ""
+    cmdb_stat_check_agp: "F"
+    graceperiod_flag: True
+    vm_poweroff_before_gp_check: "T"
+  tasks:
+    - name: cmdb fetch agp
+      ansible.builtin.import_role:
+        name: cmdb_fetch_agp
+        tasks_from: create_tr_cmdb_status_check_agp.yml
+
+- name: "cmdb fetch agp"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb fetch agp
+      ansible.builtin.import_role:
+        name: cmdb_fetch_agp
+        tasks_from: vm_status_cmdb.yml
+      when: (cmdb_stat_check_agp == "F") and cmdb_stat_check_agp is defined and (vm_poweroff_before_gp_check == "T") and vm_poweroff_before_gp_check is defined
+
+- name: "Add info TR for CMdb fetch agp"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_id_cmdb_stat: ""
+    cmdb_stat_check_agp: "F"
+    graceperiod_flag: True
+    vm_poweroff_before_gp_check: "T"
+  tasks:
+    - name: cmdb fetch agp
+      ansible.builtin.import_role:
+        name: cmdb_fetch_agp
+        tasks_from: add_info_cmdb_status_check_agp.yml
+
+- name: "cmdb fetch agp"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb fetch agp
+      ansible.builtin.import_role:
+        name: cmdb_fetch_agp
+        tasks_from: cmdb_stat_logging.yml
+
+- name: "Logger for cmdb fetch agp"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_id_cmdb_stat: ""
+    cmdb_stat_check_agp: "F"
+    graceperiod_flag: True
+    vm_poweroff_before_gp_check: "T"
+  tasks:
+    - name: cmdb fetch agp
+      ansible.builtin.import_role:
+        name: cmdb_fetch_agp
+        tasks_from: logger_cmdb_stat_agp.yml

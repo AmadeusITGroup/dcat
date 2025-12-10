@@ -1,0 +1,1097 @@
+import datetime
+from enum import Enum
+import logging
+
+from pyproach import cmdb, util
+from pyproach.record import base
+
+logger = logging.getLogger(__name__)
+
+SWORDS = {
+    # Fields common to all records types (same names but different swords)
+    'LoggerGroup': 'S0B9B',
+    'LoggerName': 'S0B59',
+    'Title': 'S8162',
+    'AssigneeGroup': 'S809A',
+    'AssigneeName': 'S809B',
+    'Status': 'S8161',
+    'Type': 'S0C09',
+    'Component': 'S81FF',
+    # Record specific fields
+    'Overview': 'S0E01',
+    'TaskParentID': 'S8A6B',
+    'StandardChange': 'S8B2B',
+    'CCRelevanceCategory': 'S8DEB',
+    'OnSiteGroup': 'S8A8A',
+    'OnSiteName': 'S8A8B',
+    'ImplementerGroup': 'S8A8D',
+    'ImplementerName': 'S8A8E',
+    'ImpactsService': 'S80A3',
+    'RARetryOfFailed': 'S8DF2',
+    'RAPreviousFailedChange': 'S8DF3',
+    'RATestingRequired': 'S8DF4',
+    'CCTestRecord': 'S8DF5',
+    'FallbackAvailable': 'S8B2E',
+    'FallbackDuration': 'S8B2F',
+    'RATrafficIncrease': 'S8DF8',
+    'FullImplementationPlan': 'S8EB2',
+    'Installation': 'S804C',
+    'ValidationSteps': 'S8EE6',
+    'ValidationResults': 'S8EE7',
+    'FullFallbackPlan': 'S8EB3',
+    'FallbackExpectedDuration': 'S8CE0',
+    'ValidationDuration': 'S8EE0',
+    'Backout': 'S0E06',
+    'CCBusinessReason': 'S8DF9',
+    'CCTrafficIncrease': 'S8DFC',
+    'CCCapacitySignoff': 'S8DFD',
+    'CCCapacitySignoffIn': 'S8E38',
+    'CCLevelOfTesting': 'S8DFE',
+    'CCPrereqs': 'S8E01',
+    'CCAddSupportReq': 'S8E03',
+    'CCDescription': 'S8DFA',
+    'CCPartOfSequence': 'S8DFB',
+    'CCProposedTimeslot': 'S8E00',
+    'CCReasonForTimeslot': 'S8E02',
+    'CCCategoryArea': 'S8DEC',
+    'SystemCategory': 'S88CC',
+    'ChangeCat1': 'S8E1D',
+    'ChangeCat2': 'S8E1E',
+    'ChangeCat3': 'S8E1F',
+    'ProcessPhase': 'S8EC6',
+    'CiNotFound': 'S8C58',
+    'CiNotFoundReason': 'S8C59',
+    'CiNotFoundList': 'S8C5E',
+    'ValidatorGroup': 'S8EE2',
+    'StartDate': 'S0C40',
+    'EndDate': 'S0C41',
+    'StartTime': 'S0C71',
+    'EndTime': 'S0C70',
+    'InitialWhishDate': 'S8C5C',
+    'DurationPlanned': 'S0C95',
+    'Emergency': 'S8160',
+    'Keywords': 'S8243',
+    'SubStatusId': 'S8EC0',
+    'ImplementedDate': 'S81AA',
+    'ImplementedTime': 'S8D14',
+    'ServiceImpactStatus': 'S8330',
+    'Success': 'S80E3',
+    'ActiveSystem': 'S81AB',
+    'AutomationLevel': 'S8F20',
+
+    # "Change Builder" field from Background tab
+    'BuilderGroup': 'S8B3C',
+    'BuilderName': 'S8B06',
+
+    # "4-Eye Checked By" field from Background tab
+    'CABApproverGroup': 'S8B3B',
+    'CABApproverName': 'S8B08',
+
+    # actual start/end datetime
+    'ActualStartDate': 'S0C43',
+    'ActualEndDate': 'S0C44',
+    'ActualStartTime': 'S0C6E',
+    'ActualEndTime': 'S0C6F',
+    'ActualDuration': 'S0C97',
+
+    # CMDB Items
+    'ConfItemID': 'S8A93',
+    'ConfItemName': 'S8A94',
+    'ConfItemStatus': 'S8D2E',
+    'ConfItemReason': 'S8D2F',
+    'ConfItemCat1': 'S8D30',
+    'ConfItemCat2': 'S8D31',
+    'ConfItemCat3': 'S8D32',
+    'ConfItemClass': 'S8D33',
+    'ConfItemAssetid': 'S8D34',
+    'ConfItemSerialNr': 'S8D35',
+    'ConfItemManager': 'S8D36',
+    'ConfItemOwner': 'S8D37',
+    'ConfItemSupporter': 'S8D38',
+    'ConfItemOperator': 'S8D39',
+    'ConfItemDesc': 'S8D69',
+}
+
+
+class Status(Enum):
+    Assigned = 'AS'
+    Accepted = 'AC'
+    PendingCMGScheduling = 'AA'
+    PendingCABApproval = 'AT'  # Deprecated: use PendingEMEApproval
+    PendingEMEApproval = 'AT'
+    Rejected = 'AX'
+    ApprovedbyCAB = 'AP'  # Deprecated: use ApprovedasEME
+    ApprovedasEME = 'AP'
+    Cancelled = 'AY'
+    FullyImplemented = 'SL'
+    ImplementationFailed = 'SF'
+    ClosedasRejected = 'CR'
+    ClosedasFullyImplemented = 'CS'
+    ClosedasImplementationFailed = 'CF'
+    ClosedasCancelled = 'CC'
+    PartiallyImplemented = 'SP'
+    ClosedasPartiallyImplemented = 'CP'
+    LoadedtoTest = 'AL'
+    VerifiedonTest = 'AV'
+    LoadtoTestRequested = 'AR'
+    LoadtoProductionRequested = 'SR'
+    Categorized = 'AB'
+    PendingOPSAuthorization = 'AE'  # Deprecated: use PendingApproval
+    PendingApproval = 'AE'
+    PendingPIRasFullyImplemented = 'SA'
+    PendingPIRasPartiallyImplemented = 'SB'
+    PendingPIRasImplementationFailed = 'SC'
+    OPSResponsibletobeselected = 'AD'
+    PassedEMM = 'AM'  # Deprecated: use ApprovedforImplementation
+    ApprovedforImplementation = 'AM'
+    Scheduled = 'AU'
+    Readyforscheduling = 'AG'
+    CMGApproved = 'AH'
+    ValidatedasPartiallyImplemented = 'VB'
+    ValidatedasImplementationFailed = 'VC'
+    ValidatedasFullyImplemented = 'VA'
+    Pending4EyesReview = 'AQ'  # Deprecated: use Pending4EyesCheck
+    Pending4EyesCheck = 'AQ'
+    ReadyForImplementation = 'AN'
+    ImplementationOngoing = 'AO'
+
+
+class ProcessPhase(Enum):
+    Request = '10_RE'
+    PrepareSchedulingSubmit = '20_PSS'
+    ApprovalNotification = '30_APN'
+    Implementation = '40_IM'
+    VerifyReview = '50_VR'
+    Closed = '60_CS'
+
+
+class AutomationLevel(Enum):
+    FullyAutomated = 'FA'
+    ScriptBased = 'SB'
+    PartialScripting = 'PS'
+    ManualSteps = 'MS'
+    FullyManual = 'FM'
+
+
+class ChangeCategory(Enum):
+    Standard = 'S'
+    NonStandard = 'N'
+    Documentation = 'X'
+
+
+class RelevanceCategory(Enum):
+    Standard = 'S'
+    NonStandard = 'N'
+    Documentation = 'D'
+
+
+class CategoryArea(Enum):
+    OBE = 'O'
+    General = 'G'
+    Network = 'N'
+
+
+class FallbackAvailable(Enum):
+    AvailableTested = '1'
+    AvailableNotTested = '2'
+    NotAvailable = '3'
+
+
+class ChangeCategoryType(Enum):
+    Infrastructure = 'IS'
+    DataConfigurationAndContent = 'F'
+    Awareness = 'A'
+    Software = 'SW'
+    Automation = 'AUTO'
+    InfrastructureWorkplace = 'ISWP'
+    IaaS = 'IAAS'
+    PaaS = 'PAAS'
+
+
+class Emergency(Enum):
+    HighImpactOnPrd = '1'
+    MediumImpactOnPrd = '2'
+    LowImpactOnPrd = '3'
+    NoImpactOnPrd = '4'
+    EmergencyFix = 'E'
+    No = 'X'
+    LatePlanning = 'L'
+    UrgentCustomerRequest = 'C'
+    PlannedOnTime = 'P'
+    FreezeBreaker = 'F'
+    InScopeOCCP = 'O'
+    PlannedOnTimePriorConsent = 'A'
+    DailyCab = 'D'
+    MajorCHange = 'M'
+    OCCP = 'S_O'
+    Planned = 'S_P'
+    AnyTime = 'S_T'
+    PriorA = 'S_A'
+
+
+class ApprovalStatus(Enum):
+    Approved = 'Y'
+    NotApproved = 'N'
+    Investigating = 'I'
+    CcbPreApproved = 'P'
+    Empty = ''
+
+
+class ServiceImpactStatus(Enum):
+    ImpactAsExpectedOrLess = 'E'
+    UnexpectedTechnicalImpact = 'I'
+    UnexpectedBusinessImpact = 'C'
+    DeviationFromChangePlan = 'D'
+
+
+class ImplementationSuccess(Enum):
+    Yes = 'Y'  # FullyImplemented
+    Partial = 'P'  # PartiallyImplemented
+    No = 'N'  # ImplementationFailed
+
+
+class TR(base.Record):
+    swords = SWORDS
+    Status = Status
+    closed_statuses = [Status.ClosedasFullyImplemented,
+                       Status.ClosedasRejected,
+                       Status.ClosedasImplementationFailed,
+                       Status.ClosedasCancelled,
+                       Status.ClosedasPartiallyImplemented]
+
+    def set_mandatory_fields(self, parent_id, **kwargs):
+        """Initiate this TR instance with all mandatory fields specifics to a TR
+
+        :param parent_id: record ID of parent record
+        """
+        if parent_id is None:
+            raise Exception('No parent Id provided for TR creation')
+        self.add_field(name='TaskParentID', value=parent_id)
+
+    def set_builder(self, builder_group=None, builder_name=None):
+        """ Sets the builder of the TR (Name and Group).
+            Defaults to the group and name of the pyproach user if called without parameters
+
+        :param builder_group: Winaproach group of the TR builder
+        :type builder_group: basestring
+        :param builder_name: Winaproach name of the TR builder
+        :type builder_name: basestring
+        """
+        if builder_group:
+            self.add_field(name='BuilderGroup', value=builder_group)
+        else:
+            self.add_field(name='BuilderGroup', value=self.api.user_profile.group)
+        if builder_name:
+            self.add_field(name='BuilderName', value=builder_name)
+        else:
+            self.add_field(name='BuilderName', value=self.api.user_profile.name)
+
+    def set_active_system(self, active_system):
+        """ Sets the active system of the TR (if not set, active system is PROD)
+
+        :param active_system: Qualifier of the system impacted by the TR
+        :type active_system: str
+        """
+        self.add_field(name='ActiveSystem', value=active_system)
+
+    def _get_system_category_tag_name(self):
+        """Get record specific field name for System Category
+
+        :return: Filed name for system category
+        :rtype: str
+        """
+        return "SystemCategory"
+
+    def get_description(self):
+        """Get record overview
+
+        :return: Main description of the record
+        :rtype: str
+        """
+        return self.get_content(name='Overview')
+
+    def categorize(self, category_type, categorization_info=None):
+        """Categorize record
+
+        :param category_type: change category. ex: Standard, NonStandard, Documentation
+            real field value stored in Win@proach can also be used as category_type (S, N, X)
+        :type category_type: ChangeCategory
+        :param categorization_info: additional information requested at categorization time
+            (e.g. risk assessment elements).
+            this parameter is expected in the form of a dictionary containing the relevant
+            information for the task categorization. Fields (all optional) include:
+            - BusinessImpact    (char)  S  : Customer service degradation or outage:
+            Y - Outage, P - Degradation, N - No Impact
+            - RetryOfFailed   (integer) S  : Record # of change being retried
+            - TestRecord      (integer) S  : Record # of the change application on lower phase
+            - FallbackAvailable  (str)  S  : AvailableTested, AvailableNotTested, NotAvailable
+            - FallbackImpact  (boolean) S  : Is a service degradation expected as consequence
+            of fallback application (default: false / No)
+            - TrafficIncrease (boolean) S  : Is a significant traffic increase expected
+            as consequence of the change (default: false / No)
+        :type categorization_info: dict
+        """
+        category_type = ChangeCategory(util.get_enum_value(ChangeCategory, category_type))
+        self.add_field(name='StandardChange', value=category_type.value)
+        # RelevanceCategory enum has same enum name than ChangeCategory but different values
+        # use that to get proper value
+        self.add_field(name='CCRelevanceCategory', value=RelevanceCategory[category_type.name].value)
+        if categorization_info is None:
+            categorization_info = {}
+
+        category = util.get_enum_value(ChangeCategory, category_type)
+        if category != "X" and isinstance(categorization_info, dict):
+            # Common fields for standard and non-standard TR
+            # AB = Categorized
+            self.add_field(name='Status', value=Status.Categorized.value)
+            if 'BusinessImpact' in categorization_info:
+                if categorization_info['BusinessImpact'] in 'YNP' and len(categorization_info['BusinessImpact']) == 1:
+                    self.add_field(name='ImpactsService', value=categorization_info['BusinessImpact'])
+            if 'RetryOfFailed' in categorization_info and int(categorization_info['RetryOfFailed']) > 0:
+                self.add_field(name='RARetryOfFailed', value='Y')
+                self.add_field(name='RAPreviousFailedChange', value=str(int(categorization_info['RetryOfFailed'])))
+            else:
+                self.add_field(name='RARetryOfFailed', value='N')
+            if 'TestRecord' in categorization_info and int(categorization_info['TestRecord']) > 0:
+                self.add_field(name='RATestingRequired', value='Y')
+                self.add_field(name='CCTestRecord', value=str(int(categorization_info['TestRecord'])))
+            else:
+                self.add_field(name='RATestingRequired', value='N')
+            if 'FallbackAvailable' in categorization_info:
+                self.add_field(name='FallbackAvailable',
+                               value=util.get_enum_value(FallbackAvailable, categorization_info['FallbackAvailable']))
+            if 'FallbackImpact' in categorization_info:
+                if categorization_info['FallbackImpact'] is True:
+                    self.add_field(name='FallbackDuration', value='2')
+                else:
+                    self.add_field(name='FallbackDuration', value='1')
+            if 'TrafficIncrease' in categorization_info:
+                if categorization_info['TrafficIncrease'] is True:
+                    val = "Y"
+                else:
+                    val = "N"
+                self.add_field(name='RATrafficIncrease', value=val)
+            if 'SystemCategory' in categorization_info:
+                self.add_field(name='SystemCategory',
+                               value=util.get_enum_value(base.SystemCategory, categorization_info['SystemCategory']))
+            if 'AutomationLevel' in categorization_info:
+                self.add_field(name='AutomationLevel',
+                               value=util.get_enum_value(AutomationLevel, categorization_info['AutomationLevel']))
+            # just in case of non-standard, more information are required
+            if category == 'N':
+                if 'BusinessReason' in categorization_info:
+                    self.add_field(name='CCBusinessReason', value=categorization_info['BusinessReason'])
+                if 'CommentTrafficIncrease' in categorization_info:
+                    self.add_field(name='CCTrafficIncrease', value=categorization_info['CommentTrafficIncrease'])
+                if 'CapacitySignoff' in categorization_info:
+                    if categorization_info['CapacitySignoff']:
+                        val = "Y"
+                        self.add_field(name='CCCapacitySignoffIn',
+                                       value=str(int(categorization_info['CapacitySignoffIn'])))
+                    else:
+                        val = "N"
+                    self.add_field(name='CCCapacitySignoff', value=val)
+                if 'LevelOfTesting' in categorization_info:
+                    self.add_field(name='CCLevelOfTesting', value=categorization_info['LevelOfTesting'])
+                if 'Prereqs' in categorization_info:
+                    self.add_field(name='CCPrereqs', value=categorization_info['Prereqs'])
+                if 'AddSupportReq' in categorization_info:
+                    self.add_field(name='CCAddSupportReq', value=categorization_info['AddSupportReq'])
+                if 'ChangeDescription' in categorization_info:
+                    self.add_field(name='CCDescription', value=categorization_info['ChangeDescription'])
+                if 'PartOfSequence' in categorization_info:
+                    self.add_field(name='CCPartOfSequence', value=categorization_info['PartOfSequence'])
+                if 'ProposedTimeslot' in categorization_info:
+                    self.add_field(name='CCProposedTimeslot', value=categorization_info['ProposedTimeslot'])
+                if 'ReasonForTimeslot' in categorization_info:
+                    self.add_field(name='CCReasonForTimeslot', value=categorization_info['ReasonForTimeslot'])
+                if 'CategoryArea' in categorization_info:
+                    self.add_field(name='CCCategoryArea',
+                                   value=util.get_enum_value(CategoryArea, categorization_info['CategoryArea']))
+
+    def build(
+        self,
+        implementation_plan,
+        fallback_plan, fallback_duration,
+        validation_steps, validation_duration,
+        automation_level=None,
+    ):
+        """Build record (plan, fallback, ...)
+
+        :param implementation_plan: implementation plan
+        :type implementation_plan: str
+        :param fallback_plan:
+        :type fallback_plan: str
+        :param fallback_duration:
+        :type fallback_duration: str
+        :param validation_steps:
+        :type validation_steps: str
+        :param validation_duration:
+        :type validation_duration: str
+        :param automation_level:
+        :type automation_level: AutomationLevel or str
+        """
+        # "Change Builder" field from Background tab
+        self.add_field(name='BuilderGroup', value=self.api.user_profile.group)
+        self.add_field(name='BuilderName', value=self.api.user_profile.name)
+
+        self.add_implementation_plan(implementation_plan)
+        if automation_level is not None:
+            self.add_field(name='AutomationLevel', value=util.get_enum_value(AutomationLevel, automation_level))
+        self.add_validation_steps(validation_steps)
+        self.add_validation_duration(validation_duration)
+        self.add_fallback_plan(fallback_plan)
+        self.add_fallback_duration(fallback_duration)
+
+        # 4-eye check automatically included for Internal Test Systems
+        if self.get_system_category() == base.SystemCategory.InternalTestSystem:
+            self.four_eye_review()
+        else:
+            self.set_status(Status.Pending4EyesCheck)
+            self.set_process_phase(ProcessPhase.PrepareSchedulingSubmit)
+
+    def four_eye_review(self, comment=None):
+        """Perform 4-eye review
+
+        :param comment: optional comment to set after review
+        :type comment: str
+        """
+        self.add_message('Build 4-eye approved')
+        if comment:
+            self.add_message(comment)
+
+        # "4-Eye Checked By" field from Background tab
+        self.add_field(name='CABApproverGroup', value=self.api.user_profile.group)
+        self.add_field(name='CABApproverName', value=self.api.user_profile.name)
+
+        self.set_status(Status.Readyforscheduling)
+        self.set_process_phase(ProcessPhase.ApprovalNotification)
+
+    def approve(self, user, group_id, approval_status, comment, board):
+        """Approve record
+
+        :param user:
+        :param group_id:
+        :param approval_status:
+        :param comment:
+        :param board:
+        """
+        self.add_approval(
+            user=user,
+            group_id=group_id,
+            approval_status=approval_status,
+            comment=comment,
+            board=board,
+        )
+        self.set_status(Status.ApprovedforImplementation)
+        self.set_process_phase(ProcessPhase.Implementation)
+
+    def set_as_implemented(
+        self, implementer_group, implementer_name,
+        service_impact=ServiceImpactStatus.ImpactAsExpectedOrLess,
+        success=ImplementationSuccess.Yes,
+        start_date=None,
+        end_date=None,
+    ):
+        """Set record as implemented
+
+        :param implementer_group: Win@proach implementer group
+        :type implementer_group: str
+        :param implementer_name: Win@proach implementer username
+        :type implementer_name: str
+        :param service_impact: type of service impact
+        :type service_impact: ServiceImpactStatus
+        :param success: is implementation a success, failure, partial
+        :type success: ImplementationSuccess
+        :param start_date: actual implementation start date.
+            Already set if `start_implementation` has been called earlier, else can be set/overridden here
+        :type start_date: datetime.datetime
+        :param end_date: actual implementation end date.
+            Automatically set to current time if not specified here.
+        :type end_date: datetime.datetime
+        """
+        # status
+        self.set_status(Status.FullyImplemented)
+        self.set_process_phase(ProcessPhase.VerifyReview)
+        self.add_field(name='ServiceImpactStatus', value=util.get_enum_value(ServiceImpactStatus, service_impact))
+
+        # implementer
+        self.add_field(name='ImplementerGroup', value=implementer_group)
+        self.add_field(name='ImplementerName', value=implementer_name)
+
+        # implementation end datetime
+        actual_end = end_date or datetime.datetime.utcnow()
+        self.set_datetime_field('Implemented', actual_end)
+        self.set_datetime_field('ActualEnd', actual_end)
+
+        # compute duration
+        # use actual_end when no start date available (ex: for Documentation record)
+        actual_start = start_date or self.get_datetime_field('ActualStart') or actual_end
+        if start_date is not None:
+            self.set_datetime_field('ActualStart', start_date)
+        self.add_field(name='ActualDuration', value=util.get_str_duration(actual_end - actual_start))
+
+        # FullyImplemented / PartiallyImplemented / ImplementationFailed
+        self.add_field(name='Success', value=util.get_enum_value(ImplementationSuccess, success))
+
+    def validate(
+            self,
+            results,
+            status=None,
+            comment=None,
+    ):
+        """Validate record implementation
+
+        :param results: details of validation
+        :type results: str
+        :param status: validation status
+        :type status: TR.Status
+        :param comment: optional comment
+        :type comment: str
+        """
+        if status is None:
+            implementation_success = ImplementationSuccess(self.get_field_code('Success'))
+            if implementation_success == ImplementationSuccess.Yes:
+                status = Status.ValidatedasFullyImplemented
+            elif implementation_success == ImplementationSuccess.Partial:
+                status = Status.ValidatedasPartiallyImplemented
+            elif implementation_success == ImplementationSuccess.No:
+                status = Status.ValidatedasImplementationFailed
+            else:
+                raise ValueError("Not enough information to set proper TR status. "
+                                 "Set 'Success' field or directly give status in input")
+
+        validation_statuses = [
+            Status.ValidatedasFullyImplemented,
+            Status.ValidatedasPartiallyImplemented,
+            Status.ValidatedasImplementationFailed,
+        ]
+        status = Status(util.get_enum_value(Status, status))
+        if status not in validation_statuses:
+            raise ValueError("Invalid validation status specified: '%s'. Possible values: [%s]"
+                             % (util.str_enum(status),
+                                ','.join(util.str_enum(enum_item) for enum_item in validation_statuses)))
+        self.set_status(status)
+        self.add_validation_result(content=results)
+        if comment is not None:
+            self.add_message(message=comment)
+
+    def verify_ok(self, comment=None):
+        """Indicate that implementation has been tested OK
+
+        :param comment: optional comment for the verification
+        :type comment: str
+        """
+        full_message = 'Verified as fully implemented \n'
+        if comment:
+            full_message += comment
+        self._verify(
+            success=True,
+            comment=full_message,
+        )
+
+    def verify_ko(self, comment, close_status, service_impact):
+        """Indicate that implementation testing has failed
+
+        :param close_status: final status to use to close record
+        :type close_status: TR.Status
+        :param comment: additional message
+        :type comment: str
+        :param service_impact: indicate if there was some business service impact
+        :type service_impact: ServiceImpactStatus
+        """
+        close_status = Status(util.get_enum_value(Status, close_status))
+        full_message = 'Changed to {}\n'.format(close_status.name)
+        if comment:
+            full_message += comment
+        self._verify(
+            success=False,
+            comment=full_message,
+            close_status=close_status,
+            service_impact=service_impact
+        )
+
+    def _verify(
+            self,
+            success,
+            comment,
+            close_status=None,
+            service_impact=None,
+    ):
+        """Specify if implementation of the record has been tested OK or not and associated service impact.
+        This is an internal method not meant to be called directly by end-user
+
+        :param success:
+        :type success: bool
+        :param close_status:
+        :type close_status: Status
+        :param comment:
+        :type comment: str
+        :param service_impact:
+        :type service_impact: ServiceImpactStatus
+        """
+        default_mapping = {
+            Status.ValidatedasFullyImplemented: Status.ClosedasFullyImplemented,
+            Status.ValidatedasPartiallyImplemented: Status.ClosedasPartiallyImplemented,
+            Status.ValidatedasImplementationFailed: Status.ClosedasImplementationFailed,
+        }
+        allowed_closed_status = list(default_mapping.values())
+        if success:
+            close_status = default_mapping[self.get_status()]
+        else:
+            if close_status not in allowed_closed_status:
+                raise ValueError("Invalid closed status specified: '%s'. Possible values: [%s]"
+                                 % (util.str_enum(close_status),
+                                    ','.join(util.str_enum(enum_item) for enum_item in allowed_closed_status)))
+
+            self.add_field(name='ServiceImpactStatus', value=util.get_enum_value(ServiceImpactStatus, service_impact))
+
+        self.add_message(message=comment)
+        self.close(status=close_status)
+        self.set_process_phase(ProcessPhase.Closed)
+
+    def add_validation_duration(self, time):
+        """ Add duration of validation steps
+
+        :param time: time in hh:mm:ss
+        :type time: str
+        """
+        self.add_field(name='ValidationDuration', value=time)
+
+    @util.deprecated("add_validation_duration")
+    def add_implementation_duration(self, time):
+        """ Add the time for the implementation plan
+
+        .. deprecated::
+           Use :func:`add_validation_duration` instead.
+
+        :param time: time in hh:mm:ss
+        :type time: str
+        """
+        self.add_validation_duration(time)
+
+    def add_implementation_plan(self, content):
+        """Add record implementation plan
+
+        :param content: Text content of implementation plan
+        :type content: str
+        """
+        self._add_content(content, self.get_sword('FullImplementationPlan'))
+        self._add_content(content, self.get_sword('Installation'))
+
+    def add_validation_steps(self, content):
+        """Add record validation steps
+
+        :param content: Text content of validation steps
+        :type content: str
+        """
+        self._add_content(content, self.get_sword('ValidationSteps'))
+
+    def add_validation_result(self, content):
+        """Add record validation results
+
+        :param content: Text content of validation result
+        :type content: str
+        """
+        self._add_content(content, self.get_sword('ValidationResults'))
+
+    def add_keywords(self, keyword):
+        """
+        :param keyword
+        :type keyword: basestring
+        """
+        self.add_field(name='Keywords', value=keyword)
+
+    def add_fallback_plan(self, content):
+        """Add record fallback plan
+
+        :param content: Text content of fallback plan
+        :type content: str
+        """
+        self._add_content(content, self.get_sword('FullFallbackPlan'))
+        self._add_content(content, self.get_sword('Backout'))
+
+    def add_fallback_duration(self, time):
+        """ Add the time for the fallback plan
+
+        :param time: time in hh:mm:ss
+        :type time: str
+        """
+        self.add_field(name='FallbackExpectedDuration', value=time)
+
+    def set_catalog_entry(self, change_type, sub_type, action_type):
+        """Define record catalog entry to specify the type of change.
+
+        :param change_type: Change type category name(Ex: Software, Infrastructure, Data Configuration & Content, ...)
+        :type change_type: ChangeCategoryType
+        :param sub_type: Change subtype category code (Ex: Application, Network, Database, ...)
+        :type sub_type: str
+        :param action_type: Another change subtype code(Ex: Release, Patching, )
+        :type action_type: str
+
+        """
+        # only first category is validated here as there are very few options possible
+        self.add_field(name='ChangeCat1', value=util.get_enum_value(ChangeCategoryType, change_type))
+        # 2nd and 3rd category will be validated directly by Win@proach server
+        self.add_field(name='ChangeCat2', value=sub_type)
+        self.add_field(name='ChangeCat3', value=action_type)
+
+    def add_approval(self, user, group_id, approval_status, comment, board=None):
+        """Add Global TR approval from specified user
+
+        :param user: Win@proach user giving approval status
+        :type user: str
+        :param group_id: Win@proach user group giving approval status
+        :type group_id: str
+        :param approval_status: Approval status given
+        :type approval_status: ApprovalStatus
+        :param comment: Comment justifying this approval status
+        :type comment: str
+        :param board: Win@proach user group the approver must belong
+        :type board: str
+        """
+        self._add_approval(user=user, group_id=group_id, approval_status=approval_status,
+                           comment=comment or "", board=board)
+
+    def _add_approval(self, user, group_id, approval_status, comment, board):
+        """Add approval
+
+        :param user: username
+        :type user: str
+        :param group_id: the group id
+        :type group_id: str
+        :param approval: Approved, Investigating, NotApproved
+        :type approval: str
+        :param comment: Text with the approval comment
+        :type comment: str
+        """
+        date, time = util.get_date_and_time().split()
+        appr_lists = [('ApprSection', 'S0B96', group_id),
+                      ('ApprUser', 'S82B9', user),
+                      ('ApprSuggApprover', 'S8E3D', user),
+                      ('ApprRealApprover', 'S8E3E', user),
+                      ('ApprDate', 'S8058', date),
+                      ('ApprTime', 'S8060', time),
+                      ('ApprApproved', 'S80A9', util.get_enum_value(ApprovalStatus, approval_status)),
+                      ('ApprovalBoard', 'S8E4D', board or ''),
+                      ('ApprovalComment', 'S8E4F', comment or '')]
+        # add items, specifying we want to keep existing approval in all requests sent (else we lose them)
+        self._add_list_items(elements=appr_lists, keep_previous_items=True)
+
+    def get_approvals(self):
+        """Get list of approvals in current record
+
+        :return: list of approval
+        :rtype: list[dict]
+        """
+        return self._get_list_items(name_prefix='Appr')
+
+    def set_missing_impacted_cis(self, reason=' ', ci_items=' '):
+        """ Set missing CIs
+
+        :param reason: (optional) explain why the CI is missing
+        :param ci_items: (optional) list of configuration items
+        """
+        self.add_field(name='CiNotFound', value='Y')
+        if reason:
+            self.add_field(name='CiNotFoundReason', value=reason)
+        if ci_items:
+            self.add_field(name='CiNotFoundList', value=ci_items)
+
+    @util.deprecated("set_status")
+    def set_tr_status(self, status):
+        """ Set the TR status
+
+        .. deprecated::
+           Use generic :func:`set_status` from base record instead.
+
+        :param status: the status of the TR
+        :type status: str
+        """
+        self.set_status(status=status)
+
+    def set_process_phase(self, phase):
+        """ Set the process phase for the TR
+
+        :param phase: the phase of the TR flow
+        :type phase: str
+        """
+        self.add_field(name='ProcessPhase', value=util.get_enum_value(ProcessPhase, phase))
+
+    @util.deprecated("set_system_category")
+    def set_system(self, system):
+        """ Set the system category entry for the TR
+
+        :param system: the system category of the TR (System field in top-left of UI
+        :type system: str
+        """
+        self.add_field(name='SystemCategory', value=util.get_enum_value(base.SystemCategory, system))
+
+    @util.deprecated("schedule")
+    def scheduling_tr(
+            self, start_datetime, end_datetime,
+            validator_groupid, implementer_groupid,
+            prioritization, ccbs=None,
+    ):
+        """Schedule the TR
+
+        .. deprecated::
+           Use :func:`schedule` instead.
+        """
+        self.schedule(
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            validator_groupid=validator_groupid,
+            implementer_groupid=implementer_groupid,
+            prioritization=prioritization,
+            ccbs=ccbs
+        )
+
+    def schedule(
+            self, start_datetime, end_datetime,
+            validator_groupid, implementer_groupid,
+            prioritization, ccbs=None,
+    ):
+        """ Schedule the TR
+
+        :param start_datetime: expected start implementation time
+        :type start_datetime: datetime.datetime
+        :param end_datetime: expected end implementation time
+        :type end_datetime: datetime.datetime
+        :param validator_groupid: the group id of the validator
+        :type validator_groupid: str
+        :param implementer_groupid: the group id of the implementer
+        :type implementer_groupid: str
+        :param prioritization: DailyCab, FreezeBreaker or AnyTime etc.
+        :type prioritization: str
+        :param ccbs: list of ccb code and appr section code
+        :type ccbs: list
+        """
+
+        if end_datetime < start_datetime:
+            raise ValueError('The start date-time is before the end date-time')
+
+        self.set_datetime_field('Start', start_datetime)
+        self.set_datetime_field('End', end_datetime)
+        self.add_field(name='InitialWhishDate', value=util.get_date_and_time(start_datetime).split()[0])
+        self.add_field(name='DurationPlanned', value=util.get_str_duration(end_datetime - start_datetime))
+        self.add_field(name='ValidatorGroup', value=validator_groupid)
+        self.add_field(name='OnSiteGroup', value=implementer_groupid)
+
+        self.add_field(name='Emergency', value=util.get_enum_value(Emergency, prioritization))
+
+        if self.get_system_category() in [
+            base.SystemCategory.Training,
+            base.SystemCategory.Production,
+        ]:
+            self.set_status(Status.PendingApproval)
+            self.add_field(name='SubStatusId', value='CC')
+
+            for item in ccbs or []:
+                ccb_code, appr_section_code = item.split(':')
+                self._add_approval(user='',
+                                   group_id=appr_section_code,
+                                   approval_status=ApprovalStatus.Empty,
+                                   comment='',
+                                   board=ccb_code)
+
+        # record is automatically approved for any environment other than Training and Production
+        else:
+            self.set_status(Status.ApprovedforImplementation)
+            self.set_process_phase(ProcessPhase.Implementation)
+
+    def start_implementation(self):
+        """Set record status to Implementation on going"""
+        self.set_status(Status.ImplementationOngoing)
+        # set actual implementation start
+        self.set_datetime_field('ActualStart', datetime.datetime.utcnow())
+
+    def __get_catalog_entry_as_dict(self):
+        """ Gets the catalag entry as a dictionary """
+        catalog_entry = {}
+        change_type = self.get_field_code('ChangeCat1')
+        sub_type = self.get_field_code('ChangeCat2')
+        action_type = self.get_field_code('ChangeCat3')
+        if change_type and sub_type and action_type:
+            catalog_entry["change_type"] = change_type
+            catalog_entry["sub_type"] = sub_type
+            catalog_entry["action_type"] = action_type
+        return catalog_entry
+
+    def __get_missing_cis_as_dict(self):
+        """  Gets the missing cis as a dictionary """
+        missing_cis = {}
+        ci_not_found_reason = self.get_field_code(name='CiNotFoundReason')
+        if ci_not_found_reason:
+            missing_cis['not_found_reason'] = ci_not_found_reason
+        ci_not_found_list = self.get_field_code(name='CiNotFoundList')
+        if ci_not_found_list:
+            missing_cis['not_found_list'] = ci_not_found_list
+        return missing_cis
+
+    def __get_categorization_info_as_dict(self):
+        """ Gets the categorization information as a dictionary """
+        categorization_info = {}
+        automation_level = self.get_field_code('AutomationLevel')
+        if automation_level:
+            categorization_info["AutomationLevel"] = automation_level
+
+        fallback_available = self.get_field_code('FallbackAvailable')
+        if fallback_available:
+            categorization_info["FallbackAvailable"] = fallback_available
+
+        fallback_impact = self.get_field_code('FallbackDuration')
+        if fallback_impact == '2':
+            categorization_info["FallbackImpact"] = True
+        if fallback_impact == '1':
+            categorization_info["FallbackImpact"] = False
+
+        business_impact = self.get_field_code('ImpactsService')
+        if business_impact:
+            categorization_info['BusinessImpact'] = business_impact
+
+        traffic_increase = self.get_field_code('RATrafficIncrease')
+        if traffic_increase:
+            if traffic_increase == "Y":
+                categorization_info["TrafficIncrease"] = True
+            if traffic_increase == "N":
+                categorization_info["TrafficIncrease"] = False
+
+        system_category = self.get_field_code('SystemCategory')
+        if system_category:
+            categorization_info["SystemCategory"] = system_category
+        test_record = self.get_field_code('RATestingRequired')
+        if test_record and test_record == "Y":
+            categorization_info["TestRecord"] = int(self.get_field_code('CCTestRecord'))
+
+        return categorization_info
+
+    def get_record_as_dict(self):
+        """ Gets the record as a dictionary """
+        record_dict = {}
+        impl_plan = self.get_content(name='FullImplementationPlan')
+        if impl_plan:
+            record_dict["implementation_plan"] = impl_plan[-1]['content']
+        impl_duration = self.get_field_code('ValidationDuration')
+        if impl_duration:
+            record_dict["validation_duration"] = impl_duration
+        keywords = self.get_field_code('Keywords')
+        if keywords:
+            record_dict["Keywords"] = keywords
+        validation_steps = self.get_content('ValidationSteps')
+        if validation_steps:
+            record_dict["validation_steps"] = validation_steps[-1]['content']
+        fallback_plan = self.get_content('FullFallbackPlan')
+        if fallback_plan:
+            record_dict["fallback_plan"] = fallback_plan[-1]['content']
+        fallback_duration = self.get_field_code('FallbackExpectedDuration')
+        if fallback_duration:
+            record_dict["fallback_duration"] = fallback_duration
+
+        catalog_entry = self.__get_catalog_entry_as_dict()
+        if catalog_entry:
+            record_dict["catalog_entry"] = catalog_entry
+
+        categorization_type = self.get_field_code('StandardChange')
+        if categorization_type:
+            record_dict["category_type"] = categorization_type
+
+        categorization_info = self.__get_categorization_info_as_dict()
+        if categorization_info:
+            record_dict["categorization_info"] = categorization_info
+
+        if self.get_field_code(name='CiNotFound') == 'Y':
+            missing_cis = self.__get_missing_cis_as_dict()
+            if missing_cis:
+                record_dict["missing_cis"] = missing_cis
+
+        configuration_items = self.get_configuration_items()
+        if configuration_items:
+            record_dict["configuration_items"] = list(map(lambda item: item.name, configuration_items))
+
+        builder_name = self.get_field_code('BuilderName')
+        if builder_name:
+            record_dict["builder_name"] = builder_name
+        builder_group = self.get_field_code('BuilderGroup')
+        if builder_group:
+            record_dict["builder_group"] = builder_group
+
+        return record_dict
+
+    def fill_from_dict(self, record_dict):
+        """ Fill TR record from a dictionary
+
+        :param record_dict: A dictionary of information describing the TR
+        :type record_dict: dict
+        """
+        if record_dict.get('active_system'):
+            self.set_active_system(record_dict['active_system'])
+        if record_dict.get('category_type'):
+            self.categorize(record_dict['category_type'], record_dict['categorization_info'] if
+                            record_dict.get('categorization_info') else None)
+        if record_dict.get('implementation_plan'):
+            self.add_implementation_plan(record_dict['implementation_plan'])
+        if record_dict.get('validation_steps'):
+            self.add_validation_steps(record_dict['validation_steps'])
+        if record_dict.get('Keywords'):
+            self.add_keywords(record_dict['Keywords'])
+        if record_dict.get('validation_duration'):
+            self.add_implementation_duration(record_dict['validation_duration'])
+        if record_dict.get('fallback_plan'):
+            self.add_fallback_plan(record_dict['fallback_plan'])
+        if record_dict.get('fallback_duration'):
+            self.add_fallback_duration(record_dict['fallback_duration'])
+        if record_dict.get('catalog_entry'):
+            catalog_entry = record_dict['catalog_entry']
+            self.set_catalog_entry(catalog_entry['change_type'],
+                                   catalog_entry['sub_type'],
+                                   catalog_entry['action_type'])
+        if record_dict.get('missing_cis'):
+            missing_cis = record_dict['missing_cis']
+            self.set_missing_impacted_cis(missing_cis['not_found_reason'], missing_cis['not_found_list'])
+        if record_dict.get('configuration_item'):
+            self.add_configuration_item(record_dict['configuration_item'])
+        elif record_dict.get('configuration_items'):
+            self.add_configuration_items(record_dict['configuration_items'])
+
+        self.set_builder(record_dict.get('builder_group'), record_dict.get('builder_name'))
+
+    def add_configuration_items(self, names):
+        """Add specified configuration items.
+
+        List of specified items will be retrieved automatically from CMDB and added to record.
+
+        :param names: list of name of the configuration items
+        :type: list[str]
+        :raise exception.NotCmdbItemFound: if no item found matching one of the input names
+        :raise exception.TooManyCmdbItemsFound: if several items found matching input names
+        """
+        for name in names:
+            self.add_configuration_item(name)
+
+    def add_configuration_item(self, name):
+        """Add specified configuration item.
+
+        Properties of specified item will be retrieved automatically from CMDB and added to record.
+
+        :param name: name of the configuration item
+        :type name: str
+        :raise exception.NotCmdbItemFound: if no item found matching input name
+        :raise exception.TooManyCmdbItemsFound: if several items found matching input name
+        """
+        cmdb_info = cmdb.get_item(name=name)
+        self._add_list_items(
+            elements=((field_name, self.get_sword(field_name), value)
+                      for field_name, value in cmdb_info.to_winaproach_dict().items()),
+            # in each query we only add new CI
+            keep_previous_items=False
+        )
+
+    def get_configuration_items(self):
+        """Get list of CMDB items from current record
+
+        :return: list CMDB items in current record
+        :rtype: list[cmdb.CmdbItem]
+        """
+        return [cmdb.CmdbItem(winapproach_dict=winapproach_dict)
+                for winapproach_dict in self._get_list_items(name_prefix='ConfItem')]

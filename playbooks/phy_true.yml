@@ -1,0 +1,162 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    associated_cis: "{{ associated_cis }}"
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}" 
+       
+  tasks: 
+
+  - name: Display input JSON
+    set_fact:
+      serial: 20 #15
+
+  - name: register env information
+    debug: 
+      msg: "{{ serial }}"
+    register: serial_number
+
+  - name: Display input JSON
+    set_fact:
+      jsondata: "{{ associated_cis }}"
+       
+  
+  - name: fetch host details
+    diff_server:
+      host: "{{ associated_cis | to_json }}"
+      cmdb_rtu: "{{CMDB_URL}}"
+    register: host_list  
+  
+  - name: Update SNOW with Failure Status
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ ritm_number }}"
+      status: Waiting
+      comments: |
+        Trigger-2 failed as we were unable to fetch host details from RTU. Investigation in progress.
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost
+    run_once: true
+    register: api_result
+    when: host_list is not defined or (host_list.phy_list | length == 0)
+
+  - name: Fail if no hosts found in the list
+    fail:
+      msg: "No hosts were found in RTU. Hence stopping execution."
+    when: host_list is not defined or (host_list.phy_list | length == 0)   
+  
+  - name: display data
+    debug:
+      var: host_list 
+
+  - set_fact:
+      phy_group: "{{ host_list.phy_list }}" 
+
+  - name: "Freeze Check module"
+    freeze_check:
+      oms_url: '{{OMS_URL}}'
+      change_type_level1: "Infrastructure"
+      change_type_level2: " "
+      change_methods: " "
+      hosts: "{{ phy_group }}"
+      environment: " "
+    delegate_to: localhost
+    register: freeze_information
+    
+  - name: "Debug Freeze_list if present"
+    debug:
+      var: freeze_information.status.Freeze_list
+    when: freeze_information.status is defined and freeze_information.status.Freeze_list is defined
+    
+    
+  - name: Update SNOW with freeze status
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ ritm_number }}"
+      status: Waiting
+      comments: |
+        Following servers are in freeze, automation will be triggered after freeze ends  -
+        {{ freeze_information.status.Freeze_list }}
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost
+    run_once: true
+    register: api_result
+    when:
+      - freeze_information.status is defined
+      - freeze_information.status.Freeze_list is defined
+      - freeze_information.status.Freeze_list | length > 0
+  
+  - name: Fail if freeze is in place
+    fail:
+      msg: "Ending execution as all hosts are within the scope of a freeze. Please retry once the freeze lifts."
+    when:
+      - freeze_information.status is defined
+      - (freeze_information.status.No_freeze | default([], true)) | length == 0
+      - freeze_information.status.Freeze_list | length > 0 
+
+  - name: Add hosts to physicaldeco group
+    add_host:
+      hostname: "{{ item }}"
+      groups: physicaldeco
+    loop: '{{ freeze_information.status.No_freeze }}'
+    
+  - name: register env information
+    debug: 
+      msg: "{{ env }}"
+    register: env_data
+  
+  - debug:
+      var: associated_cis
+         
+  - debug:
+      var: cr
+
+  - debug:
+      var: graceperiod_flag
+
+  - debug:
+      var: retention_days
+
+- import_playbook: physicaldeco/physicaldeco_master_play_phase2.yml
+  vars:
+    phy_group: "{{hostvars.localhost.phy_group}}"
+    serial_number: "{{ serial_number }}"
+    associated_cis: "{{ associated_cis }}"  
+    cr: "{{ cr }}" 
+    ritm_number: "{{ ritm_number }}"
+    graceperiod_flag: "{{ graceperiod_flag }}"
+    retention_days: "{{ retention_days }}"
+    requester_name: "{{ requester_name }}"
+    requester_group: "{{ requester_group }}"    
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"
+    phy_ssh_username: "{{ pAccount_username }}"
+    phy_ssh_password: "{{ secret_key }}"
+    infoblox_username: "{{ infoblox_username }}"
+    infoblox_password: "{{ infoblox_password }}"
+    user_iloroot: "{{ ansible_user }}"
+    password_iloroot: "{{ ansible_password }}"
+    emdb_username: "{{ emdb_username }}" 
+    emdb_password: "{{ emdb_password }}"
+    remote_username: "{{ secret }}"
+    remote_keyfile: "{{ secret_key }}"   
+    artifacts_user: "{{ auth_username }}"
+    artifacts_password: "{{ auth_password }}"
+    btmp_user: "{{ si_username }}"
+    btmp_password: "{{ si_password }}"
+    user_iloadm: "{{ elk_user }}"
+    password_iloadm: "{{ elk_password }}"        
+    synergon_username: "{{ synergon_username }}"
+    synergon_password: "{{ synergon_password }}"
+    network_username: '{{ ar_username }}'    
+    network_password: '{{ ar_token }}'
+    network_usergroup: "{{ lookup('env', 'VROPS_USERNAME') }}"
+    network_grouppass: "{{ lookup('env', 'VROPS_PASSWORD') }}"    
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}"
+  no_log: true
+  run_once: True
+  when: phy_group | length > 0

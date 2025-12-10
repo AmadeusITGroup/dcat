@@ -1,0 +1,199 @@
+--- 
+    - name: Handle the error
+      throttle: 1
+      block:       
+        - set_fact:
+            file_failure_stat: "cmdb_stat_failure.yml"
+            file_suc_cmdb_stat: "cmdb_stat_success.yml"
+            file_failure_stat_cmdb: "cmdb_stat_failure_cmdb.yml"
+            file_failure_stat_owner: "cmdb_stat_failure_owner.yml"
+
+        # - name: Display the JSON file content
+        #   shell: cat record_cmdb_fetch.json
+        #   delegate_to: localhost
+        #   register: TR_result_cmdb_fetch  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_cmdb_fetch: "{{ TR_result_cmdb_fetch.stdout[1:-1] }}"
+        #   delegate_to: localhost         
+
+        # - meta: end_host
+        #   when: record_id_cmdb_fetch == ""    
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost      
+
+                 
+        - name: "Check entry for DECO server for filter hostlist for FQDN and Vcenter Fetch"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+
+
+        - name: Set cmdb_fetch from module update
+          set_fact: 
+            cmdb_fetch: '{{ idem_status.module_update.cmdb_fetch }}'              
+            
+
+        - name: Set fqdn_info from module update
+          set_fact: 
+            fqdn_info: '{{ idem_status.module_update.fqdn_info }}' 
+
+
+        - name: Set vcenter_info from module update
+          set_fact: 
+            vcenter_info: '{{ idem_status.module_update.vcenter_info }}'     
+
+        - name: Set esxi_type from module update
+          set_fact: 
+            esxi_type: '{{ idem_status.module_update.esxi_type }}'           
+
+        - name: Set enclosure name from module update
+          set_fact: 
+            enclosure_name: '{{ idem_status.module_update.enclosure_name }}'  
+
+        # - name: End play for this host
+        #   meta: end_host
+        #   # when: vcenter_info == "F" or fqdn_info == "F" or cmdb_fetch != "F"  
+        #   when: cmdb_fetch != "T" or (esxi_type != "F" and fqdn_info != "F" and vcenter_info != "F" and enclosure_name != "F")
+
+        # - name: End play for this host
+        #   meta: end_host
+        #   when: cmdb_fetch == "T" or (esxi_type == "F" or fqdn_info == "F" or vcenter_info == "F" or enclosure_name == "F")
+
+        # - name: End play for this host
+        #   meta: end_host
+        #   when:
+        #     - esxi_type in ['HPBlade', 'LenovoBlade'] and (cmdb_fetch == "T" or fqdn_info == "F" or vcenter_info == "F" or enclosure_name == "F")
+        #     - esxi_type in ['HPEnclosure', 'LenovoEnclosure'] and (cmdb_fetch == "T" or fqdn_info == "F")
+
+
+        - name: End play for this host
+          meta: end_host
+          when:
+            - (esxi_type in ['HPBlade', 'LenovoBlade'] and (cmdb_fetch == "T" or fqdn_info == "F" or vcenter_info == "F" or enclosure_name == "F")) or
+              (esxi_type in ['HPEnclosure', 'LenovoEnclosure'] and (cmdb_fetch == "T" or fqdn_info == "F"))
+
+        - name: "Updating CMDB with CI status - Deco in Progress"
+          update_cmdb:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: '{{ inventory_hostname |lower }}'
+            instance_id: ' '
+            cmdb_server: "{{ cmdb_url_update }}"
+            user_name: "{{ emdb_username }}"
+            pass_word: "{{ emdb_password }}" 
+            status_value: "Deployed"  
+            status_reason_value: "Deco in Progress"                                 
+          delegate_to: localhost
+          register: output_cmdb_update
+          until: '"Exception" not in output_cmdb_update.cmdb_result or "Error" not in output_cmdb_update.cmdb_result' 
+          retries: 3
+          delay: 30      
+
+        # - name: "CMDB Status check"
+        #   cmdb_fetch_rtu:
+        #     conn_str: "{{ private_endpoint_connection_string }}"
+        #     server_name: '{{ inventory_hostname |lower }}'
+        #     cmdb_server: "{{ cmdb_url_update }}" 
+        #     user_name: "{{ emdb_username }}"
+        #     pass_word: "{{ emdb_password }}" 
+        #   delegate_to: localhost
+        #   register: output
+        #   until: '"Exception" not in output.cmdb_result'
+        #   retries: 3
+        #   delay: 30
+        #   when: cmdb_fetch == "F" and (fqdn_info != "F" and vcenter_info != "F")
+
+        # - debug:
+        #     var: output
+
+        # - name: "End host if CMDB status check is skipped"
+        #   meta: end_host
+        #   when: output.skipped is defined and output.skipped
+
+        - set_fact:
+            enclosure_cmdb_status: "{{output_cmdb_update.cmdb_result}}"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"  
+
+        - name: "host list for failure cmdb and requester"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ enclosure_cmdb_status }}." >> {{file_failure_stat}}                    
+          delegate_to: localhost                    
+          when: '"SUCCESSFULLY" not in output_cmdb_update.cmdb_result'
+
+        - name: "host list for failure cmdb "
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ enclosure_cmdb_status }}." >> {{file_failure_stat_cmdb}}                    
+          delegate_to: localhost                    
+          when: '"SUCCESSFULLY" not in output_cmdb_update.cmdb_result'
+          
+        - name: "host list for failure requester "
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ enclosure_cmdb_status }}." >> {{file_failure_stat_owner}}                    
+          delegate_to: localhost                    
+          when: '"SUCCESSFULLY" not in output_cmdb_update.cmdb_result'
+
+        - meta: end_host
+          when: '"SUCCESSFULLY" not in output_cmdb_update.cmdb_result'
+
+        - name: "host list for success"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], Server status updated to 'Deco in Progress'. You are good to proceed with Reclaiming the server." >> {{file_suc_cmdb_stat}}                    
+          delegate_to: localhost 
+          when: '"SUCCESSFULLY" in output_cmdb_update.cmdb_result'
+
+        # - name: Display the JSON file content
+        #   shell: cat private_endpoint_connection_string.yml
+        #   delegate_to: localhost
+        #   register: result_private_endpoint_connection_string
+    
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+        #   delegate_to: localhost
+
+        - name: "update entry for DECO server for cmdb fetch "
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "cmdb_fetch"
+            status: "T"          
+          register: update_status
+          delegate_to: localhost  
+          when: '"Exception" not in output_cmdb_update.cmdb_result'
+
+
+      rescue:
+        - name: when above one throws error the below task should execute
+          debug:
+             msg: "Exception occurred but rescued - check errors for CMDB_Fetch module"
+
+                  
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"  
+
+        - name: "ESXi failure host list"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], fetch cmdb module failed while fetching server name.either connection or access issue or server not found " >> {{file_failure_stat}}                    
+          delegate_to: localhost          
+
+        - name: "ESXi failure host list"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], fetch cmdb module failed while fetching server name.either connection or access issue or server not found " >> {{file_failure_stat_cmdb}}                    
+          delegate_to: localhost  

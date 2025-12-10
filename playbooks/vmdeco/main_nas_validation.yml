@@ -1,0 +1,74 @@
+---
+- name: "nas validation filter hostlist"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: nas validation filter hostlist
+      ansible.builtin.import_role:
+        name: nas_validation
+        tasks_from: filter_hostlist_nas_validate.yml
+
+- name: "Create TR for nas validation"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_nas_v: ""
+    graceperiod_flag: False
+    nas_validate: "F"
+    vm_status_check_cmdb: "T"
+  tasks:
+    - name: nas validation
+      ansible.builtin.import_role:
+        name: nas_validation
+        tasks_from: create_tr_nas_validation.yml
+
+- name: "nas validation"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no
+  vars:
+    nas_os_detail_w: ""
+  tasks:
+    - name: nas validation fetch vcenter
+      ansible.builtin.import_role:
+        name: nas_validation
+        tasks_from: vcenter_details_before_graceperiod.yml
+      when: (nas_validate == "F") and nas_validate is defined and (vm_status_check_cmdb == "T") and vm_status_check_cmdb is defined
+
+    - name: nas validation - Get OS type
+      ansible.builtin.import_role:
+        name: nas_validation
+        tasks_from: fetch_os_type_bgp.yml
+      when: (nas_validate == "F") and nas_validate is defined and (vm_status_check_cmdb == "T") and vm_status_check_cmdb is defined
+
+    # - name: nas validation - Windows
+    #   ansible.builtin.import_role:
+    #     name: nas_validation
+    #     tasks_from: nas_validation_windows.yml
+    #   when: nas_os_detail_w == "windows" and nas_os_detail_w is defined and (nas_validate == "F") and nas_validate is defined and (vm_status_check_cmdb == "T") and vm_status_check_cmdb is defined
+      
+    - name: nas validation - Linux
+      ansible.builtin.import_role:
+        name: nas_validation
+        tasks_from: nas_validation_linux.yml
+      when: nas_os_detail_w == "linux" and nas_os_detail_w is defined and (nas_validate == "F") and nas_validate is defined and (vm_status_check_cmdb == "T") and vm_status_check_cmdb is defined
+
+- name: "add info to TR for nas validation"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_nas_v: ""
+    graceperiod_flag: False
+    nas_validate: "F"
+    vm_status_check_cmdb: "T"
+  tasks:
+    - name: nas validation
+      ansible.builtin.import_role:
+        name: nas_validation
+        tasks_from: add_info_nas_validate.yml
+
+    - name: nas validation
+      ansible.builtin.import_role:
+        name: nas_validation
+        tasks_from: logger_nas_validate.yml

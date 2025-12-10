@@ -1,0 +1,446 @@
+---
+# - name: "This playbook is to add healthcheck info in TR"
+#   hosts: localhost
+#   gather_facts: no  
+#   vars:
+#     graceperiod_flag: true
+
+        
+#   tasks:      
+      ####Adding Info to TR 
+
+    - name: "Handling TR record_id"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""   
+
+# Success #########################
+
+        - name: Display the JSON file content
+          shell: cat san_switches_success.yml
+          delegate_to: localhost
+          register: result_check_san_suc
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_san_suc: "{{ result_check_san_suc.stdout }}" 
+          delegate_to: localhost
+          
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_san_suc }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: check_san_suc != ""  
+
+
+        - name: Display the JSON file content
+          shell: cat check_remedy_success.yml
+          delegate_to: localhost
+          register: result_check_remedy_suc
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy_suc: "{{ result_check_remedy_suc.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_remedy_suc }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: check_remedy_suc != ""  
+
+
+        - name: Display the JSON file content
+          shell: cat check_synergon_success.yml
+          delegate_to: localhost
+          register: result_check_synergon_suc
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_synergon_suc: "{{ result_check_synergon_suc.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_synergon_suc }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: check_synergon_suc != ""     
+
+
+        - name: Display the JSON file content
+          shell: cat ilo_command_success.yml
+          delegate_to: localhost
+          register: result_check_ilo_suc
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ilo_suc: "{{ result_check_ilo_suc.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_ilo_suc }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: check_ilo_suc != ""             
+           
+
+        - name: Display the JSON file content
+          shell: cat esxi_ssh_success.yml
+          delegate_to: localhost
+          register: result_check_ssh_suc
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ssh_suc: "{{ result_check_ssh_suc.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_ssh_suc }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: check_ssh_suc != ""  
+ 
+
+        - name: Display the JSON file content
+          shell: cat vcenter_api_success.yml
+          delegate_to: localhost
+          register: result_check_vcenter_api_suc
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vc_api_suc: "{{ result_check_vcenter_api_suc.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_vc_api_suc }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: check_vc_api_suc != ""  
+
+
+        - name: Display the JSON file content
+          shell: cat vcenter_host_facts_success.yml
+          delegate_to: localhost
+          register: result_vcenter_facts_suc
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vc_facts_suc: "{{ result_vcenter_facts_suc.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_vc_facts_suc }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: check_vc_facts_suc != ""  
+
+#########################################################
+                                                               
+
+        - name: Display the JSON file content
+          shell: cat check_final_success.yml
+          delegate_to: localhost
+          register: result_check_final_suc
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_final_success: "{{ result_check_final_suc.stdout }}" 
+          delegate_to: localhost                                                                                          
+        
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the ESXI deco API's which are up and running successfully"
+            form3: "***********************************************************************"            
+        - set_fact:
+            content_check_final_suc: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_final_success }}"
+          when: check_final_success != ""  
+          
+
+      rescue:
+        - debug:
+            var: 'check_final_success'
+
+# Update success message in TR
+
+    - name: "Handling add message in TR"
+      block: 
+
+        - name: ESXi health check success list
+          shell: cat check_final_success.yml
+          delegate_to: localhost
+          register: esxi_result              
+
+        - name: Save the ESXi health success list to a Variable as a Fact
+          set_fact:
+            esxi_check_final_suc: "{{ esxi_result.stdout }}" 
+          delegate_to: localhost     
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""              
+     
+       
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{ record_id_healthcheck }}"
+            message: "{{ content_check_final_suc }}"             
+            # username: "DecoP112686"     
+            # password: "opFCtCpIMzmC" 
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost
+          register: add_msg_output
+          when: esxi_check_final_suc != ""
+                                
+
+      rescue:
+        - debug:
+            var: add_msg_output            
+
+
+  
+# Failure #########################
+
+    - name: "Handling TR record_id"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""   
+
+        - name: Display the JSON file content
+          shell: cat san_switches_fail.yml
+          delegate_to: localhost
+          register: result_check_san_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_san_fail: "{{ result_check_san_fail.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_san_fail }}" >> check_final_fail.yml                    
+          delegate_to: localhost            
+          when: check_san_fail != ""  
+
+
+        - name: Display the JSON file content
+          shell: cat check_remedy_fail.yml
+          delegate_to: localhost
+          register: result_check_remedy_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy_fail: "{{ result_check_remedy_fail.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_remedy_fail }}" >> check_final_fail.yml                    
+          delegate_to: localhost            
+          when: check_remedy_fail != ""  
+
+
+        - name: Display the JSON file content
+          shell: cat check_synergon_fail.yml
+          delegate_to: localhost
+          register: result_check_synergon_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_synergon_fail: "{{ result_check_synergon_fail.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_synergon_fail }}" >> check_final_fail.yml                    
+          delegate_to: localhost            
+          when: check_synergon_fail != ""     
+
+
+        - name: Display the JSON file content
+          shell: cat ilo_command_fail.yml
+          delegate_to: localhost
+          register: result_check_ilo_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ilo_fail: "{{ result_check_ilo_fail.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_ilo_fail }}" >> check_final_fail.yml                    
+          delegate_to: localhost            
+          when: check_ilo_fail != ""             
+           
+
+        - name: Display the JSON file content
+          shell: cat esxi_ssh_fail.yml
+          delegate_to: localhost
+          register: result_check_ssh_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_ssh_fail: "{{ result_check_ssh_fail.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_ssh_fail }}" >> check_final_fail.yml                    
+          delegate_to: localhost            
+          when: check_ssh_fail != ""  
+
+
+        - name: Display the JSON file content
+          shell: cat vcenter_api_fail.yml
+          delegate_to: localhost
+          register: result_check_vcenter_api_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vc_api_fail: "{{ result_check_vcenter_api_fail.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_vc_api_fail }}" >> check_final_fail.yml                    
+          delegate_to: localhost            
+          when: check_vc_api_fail != ""  
+
+
+        - name: Display the JSON file content
+          shell: cat vcenter_host_facts_fail.yml
+          delegate_to: localhost
+          register: result_vcenter_facts_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vc_facts_fail: "{{ result_vcenter_facts_fail.stdout }}" 
+          delegate_to: localhost
+
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_vc_facts_fail }}" >> check_final_fail.yml                    
+          delegate_to: localhost            
+          when: check_vc_facts_fail != ""  
+
+# =========================================================================================================
+
+
+
+
+
+##########################################
+
+        - name: Display the JSON file content
+          shell: cat check_final_fail.yml
+          delegate_to: localhost
+          register: result_check_final_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_final_fail: "{{ result_check_final_fail.stdout }}" 
+          delegate_to: localhost                                                                                          
+        
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the list ESXI deco API's which is unavaiable now"
+            form3: "***********************************************************************"            
+        - set_fact:
+            content_check_final_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_final_fail }}"
+          when: check_final_fail != ""  
+       
+
+      rescue:
+        - debug:
+            var: check_final_fail
+
+    - name: "Handling add message in TR"
+      block: 
+
+        - name: ESXi_host list
+          shell: cat check_final_fail.yml
+          delegate_to: localhost
+          register: esxi_result              
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            esxi_check_final: "{{ esxi_result.stdout }}" 
+          delegate_to: localhost     
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""              
+     
+       
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{ record_id_healthcheck }}"
+            message: "{{ content_check_final_fail }}"             
+            # username: "DecoP112686"     
+            # password: "opFCtCpIMzmC" 
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost
+          register: add_msg_output
+          when: esxi_check_final != ""
+                                
+
+      rescue:
+        - debug:
+            var: add_msg_output
+
+    - name: "Close TR"
+      block:  
+        
+        - name: esxi_host list
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: esxi_result             
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ esxi_result.stdout[1:-1] }}"  
+          delegate_to: localhost
+
+
+        - name: "[CLOSE TR]"
+          close_tr:
+            record_id: "{{ record_id_healthcheck }}"
+            # username: "DecoP112686"
+            # password: "opFCtCpIMzmC"
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          register: close_tr_output
+                               
+
+      rescue:
+        - debug:
+            var: close_tr_output         

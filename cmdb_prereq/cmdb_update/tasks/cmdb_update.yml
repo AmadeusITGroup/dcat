@@ -1,0 +1,252 @@
+---
+    - name: Initiating the CMDB update module task
+      throttle: 1
+      vars:
+        input: "{{ lookup('file','config.json') | from_json }}"
+        
+      block:
+        - name: set env data
+          set_fact:
+            env_data: "{{ hostvars.localhost.env_data }}"
+
+        - debug:
+            var: env_data
+
+        - name: set DEV env variable
+          set_fact:
+            state_file: "{{ input.dev.state_file_url }}"
+            lookup_file: "{{ input.dev.lookup_file }}"
+            ipam_grid: "{{ input.dev.ipam_grid }}" 
+            synergon_url: "{{ input.dev.synergon_url }}" 
+            cmdb_url_update: "{{ input.dev.cmdb_url_update }}" 
+            nas_box: "{{ input.dev.nas_box }}"
+            ipam_network_view: "{{ input.dev.ipam_network_view }}"
+            dns_grid: "{{ input.dev.dns_grid }}"
+            dns_network_view: "{{ input.dev.dns_network_view }}"
+            dev_box_a: "{{ input.dev.dev_box_a }}"
+            dev_box_b: "{{ input.dev.dev_box_b }}"
+            winaproach_category: "{{ input.dev.winaproach_category }}"
+            ptr_system: "{{ input.dev.ptr_system }}"
+            bird_api: "{{ input.dev.bird_api }}"
+          run_once: True
+          delegate_to: localhost
+          when: env_data == "dev"
+
+        - name: set PROD env variable
+          set_fact:
+            state_file: "{{ input.prod.state_file_url }}"
+            lookup_file: "{{ input.prod.lookup_file }}"
+            ipam_grid: "{{ input.prod.ipam_grid }}"
+            synergon_url: "{{ input.prod.synergon_url }}"
+            cmdb_url_update: "{{ input.prod.cmdb_url_update }}"
+            ipam_network_view: "{{ input.prod.ipam_network_view }}"
+            dns_network_view: "{{ input.prod.dns_network_view }}"
+            dns_grid: "{{ input.prod.dns_grid }}"
+            nas_box: "{{ input.prod.nas_box }}"
+            prod_box_c: "{{ input.prod.prod_box_c }}"
+            prod_box_d: "{{ input.prod.prod_box_d }}"
+            prod_box_e: "{{ input.prod.prod_box_e }}"
+            prod_box_f: "{{ input.prod.prod_box_f }}"
+            prod_box_g: "{{ input.prod.prod_box_g }}"
+            winaproach_category: "{{ input.prod.winaproach_category }}"
+            ptr_system: "{{ input.prod.ptr_system }}"
+            bird_api: "{{ input.prod.bird_api }}" 
+          run_once: True
+          delegate_to: localhost                                       
+          when: env_data == "prod"
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            cmdb_url_update: "{{ cmdb_url_update }}" 
+          delegate_to: localhost
+
+        - set_fact:
+            file_cmdb_success: "vm_cmdb_success.yml"
+            file_cmdb_failure: "vm_cmdb_failure.yml"
+            deco_hosts: "deco_hosts.txt"
+            CMDB_RESULT: ""
+
+        - name: Display the JSON file content for cmdb update
+          shell: cat record_cmdb_upd.json
+          delegate_to: localhost
+          register: TR_result_cmdb_up  
+
+        - name: save the Json data to a Variable as a Fact for cmdb update
+          set_fact:
+            record_id_cmdb_up: "{{ TR_result_cmdb_up.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: record_id_cmdb_up == ""
+
+        # - name: "Write Success host to file"
+        #   shell: echo {{ inventory_hostname }} >> {{ deco_hosts }}                    
+        #   delegate_to: localhost         
+            
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "change hostname to lower case"
+          set_fact:
+            cmdb_vmname_new: "{{inventory_hostname |lower }}"               
+                          
+        - name: "Test custom module for Updating CMDB with CI status after update"
+          update_cmdb:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: '{{cmdb_vmname_new}}'
+            instance_id: ''
+            cmdb_server: "{{ cmdb_url_update }}"
+            user_name: "{{ emdb_username }}"
+            pass_word: "{{ emdb_password }}" 
+            status_value: "Deployed"  
+            status_reason_value: "Deco in Progress" #"Not in Production"                                 
+          delegate_to: localhost
+          register: output
+          until: '"Exception" not in output.cmdb_result or "Error" not in output.cmdb_result' 
+          retries: 3
+          delay: 30 
+
+        - debug:
+            var: output
+            
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Failure information to file in rescue block"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ output.cmdb_result }} " >> {{file_cmdb_failure}}                    
+          delegate_to: localhost
+          when: '"SUCCESSFULLY" not in output.cmdb_result'
+
+        # - name: Check snow api call back
+        #   update_snow:
+        #     action: Phase1
+        #     ritm_number: "{{ ritm_number}}"
+        #     status: Running
+        #     comments: Issue on CMDB stauts change from In Production to Deco in Progress. 
+        #     username: "{{ SN_USERNAME }}"
+        #     password: "{{ SN_PASSWORD }}"
+        #   delegate_to: localhost 
+        #   run_once: True
+        #   register: api_result 
+        #   when: '"SUCCESSFULLY" not in output.cmdb_result'         
+
+        - meta: end_host
+          when: '"SUCCESSFULLY" not in output.cmdb_result'          
+
+        - name: "Test custom module fetch CMDB with CI status after updating"
+          cmdb_fetch_after_update_workflow:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: '{{cmdb_vmname_new}}'
+            cmdb_server: "{{ cmdb_url_update }}" 
+            instance_id: ''
+            user_name: "{{ emdb_username }}"
+            pass_word: "{{ emdb_password }}" 
+          delegate_to: localhost
+          register: outputcmdb
+          until: '"Exception" not in outputcmdb.cmdb_result_after or "Failed" not in outputcmdb.cmdb_result_after' 
+          retries: 3
+          delay: 20           
+          when: '"SUCCESSFULLY" in output.cmdb_result'
+
+        - set_fact:
+            cmdb_result_fetch: "{{outputcmdb.cmdb_result_after}}" 
+            
+        # - name: Check snow api call back
+        #   update_snow:
+        #     action: Phase1
+        #     ritm_number: "{{ ritm_number }}"
+        #     status: Running
+        #     comments: CMDB status has been successfully changed to Deco in progress. 
+        #     username: "{{ SN_USERNAME }}"
+        #     password: "{{ SN_PASSWORD }}"
+        #   delegate_to: localhost
+        #   run_once: True  
+        #   register: api_result
+        #   when: '"SUCCESSFULLY" in output.cmdb_result'                          
+                      
+#################################################################          
+
+        - name: "success information to file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO],{{cmdb_result_fetch}}" >> {{file_cmdb_success}}                    
+          delegate_to: localhost
+          when: '"SUCCESSFULLY" in cmdb_result_fetch'
+
+        # - name: "success information to file"
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], success" >> {{file_cmdb_success}}                    
+        #   delegate_to: localhost
+     
+
+        - name: "Write Success host to file"
+          shell: echo {{ inventory_hostname }} >> {{ deco_hosts }}                    
+          delegate_to: localhost
+          when: '"SUCCESSFULLY" in cmdb_result_fetch' 
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost            
+
+        - name: "Check entry for DECO server"
+          final_create_metadata:
+            cr: "{{ cr }}"
+            awx_job_id: "{{ tower_job_id }}" 
+            ritm_number: "{{ ritm_number }}"
+            requestor_name: "{{ requester_name }}"
+            retention_days: "{{ retention_days }}"
+            requestor_group: "{{ requester_group }}"
+            pillar: "{{ pillar }}"
+            mit_ticket: "{{ mit_ticket }}"
+            cmdb: "T"
+            connection_string: "{{ private_endpoint_connection_string }}"
+          register: metadata_update
+          delegate_to: localhost
+          when: '"SUCCESSFULLY" in output.cmdb_result'
+
+        - debug:
+            var: metadata_update 
+          when: '"SUCCESSFULLY" in output.cmdb_result'           
+              
+        
+                                           
+        - name: "Failure information to File"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR],Exception occured in CMDB update module kindly check.Either connection issue or server not found" >> {{file_cmdb_failure}}                    
+          delegate_to: localhost
+          when: '"Failed to" in cmdb_result_fetch'        
+            
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for Update_CMDB module"       
+
+        - set_fact:
+            cmdb_result: "{{ output.cmdb_result }}, check errors for CMDB UPDATE module"
+##################################################################
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Failure information to file in rescue block"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ cmdb_result }}" >> {{file_cmdb_failure}}                    
+          delegate_to: localhost

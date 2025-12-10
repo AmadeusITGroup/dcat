@@ -1,0 +1,188 @@
+---
+
+
+    - name: Initiating vCenter Deregister
+      throttle: 1
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_vcenter.json
+          delegate_to: localhost
+          register: TR_result_vcenter_esxi
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_vcenter_esxi: "{{ TR_result_vcenter_esxi.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: record_id_vcenter_esxi== ""   
+
+        - set_fact:
+            vcenter_success: "vcenter_success.yml"
+            vcenter_failure: "vcenter_failure.yml"
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server from Azure"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"                        
+          register: idem_status
+          delegate_to: localhost    
+
+        # - debug:
+        #     var: idem_status
+
+
+
+        - set_fact: 
+            ipam_cleanup: '{{idem_status.module_update.ipam_cleanup}}'            
+
+        - set_fact: 
+            vcenter_cleanup: '{{idem_status.module_update.vcenter_cleanup}}'    
+
+        - name: End play for this host
+          meta: end_host
+          when: vcenter_cleanup != "F" or ipam_cleanup != "T"                
+
+
+
+        - set_fact: 
+            esxi_fqdn: '{{idem_status.module_update.fqdn_info}}'
+
+        - set_fact: 
+            v_center_before: '{{idem_status.module_update.vcenter_info}}'
+
+        - name: "Construct vCenter FQDN for specific known short hostnames"
+          set_fact:
+            fqdn_vc: "{{ v_center_before }}.vclassic.net"
+          when: 
+            - v_center_before is search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|mucamnaz1|mucamnvcpa1|mucamnvcpa2|mucamnaz2|mucamnvcpb1|mucamnvcpb2|mucamnaz3|mucamnvcpc1|mucamnvcpc2")
+            - v_center_before is not search("\\.vclassic\\.net$")
+
+        - name: "Construct vCenter FQDN for standard/default cases"
+          set_fact:
+            fqdn_vc: "{{ v_center_before }}.muc.msp.net"
+          when:
+            - v_center_before is not search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|mucamnaz1|mucamnvcpa1|mucamnvcpa2|mucamnaz2|mucamnvcpb1|mucamnvcpb2|mucamnaz3|mucamnvcpc1|mucamnvcpc2")
+            - v_center_before is not search("\\.muc\\.msp\\.net$")
+
+
+        - name: Fetch ESXi details
+          enclosure_synergon_data_fetch:
+            enclosure: "{{ inventory_hostname }}"
+            synergon_api: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+          delegate_to: localhost
+          register: esxi_data   
+
+        - name: Set fact for ESXi cluster
+          set_fact:
+            esxi_cluster: "{{ esxi_data.esxi_details[0].cluster }}"
+
+        - name: Set fact for ESXi datacenter
+          set_fact:
+            esxi_datacenter: "{{ esxi_data.esxi_details[0].datacenter }}"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          run_once: true
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          run_once: true
+
+
+
+        - name: Remove ESXi Host from vCenter
+          community.vmware.vmware_host:
+            hostname: '{{ fqdn_vc }}'
+            username: '{{ vcenter_username }}'
+            password: '{{ vcenter_password }}'
+            datacenter: '{{ esxi_datacenter }}'
+            cluster: '{{ esxi_cluster }}'
+            esxi_hostname: '{{ esxi_fqdn }}'
+            state: absent
+          delegate_to: localhost
+
+
+
+        - name: Try to fetch ESXi host facts after removal
+          community.vmware.vmware_host_facts:
+            hostname: "{{ fqdn_vc }}"
+            username: "{{ vcenter_username }}"
+            password: "{{ vcenter_password }}"
+            esxi_hostname: "{{ esxi_fqdn }}"
+            validate_certs: no
+          delegate_to: localhost
+          register: check_host
+          ignore_errors: yes
+
+
+        - name: Validate if host was removed from vCenter
+          assert:
+            that:
+              - check_host.failed
+            fail_msg: "Host {{ esxi_fqdn }} was not removed from vCenter."
+            success_msg: "✅ Host {{ esxi_fqdn }} successfully removed from vCenter."
+
+
+
+
+        - name: Log ESXi host removal failure
+          shell: echo "!vCenter Host Removal - {{ time }}, [ERROR], ESXi host {{ esxi_fqdn }} still present in vCenter after removal attempt." >> {{ vcenter_failure }}
+          when: not check_host.failed
+          delegate_to: localhost
+
+        - name: Stop execution as host removal from vCenter failed
+          meta: end_host
+          when: not check_host.failed
+
+
+        - name: "update entry for DECO server for vcenter Deregister"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "vcenter_cleanup"
+            status: "T"           
+          register: update_status_info_state
+          delegate_to: localhost
+          when: check_host.failed
+
+
+        - name: Log ESXi host removal success
+          shell: echo "#vCenter Host Removal - {{ time }}, [INFO], ESXi host {{ esxi_fqdn }} successfully removed from vCenter." >> {{ vcenter_success }}
+          when: check_host.failed
+          delegate_to: localhost
+
+
+
+      rescue: 
+        - name: Log debug message for exception
+          debug:
+            msg: "Exception occurred during vCenter host removal validation — rescued gracefully. Please check the vCenter removal module tasks."
+        
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          run_once: true
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          run_once: true
+
+
+        - name: Failure information to file in rescue block
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Exception occurred during vCenter removal validation for host {{ esxi_fqdn }}." >> {{ vcenter_failure }}                    
+          delegate_to: localhost

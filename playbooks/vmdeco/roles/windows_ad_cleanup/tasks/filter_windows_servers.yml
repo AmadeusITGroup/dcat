@@ -1,0 +1,10 @@
+---
+    - name: Filter out windows servers
+      throttle: 1
+      block:
+        
+        - name: check windows OS type and filter out windows servers
+          shell: echo "{{ inventory_hostname }}, " >> win_ad_server_list.yml
+          delegate_to: localhost
+          when: os_type == "windows" and cmdb_check == "T"
+      

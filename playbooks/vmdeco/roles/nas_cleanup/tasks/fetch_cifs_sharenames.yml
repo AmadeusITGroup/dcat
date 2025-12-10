@@ -1,0 +1,143 @@
+# - name: "CIFS Storage Cleanup Module"
+#   hosts: all
+#   gather_facts: no
+
+#   collections:
+#     - netapp.ontap
+
+#   vars:
+#     client_match : '{{ inventory_hostname }}'
+#     cifs_share_access_control: ""
+#     #user_group_acl: "" ## should be given explicitly if need to be deleted
+
+  # tasks:
+
+    - name: handle the error fetch cifs share names which will be further looped for cifs cleanup
+      throttle: 1
+      block:
+        - name: awx creds username to var
+          set_fact:
+            pAccount_user: "{{ synergon_username }}"
+          delegate_to: localhost
+
+        - name: awx creds password to var
+          set_fact:
+            pAccount_pass: "{{ synergon_password }}"
+          delegate_to: localhost
+
+        - name: Gathering  cifs share information
+          nas_custom_fetch_cifs_windows:
+            username: "{{ pAccount_user }}"
+            password:  "{{ pAccount_pass }}"
+            storage_box: "{{ nas_hostname }}"
+            vm_name: "{{ client_match }}"
+          delegate_to: localhost
+          register: share_result_cifs
+          until: '"Exception" not in share_result_cifs.share_output'
+          retries: 3
+          delay: 20 
+
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "VM host list"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Exception occurred while fetching share information of server in {{ nas_hostname }} for NAS storage cleanup {{share_result_cifs.share_output }} Kindly check fetch_cifs_sharenames module in NAS storage."  >> {{file_failure}}                    
+          delegate_to: localhost
+          when: share_result_cifs.share_output is search ("Exception") 
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_nas_hostname_failure.txt                    
+          delegate_to: localhost 
+          when: share_result_cifs.share_output is search ("Exception") 
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "update entry for DECO server"
+          azure_update_module_vals:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "nasstorage"
+            status: "F"             
+          register: update_status
+          delegate_to: localhost
+          when: share_result_cifs.share_output is search ("Exception")
+
+        - meta: end_host
+          when: share_result_cifs.share_output is search ("Exception") 
+
+        - set_fact:        
+            share_result: '{{share_result_cifs.share_output.0}}'
+          when: share_result_cifs.share_output is not search ("There are no entries")  
+
+        - set_fact:        
+            share_result_no_entries: '{{share_result_cifs.share_output.0  }}'
+          when: share_result_cifs.share_output is search ("There are no entries")                       
+  
+        - name:  seggregating all share information of all storage box
+          shell: echo "{{ share_result }}">> {{file_export_collect}}                    
+          delegate_to: localhost
+          register: output
+          when: share_result_cifs.share_output is not search ("There are no entries")
+
+        - name: "NAS logs for windows"
+          shell: echo "{{ share_result_cifs.share_output.1 }}" >> nas_info_gather.txt
+          delegate_to: localhost        
+          when: share_result_cifs.share_output.0 is not search ("no entries")
+
+      rescue:
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for nfs_storage_deletion module" 
+
+        - set_fact:
+            vm_cifs_msg: "Exception occurred while fetching cifs share names of server in {{ nas_hostname }} for NAS storage cleanup. Kindly check fetch_cifs_sharenames module in NAS storage."
+
+##################################################################
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "VM host list"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Exception occurred while fetching cifs share names of server in {{ nas_hostname }} for NAS storage cleanup. Kindly check fetch_cifs_sharenames module in NAS storage."  >> {{file_failure}}                    
+          delegate_to: localhost    
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_nas_hostname_failure.txt                    
+          delegate_to: localhost        
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "update entry for DECO server"
+          azure_update_module_vals:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "nasstorage"
+            status: "F"            
+          register: update_status
+          delegate_to: localhost 

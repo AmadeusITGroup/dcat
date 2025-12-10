@@ -1,0 +1,22 @@
+---
+- name: "VM master playbook"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: Run FQDN
+      ansible.builtin.import_role:
+        name: fqdn
+        tasks_from: fetch_fqdn.yml
+      when: (fqdn == "F") and fqdn is defined
+
+- name: "Create TR for FQDN"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    fqdn: false
+  tasks:
+    - name: Run FQDN
+      ansible.builtin.import_role:
+        name: fqdn
+        tasks_from: create_tr_fqdn.yml

@@ -1,0 +1,75 @@
+---
+    - name: "Fetching location info for the severs "
+      block:
+       
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost      
+                
+        - name: "Check entry for DECO server for filter hostlist for cmdb duplicate list"
+          azure_update_ref_phy:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+ 
+        - name: printing idem status
+          debug:
+            var: idem_status
+
+        - set_fact:
+            cmdb_update: '{{idem_status.module_update.cmdb_update}}'
+
+        - name: printing cmdb_update status
+          debug:
+            var: cmdb_update
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "extracting location info"
+          cmdb_fetch_dcm_info:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: "{{ inventory_hostname |lower }}"
+            cmdb_server: "{{ cmdb_url_update }}"
+            user_name: "{{ emdb_username }}"
+            pass_word: "{{ emdb_password }}"
+          delegate_to: localhost
+          register: location_dcm
+          when: cmdb_update == "T"
+  
+        - name: location info of each machine
+          debug:
+            var: location_dcm
+          when: cmdb_update == "T"
+  
+        - name: pushing the value to the file
+          shell: echo -e "{{location_dcm.status}}" >> dcm.yml
+          delegate_to : localhost
+          when: cmdb_update == "T" and location_dcm.status is not none
+        
+        - name: Alert when no data found
+          debug:
+            msg: "No location info fetched for {{ inventory_hostname }} in CMDB. Please check BMC portal."
+          when: cmdb_update == "T" and location_dcm.status is none
+        
+        - name: End play when no data found
+          meta: end_host
+          when: cmdb_update == "T" and location_dcm.status is none
+ 
+      rescue:
+        - debug:
+            msg: "Failed to fetch host serial info - DCM"

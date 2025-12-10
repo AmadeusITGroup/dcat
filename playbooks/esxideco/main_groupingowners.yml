@@ -1,0 +1,12 @@
+---
+- name: "failure handler test"
+  # hosts: all:vmdeco
+  hosts: "{{ target_hosts }}"
+  gather_facts: no
+  vars:
+    cmdb_url_update: "{{ hostvars['localhost']['config_data']['cmdb_url_update'] }}"
+  tasks:
+    - name: grouping
+      ansible.builtin.import_role:
+        name: grouping
+        tasks_from: owner_grouping

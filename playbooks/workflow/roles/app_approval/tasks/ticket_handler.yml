@@ -1,0 +1,211 @@
+---             
+    - name: "Handling TR"
+      throttle: 1
+      block:
+        - set_fact:
+            logger_file: "deco_results.yml"
+
+        - set_fact:
+            data: "{{ item.value }}"            
+
+        - name: "Custom module [CREATE TR]"
+          block:
+            - name: "Create TR"
+              create_tr:
+                record_type: "TR"
+                title: "CSTY:DECO:DCAT : DECO - App Owner Approval"
+                assignee_name: "DecoP112686"
+                assignee_group: "{{ item.key }}"
+                severity: "4"
+                overview: "CSTY:DECO:DCAT - App Owner Approval"
+                parent_id: "{{ cr }}"
+                username: "{{ winaproach_username }}"
+                password: "{{ winaproach_password }}"
+              delegate_to: localhost
+              no_log: False
+              register: create_tr_output
+          rescue:
+            - name: "Debugging"
+              debug:
+               msg: "Failed to create TR with assignee group- {{ item.key }}. Creating TR with requester group- {{ requester_group }}."
+            - name: "Create TR"
+              create_tr:
+                record_type: "TR"
+                title: "CSTY:DECO:DCAT : DECO - App Owner Approval"
+                assignee_name: "DecoP112686"
+                assignee_group: "{{ requester_group }}"
+                severity: "4"
+                overview: "CSTY:DECO:DCAT - App Owner Approval"
+                parent_id: "{{ cr }}"
+                username: "{{ winaproach_username }}"
+                password: "{{ winaproach_password }}"
+              delegate_to: localhost
+              no_log: False
+              register: create_tr_output
+            - name: "write data to file"
+              shell: echo "Tried assigning ticket to {{ item.key }} and DCAT automation was unable to assign ticket, assigned ticket to {{ requester_group }}" >> {{ logger_file }}
+              delegate_to: localhost
+
+
+
+        - set_fact:
+            record_app: "{{ create_tr_output.record_id }}"
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_app }}"
+          register: add_document
+          delegate_to: localhost               
+
+
+        - set_fact:
+            my_string: "{{ data  | join('\n') }}"
+
+
+        - set_fact:
+            form1: "************************************************************************"
+            form2: "! Please note that the Requestor is Accountable to verify that the" 
+            form3: "! VM/Physical/ESXi server is NOT being used by any other application" 
+            form4: "! before submitting for DECO request."
+            form5: "! Kindly confirm all Application References to this server/IP is removed"
+            form6: "! and there is no inflow of traffic."
+            form7: "! Ensure EMDB Maintenance is activated to avoid generating IRs or PTRs"
+            form8: "************************************************************************"
+            form9: "! NOTE: Do close the TR if all apps are removed and good to proceed" 
+            form10: "! with the DECO" 
+            form11: "Below are the Servers submitted for DECO - kindly validate and confirm"
+            form12: "************************************************************************"            
+        - set_fact:
+            owner_group_content: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ form4 + '\n' + form5 +'\n'+ form6 +'\n'+ form7 + '\n'+ form8 + '\n' + form9+ '\n' + form10 + '\n' + form11 + '\n' + form12 + '\n' + my_string }}"
+
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{record_app}}"
+            message: "{{ owner_group_content }}"             
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost
+          register: add_msg_output
+
+        - name: Check snow api call back
+          update_snow:
+            action: Phase1
+            ritm_number: "{{ ritm_number }}"
+            status: Running
+            comments: Application removal validation TR {{record_app}} is created. Kindly close the TR once all the applications have been removed from all the servers. 
+            username: "{{ SN_USERNAME }}"
+            password: "{{ SN_PASSWORD }}"
+          delegate_to: localhost
+          run_once: True  
+          register: api_result
+          when: add_msg_output.added_msg == true
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost                         
+
+        - name: "Check entry for DECO server"
+          final_app_tr:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ record_app }}"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}"
+          loop: "{{ data }}"   
+          register: app_tr_add
+          delegate_to: localhost
+
+        - debug:
+            var: app_tr_add           
+
+
+        - name: Display the JSON file content
+          shell: cat no_data_file.txt
+          delegate_to: localhost
+          register: no_data
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            no_data_v: "{{ no_data.stdout }}" 
+          delegate_to: localhost 
+
+              
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the list of servers with wrong CMDB data"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_data: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ no_data_v }}"
+          when:  no_data_v != ""
+
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            ptr_title: "CSTY:DECO:DCAT : DECO: CMDB DATA INCORRECT"
+            tr_map: "{{ record_app }}"
+            assignee_group: DINFDECO #"OSOINT"  
+            ptr_logs: "{{ content_data }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_out_data
+          until: '"Successfully" in ptr_out_data.msg'
+          retries: 3
+          delay: 10            
+          when:  no_data_v != ""
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ inventory_hostname }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_out_data.id }}"
+            event: "VM DECO: App approval TR creation failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}"  
+          register: ptr_add
+          when: no_data_v != ""
+
+      rescue:
+        - debug:
+            msg: "DECO flow unable to categorize group for host"

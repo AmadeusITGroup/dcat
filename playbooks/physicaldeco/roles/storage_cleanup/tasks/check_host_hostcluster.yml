@@ -1,0 +1,227 @@
+- name: "Check Host is part of Host Cluster"
+  throttle: 1
+  block:
+    - set_fact:
+          storage_sys: "{{ storagesys }}"  
+    - debug:
+        var: storage_sys
+
+    - set_fact:
+        hostcluster_name: ""  
+    - set_fact:
+        svc_wwpns: "" 
+    - set_fact:
+        host_status: ""
+    - set_fact:
+        compare_output: ""            
+
+    - name: "Check if host part of host cluster."
+      ibm.spectrum_virtualize.ibm_svcinfo_command:
+        command:  "svcinfo lshost {{ inventory_hostname }}"
+        clustername: "{{ storage_sys }}"
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+      register: hostclusterdata
+      ignore_errors: True
+
+    - name: "Debug hostclustername output"
+      debug:
+        var: hostclusterdata
+
+    # - name: Get timestamp from the system
+    #   shell: "date +%Y-%m-%d/%H:%M"
+    #   delegate_to: localhost
+    #   register: tstamp
+      
+    # - set_fact:
+    #       time: "{{tstamp.stdout}}"
+
+    # - name: "Physical host list"
+    #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO],{{ hostclusterdata.msg }}" >> {{file_storage_cleanup_suc}}                    
+    #   delegate_to: localhost
+    #   when: hostclusterdata.msg is defined and hostclusterdata.msg is search("object does not exist")
+
+    # - meta: end_host
+    #   when: hostclusterdata.msg is defined and hostclusterdata.msg is search("object does not exist")
+
+    # - name: "Physical host list"
+    #   shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Check errors on check_host_hostcluster module.{{ hostclusterdata.msg }}" >> {{file_storage_cleanup_fail}}                    
+    #   delegate_to: localhost
+    #   when: hostclusterdata.msg is defined and hostclusterdata.msg is not search("object does not exist") or hostclusterdata.msg!= ""
+
+    # - meta: end_host
+    #   when: hostclusterdata.msg is defined and hostclusterdata.msg is not search("object does not exist")      
+
+    - name: "Debug hostclustername output"
+      debug:
+        var: hostclusterdata.stdout 
+
+
+    - name: "Host Cluster name"
+      check_host_clustername:
+        hostcluster_data: "{{ hostclusterdata.stdout }}"
+      register: hostclustername
+      ignore_errors: True
+
+    - name: "Debug hostclustername output"
+      debug:
+        var: hostclustername
+    - set_fact:
+        hostcluster_name: "{{ hostclustername.data }}"
+      when: hostclusterdata.stdout != ""      
+    - set_fact:
+        svc_wwpns: "{{ hostclustername.wwpns }}"
+      when: hostclusterdata.stdout != ""       
+    - set_fact:
+        host_status: "{{ hostclustername.status }}"
+      when: hostclusterdata.stdout != ""    
+    
+    #- name: "TR Creation to Storage Team - Host Status is not OFFLINE"
+      #when: host_status != "offline"  
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+    
+    - set_fact:
+          time: "{{tstamp.stdout}}"
+
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+      when: host_status != "offline" and hostclusterdata.stdout != ""
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Host Status in  {{storage_sys}} is not OFFLINE." >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost   
+      when: host_status != "offline" and hostclusterdata.stdout != ""
+
+    - meta: end_host
+      when: host_status != "offline" and hostclusterdata.stdout != ""
+    
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }} - svc-{{storage_sys}} Host_cluster_name - {{hostcluster_name}}." >> {{file_info_storage}}                    
+      delegate_to: localhost  
+      when: hostcluster_name != "" 
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }} - Host is not part of Cluster in svc {{storage_sys}}." >> {{file_info_storage}}                    
+      delegate_to: localhost  
+      when: hostcluster_name == "" 
+###########################################################################################################
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      register: result_private_endpoint_connection_string
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      delegate_to: localhost
+
+    - name: "Check entry for DECO server and fetch wwpn information of host"
+      storage_state_value_fetch:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"                        
+      register: info_result_host
+      delegate_to: localhost     
+
+    - debug:
+        var: info_result_host
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+    - set_fact:
+        time: "{{tstamp.stdout}}"
+
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+      when: info_result_host.module_update is search("Error")
+
+    - name: "unable to fetch data from state file writing to failure file"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], unable to fetch data from state file.{{ info_result_host.module_update }}" >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost   
+      when: info_result_host.module_update is search("Error")
+
+    - meta: end_host
+      when: info_result_host.module_update is search("Error")
+
+    - name: "Host WWPN - Output"
+      set_fact:
+        host_wwpns_info: "{{ info_result_host.module_update.host_info}}"
+
+    - set_fact:
+        host_wwpns: "{{ host_wwpns_info.WWPN }}"
+
+
+    # ##############CHECK FOR WWPN WITH THE SVC WWPN SCRIPT #
+    - name: "compare Host WWPN with SVC WWPN"
+      compare_wwpns:
+        wwpns_fromhost: "{{ host_wwpns }}"
+        wwpns_fromsvc: "{{ svc_wwpns }}"
+      register: wwpns_output
+      when: svc_wwpns != ""
+      ignore_errors: True
+    - name: "Debug compare Host WWPN with SVC WWPN output"
+      debug:
+        var: wwpns_output
+    - set_fact:
+        compare_output: "{{wwpns_output.data}}"
+      when: svc_wwpns != ""  
+    
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+
+    - set_fact:
+          time: "{{tstamp.stdout}}"
+    
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+      when: compare_output != "matched" and svc_wwpns != ""
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Host WWPN doesn't match with the SVC WWPN.Kindly check" >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost   
+      when: compare_output != "matched" and svc_wwpns != ""
+    - meta: end_host
+      when: compare_output != "matched" and svc_wwpns != "" 
+
+    - debug:
+        msg: "matched wwpns and ready for cleanup"
+
+    - include: clustermethod.yml
+      when: hostcluster_name != ""
+      
+    - include: hostmethod.yml
+
+  rescue: 
+
+    - name: "Debug hostclustername output"
+      debug:
+        var: hostclusterdata
+
+    - name: When above one throws error the below task should execute
+      debug:
+        msg: "Exception occurred but rescued - check errors on Host is part of Host cluster module"  
+    
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+    
+    - set_fact:
+          time: "{{tstamp.stdout}}"
+
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Check errors on check_host_hostcluster module." >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost  

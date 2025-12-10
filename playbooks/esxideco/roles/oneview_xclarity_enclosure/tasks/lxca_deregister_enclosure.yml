@@ -1,0 +1,422 @@
+---
+- block:
+
+    - set_fact:
+        oview_lxca_success: "oview_lxca_success_enclosure.yml"
+        oview_lxca_failure: "oview_lxca_failure_enclosure.yml"
+
+    - name: Fetch LXCA for the blade
+      lxca_pattern_match:
+        blade_name: "{{ inventory_hostname }}"
+      delegate_to: localhost
+      register: lxca_output
+
+    - name: Set fact for LXCA URL
+      set_fact:
+        lxca_host: "{{ lxca_output.lxca_url }}"
+      when:
+        - lxca_output is defined
+        - lxca_output.lxca_url is defined
+      
+    - name: Debug LXCA host
+      debug:
+        var: lxca_host
+      when: lxca_host is defined
+
+    - name: "update entry for DECO server for for LXCA"
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+        module_name: "oneview_xclarity_info"
+        status: "{{ lxca_host }}"            
+      register: update_status_info_state
+      delegate_to: localhost
+      when: lxca_host is defined
+
+    # - name: Fetch all enclosures (raw JSON)
+    #   uri:
+    #     url: "{{ lxca_host }}/chassis"
+    #     method: GET
+    #     user: "{{ domain_username }}"
+    #     password: "{{ domain_password }}"
+    #     force_basic_auth: yes
+    #     validate_certs: no
+    #     return_content: yes
+    #   register: enclosure_list
+    #   delegate_to: localhost
+    #   when: lxca_host is defined
+
+    - name: Download chassis JSON to temp file
+      get_url:
+        url: "{{ lxca_host }}/chassis"
+        url_username: "{{ domain_username }}"
+        url_password: "{{ domain_password }}"
+        force_basic_auth: yes
+        validate_certs: no
+        dest: "/tmp/chassis_{{ inventory_hostname }}.json"
+        mode: '0600'                # Protect credentials in file
+        timeout: 60                  # Avoid worker hang on slow API
+      delegate_to: localhost
+      when: lxca_host is defined
+
+    # - name: Read JSON file content
+    #   set_fact:
+    #     chassis_raw: "{{ lookup('file', '/tmp/chassis_' + inventory_hostname + '.json') }}"
+    #   delegate_to: localhost
+    #   when:
+    #     - lxca_host is defined
+    #     - lookup('file', '/tmp/chassis_' + inventory_hostname + '.json') | length > 0
+
+
+    # - name: Parse chassis list safely
+    #   set_fact:
+    #     chassis_list: "{{ (chassis_raw | from_json | json_query('chassisList')) | default([], true) }}"
+    #   delegate_to: localhost
+    #   when: chassis_raw is defined
+    #   failed_when: false
+
+    # - name: Read JSON file content
+    #   set_fact:
+    #     chassis_raw: "{{ lookup('file', '/tmp/chassis_' + inventory_hostname + '.json') | from_json }}"
+    #   delegate_to: localhost
+    #   when:
+    #     - lxca_host is defined
+    #     - lookup('file', '/tmp/chassis_' + inventory_hostname + '.json') | length > 0
+
+    # - name: Parse chassis list safely
+    #   set_fact:
+    #     chassis_list: "{{ chassis_raw.chassisList | default([], true) }}"
+    #   delegate_to: localhost
+    #   when:
+    #     - chassis_raw is defined
+
+
+
+    # - name: Load only chassisList from file
+    #   set_fact:
+    #     chassis_list: >-
+    #       {{
+    #         (lookup('file', '/tmp/chassis_' + inventory_hostname + '.json') | from_json)
+    #         | json_query('chassisList')
+    #         | default([])
+    #       }}
+    #   delegate_to: localhost
+    #   when: 
+    #     - lxca_host is defined
+    #     - lookup('file', '/tmp/chassis_' + inventory_hostname + '.json') | length > 0
+
+    
+    # - name: Debug raw LXCA chassis response
+    #   debug:
+    #     var: enclosure_list.json
+    #   delegate_to: localhost
+
+    # - name: Parse chassis list from JSON
+    #   set_fact:
+    #     chassis_list: "{{ enclosure_list.json.chassisList }}"
+    #   delegate_to: localhost
+    #   when:
+    #     - enclosure_list is defined
+    #     - enclosure_list.json is defined
+    #     - enclosure_list.json is mapping
+    #     - enclosure_list.json.chassisList is defined
+
+    # - name: Extract matching enclosure
+    #   set_fact:
+    #     matched_enclosure: >-
+    #       {{
+    #         chassis_list
+    #         | selectattr('cmmDisplayName', 'match', '(?i)^' + inventory_hostname + '$')
+    #         | list
+    #         | first | default({})
+    #       }}
+    #   delegate_to: localhost
+    #   when: chassis_list | length > 0
+
+    - name: Extract matching enclosure directly from file
+      command: >
+        jq -c '.chassisList[]
+              | select(.cmmDisplayName | ascii_downcase == "{{ inventory_hostname | lower }}")'
+              /tmp/chassis_{{ inventory_hostname }}.json
+      register: enclosure_json
+      delegate_to: localhost
+      changed_when: false
+      when: lxca_host is defined
+
+    - name: Set matched_enclosure fact (only the small JSON object)
+      set_fact:
+        matched_enclosure: "{{ (enclosure_json.stdout | from_json) if enclosure_json.stdout else {} }}"
+      when: lxca_host is defined
+      delegate_to: localhost
+
+    # - name: Extract enclosure object from extracted list
+    #   set_fact:
+    #     matched_enclosure: >-
+    #       {{
+    #         chassis_list
+    #         | selectattr('cmmDisplayName', 'match', '(?i)^' + inventory_hostname + '$')
+    #         | list
+    #         | first
+    #       }}
+    #   delegate_to: localhost
+    #   when: chassis_list is defined and chassis_list | length > 0
+
+    - name: No enclosure found, skip deletion
+      debug:
+        msg: "No enclosure matching '{{ inventory_hostname }}', skipping enclosure removal."
+      when: matched_enclosure is not defined
+      delegate_to: localhost
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp
+
+    - set_fact:
+        time: "{{ tstamp.stdout }}"
+
+    - name: Log Failure - No enclosure found
+      shell: |
+        echo "{{ inventory_hostname }}, {{ time }}, [INFO] - No enclosure found for blade, skipping deletion." >> {{ oview_lxca_failure }}
+      delegate_to: localhost
+      when: matched_enclosure is not defined
+
+    - meta: end_host
+      when: matched_enclosure is not defined
+
+    - name: Set enclosure UUID
+      set_fact:
+        enclosure_uuid: "{{ matched_enclosure.uuid }}"
+      delegate_to: localhost
+      when: matched_enclosure is defined
+
+    - name: Unmanage (deregister) enclosure from LXCA
+      uri:
+        url: "{{ lxca_host }}/unmanageRequest"
+        method: POST
+        user: "{{ domain_username }}"
+        password: "{{ domain_password }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        headers:
+          Content-Type: "application/json"
+        body:
+          endpoints:
+            - ipAddresses: ["{{ inventory_hostname }}"]
+              type: "Chassis"
+              uuid: "{{ enclosure_uuid }}"
+          forceUnmanage: true
+        status_code: [200, 201, 202]
+        return_content: yes
+      register: unmanage_response
+      delegate_to: localhost
+      when: matched_enclosure is defined
+
+    # - name: Set task URI fact (async case)
+    #   set_fact:
+    #     unmanage_task_uri: "{{ unmanage_response.headers.Location | default(unmanage_response.headers.location) | default('') }}"
+    #   when: unmanage_response.status in [200, 201, 202]
+
+    # - name: Set task URI fact (async case)
+    #   set_fact:
+    #     unmanage_task_uri: >-
+    #       {{
+    #         (unmanage_response.headers
+    #           | dict2items
+    #           | selectattr('key', 'match', '^(?i)location$')
+    #           | map(attribute='value')
+    #           | list
+    #           | first
+    #           | default(''))
+    #       }}
+    #   when: unmanage_response.status in [200, 201, 202]
+
+
+    # - name: Set task URI fact (async case)
+    #   set_fact:
+    #     unmanage_task_uri: >-
+    #       {{ 
+    #         (unmanage_response.headers
+    #           | dict2items
+    #           | selectattr('key', 'match', '^(?i)location$')
+    #           | map(attribute='value')
+    #           | list
+    #           | first
+    #           | default('')
+    #         ) 
+    #       }}
+    #   when:
+    #     - unmanage_response is defined
+    #     - unmanage_response.headers is defined
+    #     - unmanage_response.status_code in [200, 201, 202]
+    #   delegate_to: localhost
+
+    # - name: Set task URI fact (async case)
+    #   set_fact:
+    #     unmanage_task_uri: >-
+    #       {{ 
+    #         (unmanage_response.headers
+    #           | dict2items
+    #           | selectattr('key', 'match', '^(?i)location$')
+    #           | map(attribute='value')
+    #           | list
+    #           | first
+    #           | default('')
+    #         ) 
+    #       }}
+    #   when:
+    #     - unmanage_response is defined
+    #     - unmanage_response.headers is defined
+    #     - (unmanage_response.status is defined and (unmanage_response.status | int) in [200, 201, 202]) or
+    #       (unmanage_response.json.statusCode is defined and (unmanage_response.json.statusCode | int) in [200, 201, 202])
+    #   delegate_to: localhost
+
+    - name: Set task URI fact (async case)
+      set_fact:
+        unmanage_task_uri: "{{ unmanage_response.location }}"
+      when:
+        - unmanage_response is defined
+        - unmanage_response.location is defined
+        - unmanage_response.status is defined and (unmanage_response.status | int) in [200, 201, 202]
+      delegate_to: localhost
+      ignore_errors: yes
+
+    # - name: Wait for unmanage-job completion
+    #   uri:
+    #     url: "{{ lxca_host }}{{ unmanage_task_uri }}"
+    #     method: GET
+    #     user: "{{ domain_username }}"
+    #     password: "{{ domain_password }}"
+    #     force_basic_auth: yes
+    #     validate_certs: no
+    #     return_content: yes
+    #     status_code: 200
+    #   register: unmanage_status
+    #   until: unmanage_status.json.taskStatus in ['Completed','Warning','Error']
+    #   retries: 30
+    #   delay: 10
+    #   # when: unmanage_task_uri is defined
+    #   when: unmanage_task_uri != ''
+    #   delegate_to: localhost
+
+    # - name: Wait for unmanage-job completion
+    #   uri:
+    #     url: "{{ lxca_host }}{{ unmanage_task_uri }}"
+    #     method: GET
+    #     user: "{{ domain_username }}"
+    #     password: "{{ domain_password }}"
+    #     force_basic_auth: yes
+    #     validate_certs: no
+    #     return_content: yes
+    #     status_code: 200
+    #   register: unmanage_status
+    #   until: unmanage_status.json.taskStatus in ['Completed','Warning','Error']
+    #   retries: 30
+    #   delay: 10
+    #   when: unmanage_task_uri != ''
+    #   delegate_to: localhost
+    #   ignore_errors: yes
+
+    # - name: Wait for unmanage-job completion
+    #   uri:
+    #     url: "{{ lxca_host }}{{ unmanage_task_uri }}"
+    #     method: GET
+    #     user: "{{ domain_username }}"
+    #     password: "{{ domain_password }}"
+    #     force_basic_auth: yes
+    #     validate_certs: no
+    #     return_content: yes
+    #     status_code: 200
+    #   register: unmanage_status_raw
+    #   until: (unmanage_status_raw.content | from_json).taskStatus in ['Completed','Warning','Error']
+    #   retries: 30
+    #   delay: 10
+    #   when: unmanage_task_uri != ''
+    #   delegate_to: localhost
+    #   ignore_errors: yes
+
+    - name: Wait for unmanage-job completion
+      uri:
+        url: "{{ lxca_host }}{{ unmanage_task_uri }}"
+        method: GET
+        user: "{{ domain_username }}"
+        password: "{{ domain_password }}"
+        force_basic_auth: yes
+        validate_certs: no
+        return_content: yes
+        status_code: 200
+      register: unmanage_status_raw
+      until: >
+        (
+          (unmanage_status_raw.content | default('{}'))
+          | from_json
+        ).get('taskStatus', '') in ['Completed', 'Warning', 'Error']
+      retries: 30
+      delay: 10
+      when: unmanage_task_uri != ''
+      delegate_to: localhost
+      ignore_errors: yes
+
+
+
+    # - name: Log Success for Enclosure Unmanagement (LXCA)
+    #   shell: |
+    #     echo "{{ inventory_hostname }}, {{ lookup('pipe', 'date +%Y-%m-%d/%H:%M') }}, [INFO] - Enclosure unmanagement completed successfully (LXCA)." >> {{ oview_lxca_success }}
+    #   delegate_to: localhost
+    #   when: unmanage_status.json.taskStatus == 'Completed'
+
+    - name: Log Success for Enclosure Unmanagement (LXCA)
+      shell: |
+        echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Enclosure unmanagement completed successfully (LXCA)." >> {{ oview_lxca_success }}
+      delegate_to: localhost
+      # when:
+      #   - unmanage_status.json.taskStatus is defined
+      #   - unmanage_status.json.taskStatus == 'Completed'
+
+        
+
+    - name: "update entry for DECO server for Oneview LXCA Deregister"
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+        module_name: "oneview_xclarity_removal"
+        status: "T"           
+      register: update_status_info_state
+      delegate_to: localhost
+      # when:
+      #   - unmanage_status.json.taskStatus is defined
+      #   - unmanage_status.json.taskStatus == 'Completed'
+
+    # - name: Log Failure for Enclosure Unmanagement (LXCA)
+    #   shell: |
+    #     echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Enclosure unmanagement FAILED (LXCA)." >> {{ oview_lxca_failure }}
+    #   delegate_to: localhost
+    #   when:
+    #     - unmanage_status.json.taskStatus is defined
+    #     - unmanage_status.json.taskStatus == 'Error'
+
+    # - meta: end_host
+    #   when:
+    #     - unmanage_status.json.taskStatus is defined
+    #     - unmanage_status.json.taskStatus == 'Error'
+
+
+  rescue:
+    - name: Exception occurred - rescued
+      debug:
+        msg: "Exception occurred but rescued - check errors for Oneview LXCA Enclosure module"
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp
+
+    - set_fact:
+        time: "{{ tstamp.stdout }}"
+
+    - name: Failure information to file in rescue block
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Kindly check Oneview Xclarity module for esxi servers" >> {{ oview_lxca_failure }}
+      delegate_to: localhost
+
+

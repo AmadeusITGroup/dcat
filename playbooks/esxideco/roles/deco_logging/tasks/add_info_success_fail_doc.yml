@@ -1,0 +1,334 @@
+---
+
+    - name: "Handling TR record_id"
+      block:
+
+        - name: DEBUG — add_info_success_fail_doc.yml loaded
+          debug:
+            msg: "Entered add_info_success_fail_doc.yml"
+
+        - name: Display the JSON file content
+          shell: cat record_doc_esxi.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_doc_esxi: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost        
+
+        - meta: end_host
+          when: record_doc_esxi == ""
+
+
+        - name: Check if success_esxi.yml exists
+          stat:
+            path: success_esxi.yml
+          delegate_to: localhost
+          register: success_esxi_file
+
+        - name: Check if failure_esxi.yml exists
+          stat:
+            path: failure_esxi.yml
+          delegate_to: localhost
+          register: failure_esxi_file
+
+
+        - name: ESXi_host success list
+          shell: cat success_esxi.yml
+          delegate_to: localhost
+          register: esxi_result_suc      
+          when: success_esxi_file.stat.exists
+        
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            esxi_success: "{{ esxi_result_suc.stdout }}" 
+          delegate_to: localhost
+          when: success_esxi_file.stat.exists
+
+
+        - name: ESXi_host failure list
+          shell: cat failure_esxi.yml
+          delegate_to: localhost
+          register: esxi_result_fail          
+          when: failure_esxi_file.stat.exists
+
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            esxi_fail: "{{ esxi_result_fail.stdout }}" 
+          delegate_to: localhost
+          when: failure_esxi_file.stat.exists
+        
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Following are Success ESXi list"
+            form3: "***********************************************************************"  
+
+        - set_fact:
+            doc_content_success: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ esxi_success }}"
+          # when: esxi_success != "" 
+          when: esxi_success is defined and esxi_success | length > 0
+
+
+        - name: " Merge success information to single final file "
+          shell: echo "{{doc_content_success}}" >> doc_final.yml                    
+          delegate_to: localhost
+          # when: esxi_success != ""
+          when: esxi_success is defined and esxi_success | length > 0
+
+
+        - name: ESXi_host failure list
+          shell: cat failure_esxi.yml
+          delegate_to: localhost
+          register: esxi_result_fail          
+          when: failure_esxi_file.stat.exists
+
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            esxi_fail: "{{ esxi_result_fail.stdout }}" 
+          delegate_to: localhost
+          when: failure_esxi_file.stat.exists
+
+        - name: Split the string into lines
+          set_fact:
+            vm_fail_line: "{{ esxi_fail.split('\n') }}"
+          when: failure_esxi_file.stat.exists
+
+
+        - name: Convert the list to a set to remove duplicates
+          set_fact:
+            esxi_fail_list: "{{ vm_fail_line | unique }}"
+          when: failure_esxi_file.stat.exists
+
+
+        - name: Join the lines back into a single string
+          set_fact:
+            esxi_fail: "{{ esxi_fail_list | join('\n') }}" 
+          when: failure_esxi_file.stat.exists
+                    
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Following are Failure ESXi list"
+            form3: "***********************************************************************"      
+            when: esxi_fail is defined and esxi_fail | length > 0
+
+        - set_fact:
+            doc_content_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ esxi_fail }}"
+          # when: esxi_fail != "" 
+          when: esxi_fail is defined and esxi_fail | length > 0
+
+
+        - name: " Merge failure information to single final file "
+          shell: echo "{{doc_content_fail}}" >> doc_final.yml                    
+          delegate_to: localhost
+          # when: esxi_fail != ""           
+          when: esxi_fail is defined and esxi_fail | length > 0
+          
+            
+      rescue:
+        - debug:
+            msg: "unable to collect success/fail ESXi list"
+
+    - name: "Handling add message in TR"
+      block: 
+
+        - name: ESXi_host list
+          shell: cat doc_final.yml
+          delegate_to: localhost
+          register: esxi_result              
+
+        - name: save the ESXi final msg to a Variable as a Fact
+          set_fact:
+            doc_fin: "{{ esxi_result.stdout }}" 
+          delegate_to: localhost
+         
+
+        - meta: end_host
+          when: doc_fin == ""
+
+        - name: Display the JSON file content
+          shell: cat record_doc_esxi.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_doc_esxi: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost           
+        
+        
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{record_doc_esxi}}"
+            message: "{{ doc_fin }}"             
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}" 
+          delegate_to: localhost
+          register: add_msg_output
+                                  
+
+    - name: "Close TR"
+      block:  
+        
+        - name: Display the JSON file content
+          shell: cat record_doc_esxi.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_doc_esxi: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: record_doc_esxi == ""
+
+        - name: "[CLOSE TR]"
+          close_tr:
+            record_id: "{{record_doc_esxi}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+          register: close_tr_output
+
+        - name: "Retrieve Original CI List from Associated CR"
+          create_ci_list_final:
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}" 
+            win_target: "{{win_url}}"
+            cr: "{{ cr }}"
+          register: all_cis
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+                    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost  
+
+        - name: Check CMDB update for each blade (run once)
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{ item.hostname }}"
+          loop: "{{ blade_cmdb_input }}"
+          loop_control:
+            label: "{{ item.hostname }} ({{ item.enclosure }})"
+          register: cmdb_check_results
+          delegate_to: localhost
+          run_once: true
+
+        - name: "Extract Deco_date per CI"
+          set_fact:
+            deco_status: >-
+              {%- set result = {} -%}
+              {%- for item in cmdb_check_results.results -%}
+                {%- set host = item.item -%}
+                {%- set deco = item.module_update.deco_date | default('F') -%}
+                {%- set _ = result.update({host: deco}) -%}
+              {%- endfor -%}
+              {{ result }}
+          delegate_to: localhost
+          run_once: true
+
+        - name: "Set snow_status based on deco_date values"
+          set_fact:
+            snow_status: >-
+              {% if deco_status.values() | list | select('equalto', 'F') | list | length > 0 %}
+                Waiting
+              {% else %}
+                Success
+              {% endif %}
+          delegate_to: localhost
+          run_once: true
+
+        - name: "Display SNOW status"
+          debug:
+            var: snow_status
+
+        - name: "Prepare success and failure ESXi lists"
+          set_fact:
+            esxi_success: "{{ deco_status | dict2items | selectattr('value', 'ne', 'F') | map(attribute='key') | join('\n') }}"
+            esxi_fail: "{{ deco_status | dict2items | selectattr('value', 'eq', 'F') | map(attribute='key') | join('\n') }}"
+          delegate_to: localhost
+          run_once: true
+
+        # ---------- SUCCESS SECTION ----------
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Following are Success ESXi list"
+            form3: "***********************************************************************"
+          when: esxi_success is defined and esxi_success | length > 0
+
+        - set_fact:
+            doc_content_success: |
+              {{ form1 }}
+              {{ form2 }}
+              {{ form3 }}
+              {{ esxi_success }}
+          when: esxi_success is defined and esxi_success | length > 0
+
+        - name: "Merge success information into final summary file"
+          shell: echo "{{ doc_content_success }}" >> doc_final.yml
+          delegate_to: localhost
+          when: esxi_success is defined and esxi_success | length > 0
+
+        # ---------- FAILURE SECTION ----------
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Following are Failure ESXi list"
+            form3: "***********************************************************************"
+          when: esxi_fail is defined and esxi_fail | length > 0
+
+        - set_fact:
+            doc_content_fail: |
+              {{ form1 }}
+              {{ form2 }}
+              {{ form3 }}
+              {{ esxi_fail }}
+          when: esxi_fail is defined and esxi_fail | length > 0
+
+
+        - name: "Merge failure information into final summary file"
+          shell: echo "{{ doc_content_fail }}" >> doc_final.yml
+          delegate_to: localhost
+          when: esxi_fail is defined and esxi_fail | length > 0
+
+        - set_fact:
+            decomm_summary: |
+              {{ doc_content_success | default('') }}
+              {{ doc_content_fail | default('') }}
+          delegate_to: localhost
+          run_once: true
+
+        # - set_fact:
+        #     snow_status: "{{ 'Waiting' if ('Failure' in doc_fin) else 'Success' }}"
+
+        - name: Update SNOW with Enclosure Deco status
+          update_snow:
+            action: Updating_SNOW
+            ritm_number: "{{ ritm_number }}"
+            status: "{{ snow_status | trim }}"
+            comments:  "{{ decomm_summary }}"
+            client_id: "{{ az_client_id }}"
+            client_secret: "{{ az_client_password }}"
+          run_once: True  
+          register: api_result
+          # when: snow_status in ['Waiting', 'Success']
+          when: snow_status | trim in ['Waiting', 'Success']
+
+      rescue:
+        - debug:
+            var: close_tr_output       
+
+
+            
+        
+            
+             

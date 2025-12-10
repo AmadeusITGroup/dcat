@@ -1,0 +1,55 @@
+---
+- name: Update Change Record Overview
+  hosts: localhost
+
+  tasks:
+    # - name: Set test var
+    #   set_fact:
+    #     doc_agp_fin: "Following are Success Physical list After graceperiod\nobeap20b"
+
+    # - name: Debugging
+    #   ansible.builtin.debug:
+    #     msg: doc_agp_fin = {{ doc_agp_fin }}  and ci_completion_status = {{ ci_completion_status.create_entity_result }} and awx_job_completion_status = {{ awx_job_completion_status.create_entity_result }}
+
+    - name: Failure- Update the overview of the Change Record for failure
+      uri:
+        url: "https://WIN@PROACH_URL/aproach-api/v1.0/changerecords/{{ cr }}"
+        method: PUT
+        headers:
+          Content-Type: "application/json"
+        body: |
+          {
+            "operation": "cr_update_overview",
+            "changeRecord": {
+              "Overview": {
+                "text": "!Not all servers submitted as part of this request have been !decommissioned. Kindly refer the associated TR/PTR for more details."
+              }
+            }
+          }
+        body_format: json
+        status_code: 200
+        url_username: "{{ winAproach_username }}"
+        url_password: "{{ winAproach_password }}"
+        force_basic_auth: yes
+      when: doc_agp_fin is search("Failure") or close_ritm =="F"
+    - name: Success- Update the overview of the Change Record for success
+      uri:
+        url: "https://WIN@PROACH_URL/aproach-api/v1.0/changerecords/{{ cr }}"
+        method: PUT
+        headers:
+          Content-Type: "application/json"
+        body: |
+          {
+            "operation": "cr_update_overview",
+            "changeRecord": {
+              "Overview": {
+                "text": "Although, all the servers requested are decommissioned, there are still some peripherals like Network, storage etc. which will be cleaned up in due course of time. Associated TRs should be able to provide details around them. Once they are closed, please verify if everything looks good from your end and close this CR."
+              }
+            }
+          }
+        body_format: json
+        status_code: 200
+        url_username: "{{ winAproach_username }}"
+        url_password: "{{ winAproach_password }}"
+        force_basic_auth: yes
+      when: doc_agp_fin is search("Success") and doc_agp_fin is not search("Failure") and close_ritm =="T"  

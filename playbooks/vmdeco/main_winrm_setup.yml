@@ -1,0 +1,31 @@
+---
+
+- name: "Create TR for winrm Key Add"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Create TR for winrm
+      ansible.builtin.import_role:
+        name: winrm_setup
+        tasks_from: create_tr_winrm.yml
+
+- name: "svc Key ADD"
+  hosts: all:winrmkey
+  vars:
+    sshusr: "{{ auth_username }}"
+    sshpass: "{{ auth_password }}"
+  gather_facts: no
+  tasks:
+    - name: Import Role for User Creation
+      ansible.builtin.import_role:
+        name: winrm_setup
+        tasks_from: usercreation.yml
+
+- name: "Add info TR for winrm key Add"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Add info to winrm key Add TR
+      ansible.builtin.import_role:
+        name: winrm_setup
+        tasks_from: add_info_winrm.yml

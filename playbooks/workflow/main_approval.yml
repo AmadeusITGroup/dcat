@@ -1,0 +1,245 @@
+---
+- name: Obtain Connection String for Private Endpoint
+  hosts: localhost
+  gather_facts: false
+  vars:
+    azure_client_id: '{{ az_client_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+    storage_account_name: '{{ storage_account_name }}'
+    resource_group: '{{ resource_group }}'
+    azure_subscription_id: '{{ azure_subscription_id }}'
+
+  pre_tasks:
+    - name: Set default for mit_ticket
+      set_fact:
+        mit_ticket_ref: "{{ mit_ticket | default('F') }}"
+
+  tasks:
+
+    - set_fact:
+        mit_ticket_ref: "{{mit_ticket}}"
+
+    - set_fact:
+        env_data: "{{ hostvars.localhost.env_data.msg }}"
+
+    - set_fact:
+        storage_account_name: "awxdcatdev"
+      when: env_data == "dev"  
+
+    - set_fact:
+        resource_group: "dcat"
+
+    - set_fact:
+        azure_subscription_id: "c7fe37a6-85d1-4afc-b695-13a64f545042"
+
+    - set_fact:
+        storage_account_name: "awxdcatprod"
+      when: env_data == "prod"                             
+
+
+    - name: Retrieve Storage Account Key
+      azure_rm_storageaccount_info:
+        resource_group: "{{ resource_group }}"
+        name: "{{ storage_account_name }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_client_secret }}"
+        tenant: "{{ azure_tenant_id }}"
+        subscription_id: '{{ azure_subscription_id }}'
+        show_connection_string: true
+      register: storage_account_info
+    
+    - debug:
+        var: storage_account_info
+
+    - name: Set Storage Account Key
+      set_fact:
+        storage_account_key: "{{ storage_account_info.storageaccounts[0].primary_endpoints.key }}"
+
+    - name: Get Private Endpoint Connection String
+      set_fact:
+        private_endpoint_connection_string: "DefaultEndpointsProtocol=https;AccountName={{ storage_account_name }};AccountKey={{ storage_account_key }};EndpointSuffix=core.windows.net"
+
+    - name: "data check"
+      shell: echo "{{ private_endpoint_connection_string }}" >> private_endpoint_connection_string.yml   
+      delegate_to: localhost
+      
+
+- name: "Group CI's based on owner group "
+  hosts: localhost
+  gather_facts: no
+
+  tasks:     
+    - name: Fail play if vmdeco group is empty
+      meta: end_play
+      when: "{{ (groups['vmdeco'] | default([])) | length == 0 }}"
+
+    - name: deco logger
+      ansible.builtin.import_role:
+        name: owner_approval
+        tasks_from: deco_logger.yml  
+        
+
+- name: "Group CI's based on owner group "
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no
+  throttle: 1
+
+  pre_tasks:
+    - name: Set default for mit_ticket
+      set_fact:
+        mit_ticket_ref: "{{ mit_ticket | default('F') }}"
+        
+  tasks:
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      register: result_private_endpoint_connection_string
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      delegate_to: localhost    
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+
+    - set_fact:
+        time: "{{tstamp.stdout}}"     
+
+    # - name: "Check entry for DECO server"
+    #   final_app_tr:
+    #     ci: "{{ inventory_hostname }}"
+    #     cr: "{{ cr }}"
+    #     event_number: "0"
+    #     event_status: "F"
+    #     created_on: "F"
+    #     last_update: "F"
+    #     connection_string: "{{ private_endpoint_connection_string }}"
+    #   register: app_tr_add
+    #   delegate_to: localhost
+
+    # - debug:
+    #     var: app_tr_add         
+
+    # - name: "Check entry for DECO server"
+    #   final_owner_tr:
+    #     ci: "{{ inventory_hostname }}"
+    #     cr: "{{ cr }}"
+    #     event_number: "0"
+    #     event_status: "F"
+    #     created_on: "F"
+    #     last_update: "F"
+    #     connection_string: "{{ private_endpoint_connection_string }}"
+    #   register: owner_tr_add
+    #   delegate_to: localhost 
+
+    # - debug:
+    #     var: owner_tr_add
+
+        
+    - name: "Check entry for DECO server"
+      final_create_metadata:
+        cr: "{{ cr }}"
+        awx_job_id: "{{ tower_job_id }}" 
+        ritm_number: "{{ ritm_number }}"
+        requestor_name: "{{ requester_name }}"
+        retention_days: "{{ retention_days }}"
+        requestor_group: "{{ requester_group }}"
+        pillar: "{{ pillar }}"
+        mit_ticket: "{{ mit_ticket_ref }}"
+        cmdb: "F"
+        connection_string: "{{ private_endpoint_connection_string }}"
+      register: metadata_update
+      delegate_to: localhost
+
+    - debug:
+        var: metadata_update        
+
+    - name: "Check entry for DECO server"
+      final_create_cr:
+        ci: "{{ inventory_hostname }}"
+        cr: "{{ cr }}"
+        connection_string: "{{ private_endpoint_connection_string }}"
+      register: create_cr_update
+      delegate_to: localhost
+
+
+    - debug:
+        var: create_cr_update             
+
+
+    - name: Server type - DB/ Non DB
+      set_fact:
+        server_type: "{{ type_of_servers }}"
+
+- name: "Group CI's based on owner group "
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no
+
+  tasks:  
+    - name: owner_approval
+      ansible.builtin.import_role:
+        name: owner_approval
+        tasks_from: owner_approval_template.yml
+
+- name: "Group CI's based on owner group "
+  hosts: localhost
+  gather_facts: no
+
+  tasks:        
+
+    - name: Fail play if vmdeco group is empty
+      meta: end_play
+      when: "{{ (groups['vmdeco'] | default([])) | length == 0 }}"
+
+    - name: owner_approval
+      ansible.builtin.import_role:
+        name: owner_approval
+        tasks_from: set_groups.yml
+
+- name: "Group CI's based on owner group "
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no
+  tasks:        
+    - name: app_approval
+      ansible.builtin.import_role:
+        name: app_approval
+        tasks_from: app_approval.yml
+
+- name: "Group CI's based on owner group "
+  hosts: localhost
+  gather_facts: no
+
+  tasks:  
+
+    - name: Fail play if vmdeco group is empty
+      meta: end_play
+      when: "{{ (groups['vmdeco'] | default([])) | length == 0 }}"
+
+    - name: app_approval
+      ansible.builtin.import_role:
+        name: app_approval
+        tasks_from: set_groups.yml
+
+
+- name: "Group CI's based on owner group "
+  hosts: localhost
+  gather_facts: no
+
+  tasks:     
+
+    - name: Fail play if vmdeco group is empty
+      meta: end_play
+      when: "{{ (groups['vmdeco'] | default([])) | length == 0 }}"
+
+    - name: deco logger
+      ansible.builtin.import_role:
+        name: owner_approval
+        tasks_from: update_logger.yml

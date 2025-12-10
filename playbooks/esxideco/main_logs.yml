@@ -1,0 +1,30 @@
+---
+
+- name: "success/Failure logs"
+  # hosts: enclosures
+  hosts: "{{ target_hosts_orig }}"
+  gather_facts: no    
+  tasks: 
+
+    - name: success/Failure logs
+      ansible.builtin.import_role:
+        name: deco_logging
+        tasks_from: success_fail_doc.yml
+        
+
+- name: "Create TR for success/Failure logs"
+  hosts: localhost
+  gather_facts: no
+  # vars:
+  #   graceperiod_flag: True 
+  tasks:
+
+    - name: success/Failure logs
+      ansible.builtin.import_role:
+        name: deco_logging
+        tasks_from: create_tr_success_fail_doc.yml
+
+    - name: success/Failure logs
+      ansible.builtin.import_role:
+        name: deco_logging
+        tasks_from: add_info_success_fail_doc.yml

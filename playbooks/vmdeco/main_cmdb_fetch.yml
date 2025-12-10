@@ -1,0 +1,70 @@
+---
+- name: "CMDB FETCH"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch
+        tasks_from: filter_hostlist_cmdb_check_bgp.yml
+
+- name: "Create TR for cmdb fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    vm_status_check_cmdb: "F"
+    graceperiod_flag: False
+    filter_domain: ""
+  tasks:
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch
+        tasks_from: create_tr_cmdb_status_check.yml
+
+- name: "CMDB FETCH"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch
+        tasks_from: vm_status_cmdb.yml
+      when: (vm_status_check_cmdb == "F") and vm_status_check_cmdb is defined and (filter_domain != "F") and filter_domain is defined
+
+- name: "Create TR for cmdb fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    vm_status_check_cmdb: "F"
+    graceperiod_flag: False
+    filter_domain: ""
+  tasks:
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch
+        tasks_from: add_info_cmdb_status_check.yml
+
+- name: "CMDB FETCH"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch
+        tasks_from: cmdb_stat_logging.yml
+
+- name: "Logger for CMDB Fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    vm_status_check_cmdb: "F"
+    graceperiod_flag: False
+    filter_domain: ""
+  tasks:
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch
+        tasks_from: logger_cmdb_stat.yml

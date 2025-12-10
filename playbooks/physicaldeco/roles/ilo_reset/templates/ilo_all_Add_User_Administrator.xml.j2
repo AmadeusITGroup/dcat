@@ -1,0 +1,21 @@
+<!--        Firmware support information for this script:            -->
+<!--            iLO 4 - All versions.                                -->
+<!--            iLO 3 - All versions.                                -->
+<!--            iLO 2 - All versions.                                -->
+ 
+<RIBCL VERSION="2.0">
+<LOGIN USER_LOGIN="not_required" PASSWORD="not_required">
+<USER_INFO MODE="write">
+<ADD_USER
+           USER_NAME="{{ user_iloadm }}"
+           USER_LOGIN="{{ user_iloadm }}"
+           PASSWORD="{{ password_iloadm }}">
+<ADMIN_PRIV value ="Y"/>
+<REMOTE_CONS_PRIV value ="Y"/>
+<RESET_SERVER_PRIV value ="Y"/>
+<VIRTUAL_MEDIA_PRIV value ="Y"/>
+<CONFIG_ILO_PRIV value="Yes"/>
+</ADD_USER>
+</USER_INFO>
+</LOGIN>
+</RIBCL>

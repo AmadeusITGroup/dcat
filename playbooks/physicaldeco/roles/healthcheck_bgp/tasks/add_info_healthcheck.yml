@@ -1,0 +1,344 @@
+---
+# - name: "This playbook is to add healthcheck info in TR"
+#   hosts: localhost
+#   gather_facts: no  
+#   vars:
+#     graceperiod_flag: true
+
+        
+#   tasks:      
+      ####Adding Info to TR 
+
+    - name: "Handling TR record_id"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""   
+
+
+        - name: Display the JSON file content
+          shell: cat check_artifacts_success.yml
+          delegate_to: localhost
+          register: result_check_arti_suc
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_artifacts_success: "{{ result_check_arti_suc.stdout }}" 
+          delegate_to: localhost 
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_artifacts_success }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: check_artifacts_success != ""     
+               
+
+        - name: Display the JSON file content
+          shell: cat check_remedy_success.yml
+          delegate_to: localhost
+          register: result_check_remedy_succ
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy_success: "{{ result_check_remedy_succ.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_remedy_success }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: check_remedy_success != ""            
+           
+
+#########################################################
+        - name: Display the JSON file content
+          shell: cat san_switches_success.yml
+          delegate_to: localhost
+          register: result_san_switches_success
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_san: "{{ result_san_switches_success.stdout }}" 
+          delegate_to: localhost 
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_san }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: check_san != ""
+
+
+        - name: Display the JSON file content
+          shell: cat phy_ssh_success.yml
+          delegate_to: localhost
+          register: result_phy_ssh_success
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            phy_ssh_success: "{{ result_phy_ssh_success.stdout }}" 
+          delegate_to: localhost 
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ phy_ssh_success }}" >> check_final_success.yml                    
+          delegate_to: localhost            
+          when: phy_ssh_success != ""                                                                             
+
+
+        - name: Display the JSON file content
+          shell: cat check_final_success.yml
+          delegate_to: localhost
+          register: result_check_final_suc
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_final_success: "{{ result_check_final_suc.stdout }}" 
+          delegate_to: localhost                                                                                          
+        
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the DECO results for API checks - physical servers"
+            form3: "***********************************************************************"            
+        - set_fact:
+            content_check_final_suc: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_final_success }}"
+          when: check_final_success != "" 
+
+        # - name: Check snow api call back
+        #   update_snow:
+        #     action: Phase1
+        #     ritm_number: "{{ ritm_number }}"
+        #     status: Started
+        #     comments: Phase-1 of decommission getting started for {{ associated_cis }}. we will post the update shortly.
+        #     username: "{{ SN_USERNAME }}"
+        #     password: "{{ SN_PASSWORD }}"
+        #   when: check_final_success != "" 
+        #   run_once: True  
+        #   register: api_result              
+
+      rescue:
+        - debug:
+            var: 'check_final_success'
+
+    - name: "Handling add message in TR"
+      block: 
+
+        - name: VM_host list
+          shell: cat check_final_success.yml
+          delegate_to: localhost
+          register: vm_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_check_final_suc: "{{ vm_result.stdout }}" 
+          delegate_to: localhost     
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""              
+     
+       
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{ record_id_healthcheck }}"
+            message: "{{ content_check_final_suc }}"             
+            username: "DecoP112686"     
+            password: "opFCtCpIMzmC" 
+          delegate_to: localhost
+          register: add_msg_output
+          when: vm_check_final_suc != ""
+                                
+
+      rescue:
+        - debug:
+            var: add_msg_output            
+
+    - name: "Handling TR record_id"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""   
+
+
+        - name: Display the JSON file content
+          shell: cat check_artifacts.yml
+          delegate_to: localhost
+          register: result_check_arti
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_artifacts: "{{ result_check_arti.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_artifacts }}" >> check_final.yml                    
+          delegate_to: localhost            
+          when: check_artifacts != ""                   
+          
+
+        - name: Display the JSON file content
+          shell: cat check_remedy.yml
+          delegate_to: localhost
+          register: result_check_remedy
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy: "{{ result_check_remedy.stdout }}" 
+          delegate_to: localhost
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ check_remedy }}" >> check_final.yml                    
+          delegate_to: localhost            
+          when: check_remedy != ""          
+
+##########################################
+
+
+        - name: Display the JSON file content
+          shell: cat san_switches_fail.yml
+          delegate_to: localhost
+          register: result_san_switches_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            san_switches_fail: "{{ result_san_switches_fail.stdout }}" 
+          delegate_to: localhost 
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ san_switches_fail }}" >> check_final.yml                    
+          delegate_to: localhost            
+          when: san_switches_fail != ""   
+ 
+
+        - name: Display the JSON file content
+          shell: cat phy_fqdn_fail.yml
+          delegate_to: localhost
+          register: result_fqdn_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            phy_fqdn_fail: "{{ result_fqdn_fail.stdout }}" 
+          delegate_to: localhost 
+
+        - name: "adding up the healthcheck issue"
+          shell: echo "{{ phy_fqdn_fail }}" >> check_final.yml                    
+          delegate_to: localhost            
+          when: phy_fqdn_fail != ""
+
+        - name: Display the JSON file content
+          shell: cat check_final.yml
+          delegate_to: localhost
+          register: result_check_final
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_final: "{{ result_check_final.stdout }}" 
+          delegate_to: localhost                                                                                          
+        
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the DECO results for API checks - physical servers"
+            form3: "***********************************************************************"            
+        - set_fact:
+            content_check_final: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_final }}"
+          when: check_final != ""  
+       
+
+      rescue:
+        - debug:
+            var: check_final
+
+    - name: "Handling add message in TR"
+      block: 
+
+        - name: VM_host list
+          shell: cat check_final.yml
+          delegate_to: localhost
+          register: vm_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_check_final: "{{ vm_result.stdout }}" 
+          delegate_to: localhost     
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck == ""              
+     
+       
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{ record_id_healthcheck }}"
+            message: "{{ content_check_final }}"             
+            username: "DecoP112686"     
+            password: "opFCtCpIMzmC" 
+          delegate_to: localhost
+          register: add_msg_output
+          when: vm_check_final != ""
+                                
+
+      rescue:
+        - debug:
+            var: add_msg_output
+
+    - name: "Close TR"
+      block:  
+        
+        - name: VM_host list
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: vm_result             
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ vm_result.stdout[1:-1] }}"  
+          delegate_to: localhost
+
+
+        - name: "Test custome module [CLOSE TR]"
+          close_tr:
+            record_id: "{{ record_id_healthcheck }}"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+          register: close_tr_output
+
+        - debug:
+            msg: "{{api_result}}"
+                               
+
+      rescue:
+        - debug:
+            var: close_tr_output         

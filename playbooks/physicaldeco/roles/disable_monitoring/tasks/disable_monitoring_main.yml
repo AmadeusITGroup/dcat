@@ -1,0 +1,56 @@
+---
+- name: "Removing S-check user"
+  hosts: all
+  gather_facts: no
+  #become: yes
+
+  vars:
+    ansible_user: autodecopoc
+    ansible_password: UseDynamite!
+
+  tasks:
+    - name: "Remove S-CHECK user id along with home directory on Linux"
+      ansible.builtin.user: 
+        name: amasys
+        state: absent
+        remove: true
+      
+    - name: "validate ansys ID status on Linux"
+      shell: |
+        id amasys
+      register: User_status        
+      ignore_errors: yes
+
+    - name: "To confirm the amasys ID status on Linux"
+      debug:
+        var: User_status
+
+    # - hosts: all
+    #   tasks:
+    #     - name: "Remove the node_exporter package on RHEL"
+    #       yum:
+    #         name: node_exporter
+    #         state: absent
+    #       when: ansible_os_family == "RedHat"
+
+    #     - name: "Remove the node_exporter package on SUSE"
+    #       zypper:
+    #         name: node_exporter
+    #         state: absent
+    #       when: ansible_os_family == "Suse"
+
+    - hosts: all
+      tasks:
+        # - name: "Remove the node_exporter package"
+        #   package:
+        #     name: node_exporter
+        #     state: absent
+
+        - name: "Remove the node_exporter package"
+          ilo_commands:
+            hostname: "{{ fqdn }}"
+            username: "{{ remote_username }}"
+            password: "{{ remote_keyfile }}"
+            command: "sudo rpm -e node_exporter"
+          register: node_exporter_remove
+          delegate_to: localhost

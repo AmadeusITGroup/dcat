@@ -1,0 +1,226 @@
+---
+    - name: Initiating the CMDB update module task
+      throttle: 1
+      block:
+
+        - set_fact:
+            file_cmdb_fail: "cmdb_failure.yml"
+            file_cmdb_suc: "cmdb_success.yml"
+            CMDB_RESULT: ""      
+          run_once: true
+
+
+        - name: Display the JSON file content for cmdb update
+          shell: cat record_cmdb_update_esxi.json
+          delegate_to: localhost
+          register: TR_result_cmdb_up_esxi
+          run_once: true
+
+
+        - name: save the Json data to a Variable as a Fact for cmdb update
+          set_fact:
+            record_id_cmdb_up_esxi: "{{ TR_result_cmdb_up_esxi.stdout[1:-1] }}"
+          delegate_to: localhost         
+          run_once: true
+
+        - meta: end_host
+          when: record_id_cmdb_up_esxi == ""      
+
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+          run_once: true
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost      
+          run_once: true
+                
+        - name: "Check entry for DECO server for filter hostlist for cmdb update"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+         
+        - set_fact: 
+            esxi_type: '{{idem_status.module_update.esxi_type}}'  
+
+        - name: Set Vcenter cleanup status from idem status
+          set_fact: 
+            vcenter_cleanup: '{{ idem_status.module_update.vcenter_cleanup }}'
+            
+        - set_fact: 
+            san_info_fetch: '{{idem_status.module_update.san_info_fetch}}'      
+  
+        - set_fact: 
+            cmdb_update: '{{idem_status.module_update.cmdb_update}}'     
+
+
+          
+        - name: End play for this host
+          meta: end_host
+          when:
+            - (esxi_type in ['HPBlade', 'LenovoBlade'] and (cmdb_update != "F" or vcenter_cleanup != "T")) or
+              (esxi_type in ['HPEnclosure', 'LenovoEnclosure'] and (cmdb_update != "F" or san_info_fetch != "T"))
+          
+
+
+        # - name: "change hostname to lower case"
+        #   set_fact:
+        #     cmdb_esxi_new: "{{inventory_hostname |lower }}"    
+        #   when:
+        #     - esxi_type in ['HPBlade', 'LenovoBlade'] and cmdb_update == "F" and ipam_cleanup == "T"
+        #     - esxi_type in ['HPEnclosure', 'LenovoEnclosure'] and cmdb_update == "F" and dcm == "T"
+           
+        - name: "Change hostname to lower case"
+          set_fact:
+            cmdb_esxi_new: "{{ inventory_hostname | lower }}"    
+          when:
+            - (esxi_type in ['HPBlade', 'LenovoBlade'] and cmdb_update == "F" and vcenter_cleanup == "T") or
+              (esxi_type in ['HPEnclosure', 'LenovoEnclosure'] and cmdb_update == "F" and dcm == "T")
+
+                          
+        - name: "Updating CMDB with CI status after deletion"
+          update_cmdb:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: '{{cmdb_esxi_new}}'
+            instance_id: '{{ instanceid }}'
+            cmdb_server: "{{ cmdb_url_update }}"
+            user_name: "{{ emdb_username }}"
+            pass_word: "{{ emdb_password }}" 
+            status_value: "End of Life"  
+            status_reason_value: "Obsolete"                                 
+          delegate_to: localhost
+          register: output
+          until: '"Exception" not in output.cmdb_result or "Error" not in output.cmdb_result' 
+          retries: 3
+          delay: 30 
+          # when:
+          #   - esxi_type in ['HPBlade', 'LenovoBlade'] and cmdb_update == "F" and ipam_cleanup == "T"
+          #   - esxi_type in ['HPEnclosure', 'LenovoEnclosure'] and cmdb_update == "F" and dcm == "T"
+          when:
+            - (esxi_type in ['HPBlade', 'LenovoBlade'] and cmdb_update == "F" and vcenter_cleanup == "T") or
+              (esxi_type in ['HPEnclosure', 'LenovoEnclosure'] and cmdb_update == "F" and dcm == "T")          
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          run_once: true
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          run_once: true
+
+
+        - name: "Failure information to file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ output.cmdb_result }} " >> {{file_cmdb_fail}}                    
+          delegate_to: localhost
+          when: '"SUCCESSFULLY" not in output.cmdb_result'
+
+        - meta: end_host
+          when: '"SUCCESSFULLY" not in output.cmdb_result'          
+
+        - name: "Fetch CMDB with CI status after updating"
+          cmdb_fetch_after_update:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: '{{cmdb_esxi_new}}'
+            cmdb_server: "{{ cmdb_url_update }}" 
+            instance_id: '{{ instanceid }}'
+            user_name: "{{ emdb_username }}"
+            pass_word: "{{ emdb_password }}" 
+          delegate_to: localhost
+          register: outputcmdb
+          until: '"Exception" not in outputcmdb.cmdb_result_after or "Failed" not in outputcmdb.cmdb_result_after' 
+          retries: 3
+          delay: 20           
+          when: '"SUCCESSFULLY" in output.cmdb_result'
+
+        - set_fact:
+            cmdb_result_fetch: "{{outputcmdb.cmdb_result_after}}"               
+
+        - name: "Failure information to File"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR],Exception occured in CMDB update module kindly check.Either connection issue or server not found" >> {{file_cmdb_fail}}                    
+          delegate_to: localhost
+          when: '"SUCCESSFULLY" not in cmdb_result_fetch'  
+
+        - meta: end_host
+          when: '"Failed to" in cmdb_result_fetch'   
+
+        - name: "success information to file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO],{{cmdb_result_fetch}}" >> {{file_cmdb_suc}}                    
+          delegate_to: localhost
+          when: '"SUCCESSFULLY" in cmdb_result_fetch'
+
+        # - name: Display the JSON file content
+        #   shell: cat private_endpoint_connection_string.yml
+        #   delegate_to: localhost
+        #   run_once: true
+        #   register: result_private_endpoint_connection_string
+    
+        # - name: save the conn string data to a Variable as a Fact
+        #   set_fact:
+        #     private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+        #   delegate_to: localhost
+        #   run_once: true
+
+        - name: "update entry for DECO server for cmdb status update"
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "cmdb_update"
+            status: "T"            
+          register: update_status
+          delegate_to: localhost  
+          when: '"SUCCESSFULLY" in cmdb_result_fetch'
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d"
+          delegate_to: localhost
+          run_once: true
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"    
+          run_once: true
+                        
+             
+
+        - name: "update entry for DECO server for Closure date"
+          azure_update_module_vals_esxi.py:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{ inventory_hostname }}"
+            module_name: "deco_date"
+            status: "{{ time }}"
+          register: update_status_info_date
+          delegate_to: localhost  
+          when:
+            - esxi_type in ['HPBlade', 'LenovoBlade']
+            - update_status is succeeded
+
+
+
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for Update_CMDB module" 
+          #ignore_errors: yes      
+
+        - set_fact:
+            cmdb_result: "{{ output.cmdb_result }}, check errors for CMDB UPDATE module"
+##################################################################
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Failure information to file in rescue block"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ cmdb_result }}" >> {{file_cmdb_fail}}                    
+          delegate_to: localhost

@@ -1,0 +1,162 @@
+---
+# - name: "This playbook is to create PTR for PHYSCIAL deco service health check"
+#   hosts: localhost
+#   gather_facts: no
+           
+        
+#   tasks:      
+#####################################################################################################################        
+                               
+
+    - name: "Handling PTR record_id for ESXI deco"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck_ilo.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_healthcheck_ilo: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_healthcheck_ilo == ""       
+
+        - name: Display the JSON file content
+          shell: cat ilo_command_fail.yml
+          delegate_to: localhost
+          register: result_check_linux
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            esxi_ilo_fail: "{{ result_check_linux.stdout }}" 
+          delegate_to: localhost 
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the ilo connectivity issue details which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_esxi_ilo_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ esxi_ilo_fail }}"
+          when: esxi_ilo_fail != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck_ilo.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_healthcheck_ilo: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost                    
+
+############################################################################################################
+        - name: read yaml file from the specific location 
+          set_fact:
+            file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        - name: split the file content
+          set_fact:
+            lines: "{{file_content.split('\n')}}"
+
+        - name: convert the lines in the file to dict
+          set_fact:
+            res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+          loop: "{{ lines }}"
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key: "{{ present_key | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_esxi_ilo_fail is defined and item in content_esxi_ilo_fail
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name: "{{ allowner_name | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key }}"
+          when: content_esxi_ilo_fail is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final: | 
+              {% for key,value in allowner_name.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_esxi_ilo_fail is defined
+
+        - set_fact:
+            Requester_group: "Requester_group: {{requester_group}}"
+            Requester_name: "Requester_name: {{requester_name}}"
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_esxi_ilo_fail}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_esxi_ilo_fail is defined
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups
+          when: content_esxi_ilo_fail is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups: "{{ result_groups.stdout }}" 
+          delegate_to: localhost 
+          when: content_esxi_ilo_fail is defined
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            ptr_title: "ESXI DECO: Service health check on ilo connectivity referring to failed TR - {{ record_healthcheck_ilo }}"
+            tr_map: "{{ record_healthcheck_ilo }}"
+            assignee_group: "DINFDECO"  
+            ptr_logs: "{{ support_groups }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_esxi_ilo_fail
+          until: '"Successfully" in ptr_esxi_ilo_fail.msg'
+          retries: 3
+          delay: 10
+          when: esxi_ilo_fail != ""
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            task_id: "{{ record_healthcheck_ilo }}"
+            prob_id: "{{ ptr_esxi_ilo_fail.id }}"                   
+          register: update_overview  
+          when: esxi_ilo_fail != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - ILO connectivity"                               
+############################################################################################################
+

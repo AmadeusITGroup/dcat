@@ -1,0 +1,600 @@
+---          
+    - name: "Handling TR record_id for implementation and validation result for storage cleanup task"
+      block:
+ #############  success info gathering ##########################
+        - name : handling error in the success block
+          block:
+            - set_fact:
+                file_storage_cleanup_fail: "storage_cleanup_failure.yml"
+                file_storage_cleanup_suc: "storage_cleanup_success.yml"
+                file_storage_cleanup_fin : "storage_cleanup_final.yml"
+                file_attach_storage_san: "info_san.txt"
+                file_attach_storage_controller: "Info_Host_Volume.txt"                     
+
+            - name: Display the JSON file content for storage cleanup this is TR number
+              shell: cat record_storage_cleanup_phy.json
+              delegate_to: localhost
+              register: TR_result_storage_cleanup  
+
+            - name: save the Json data to a Variable as a Fact for storage cleanup
+              set_fact:
+                record_id_storage_cleanup: "{{ TR_result_storage_cleanup.stdout[1:-1] }}"
+              delegate_to: localhost         
+
+            - meta: end_host
+              when: record_id_storage_cleanup == ""
+
+            - name: Display the JSON file content
+              shell: cat storage_cleanup_success.yml
+              delegate_to: localhost
+              register: result_storage_cleanup_suc
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_storage_cleanup_suc_v: "{{ result_storage_cleanup_suc.stdout }}" 
+              delegate_to: localhost  
+     
+            
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are the DECO results for storage cleanup- physical servers"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_storage_cleanup_suc: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_storage_cleanup_suc_v }}"
+              when: result_storage_cleanup_suc_v != ""   
+            
+
+            - name: " Merge Success information to single final file "
+              shell: echo "{{content_storage_cleanup_suc}}" >> storage_cleanup_final.yml                    
+              delegate_to: localhost
+              when: result_storage_cleanup_suc_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no success file found and continue"      
+  ####################### Failure info gathering ########################## 
+        - name : handling error in the failure block
+          block:          
+            - name: Display the JSON file content
+              shell: cat storage_cleanup_failure.yml
+              delegate_to: localhost
+              register: result_storage_cleanup_fail
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_storage_cleanup_fail_v: "{{ result_storage_cleanup_fail.stdout }}" 
+              delegate_to: localhost  
+      
+            
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are the DECO results for storage cleanup- physical servers"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_storage_cleanup_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_storage_cleanup_fail_v }}"
+              when: result_storage_cleanup_fail_v != ""    
+         
+  
+            - name: " Merge Failure information to to single final file"
+              shell: echo "{{ content_storage_cleanup_fail }}" >> storage_cleanup_final.yml                   
+              delegate_to: localhost
+              when: result_storage_cleanup_fail_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no failure file found and continue"
+
+##########################  merging both failure and success results ###########################
+
+        - name: Display the JSON file content
+          shell: cat storage_cleanup_final.yml
+          delegate_to: localhost
+          register: result_storage_cleanup_fin
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            result_storage_cleanup_fin_v: "{{ result_storage_cleanup_fin.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat file_storage_cleanup_suc_vol.yml
+          delegate_to: localhost
+          register: result_storage_cleanup_vol_s
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            result_file_storage_cleanup_suc_vol: "{{ result_storage_cleanup_vol_s.stdout }}" 
+          delegate_to: localhost           
+           
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost 
+
+######################### Adding attachment to the TR ###################################
+        - name: "Add attachments to TR"
+          block:              
+
+            - name: Get stats about the SAN INFO file to be attached
+              stat:
+                path: info_san.txt
+              register: storage_info_file_san
+
+            - name: Get stats about the STORAGE CONTROLLER file to be attached
+              stat:
+                path: Info_Host_Volume.txt
+              register: storage_info_file_controller
+
+            - name: "Add attachments to TR "
+              add_attachment_to_tr:
+                record_id: "{{record_id_storage_cleanup}}"
+                attachments: "{{ file_attach_storage_san }}"             
+                username: "{{ winaproach_username }}"     
+                password: "{{ winaproach_password }}"                       
+              delegate_to: localhost
+              register: add_attachment_output_san_storage
+              when :  storage_info_file_san.stat.exists
+
+            - name: "Add attachments to TR "
+              add_attachment_to_tr:
+                record_id: "{{record_id_storage_cleanup}}"
+                attachments: "{{ file_attach_storage_controller }}"             
+                username: "{{ winaproach_username }}"     
+                password: "{{ winaproach_password }}"                       
+              delegate_to: localhost
+              register: add_attachment_output_controller_storage
+              when :  storage_info_file_controller.stat.exists
+
+            - name: "Add message to TR"
+              add_message_to_tr:
+                record_id: "{{ record_id_storage_cleanup }}"
+                message: "{{ result_storage_cleanup_fin_v }}"             
+                username: "DecoP112686"     
+                password: "opFCtCpIMzmC" 
+              delegate_to: localhost
+              register: add_msg_output
+              when :  storage_info_file_controller.stat.exists
+
+            - name: "Test custome module [CLOSE TR]"
+              close_tr:
+                record_id: "{{ record_id_storage_cleanup }}"
+                username: "DecoP112686"
+                password: "opFCtCpIMzmC"
+              register: close_tr_output
+
+
+          rescue:
+            - debug:
+                msg: "Unable to add attachments to the TR"           
+########################  closing implementation as failed  ############################################
+        # - name: Implementation Failed that is closing the implementation as failed
+        #   winaproach:
+        #     system: prod #"{{ winaproach_env }}"
+        #     type: task_record
+        #     operation: fail_implementation
+        #     username: "{{ winaproach_username }}"
+        #     password: "{{ winaproach_password }}"
+        #     fields:
+        #       task_id: "{{ record_id_storage_cleanup }}" #"{{ record_id }}"
+        #       text: "{{ result_storage_cleanup_fin_v }}"
+        #   register: fail_implementation  
+        #   when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is not search("INFO")
+
+
+############################################################################################################
+        - name: read yaml file from the specific location 
+          set_fact:
+            file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        - name: split the file content
+          set_fact:
+            lines: "{{file_content.split('\n')}}"
+
+        - name: convert the lines in the file to dict
+          set_fact:
+            res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+          loop: "{{ lines }}"
+          when: lines | length > 0
+
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key: "{{ present_key | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_storage_cleanup_fail is defined and item in content_storage_cleanup_fail
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name: "{{ allowner_name | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key }}"
+          when: content_storage_cleanup_fail is defined 
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final: | 
+              {% for key,value in allowner_name.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_storage_cleanup_fail is defined 
+
+        - set_fact:
+            Requester_group: "Requester_group: {{requester_group}}"
+            Requester_name: "Requester_name: {{requester_name}}"
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_storage_cleanup_fail}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_storage_cleanup_fail is defined 
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups
+          when: content_storage_cleanup_fail is defined 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups: "{{ result_groups.stdout }}" 
+          delegate_to: localhost
+          when: content_storage_cleanup_fail is defined 
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "PHYSICAL DECO: storage cleanup failure list and details with failed TR - {{ record_id_storage_cleanup }}"
+            tr_map: "{{ record_id_storage_cleanup }}"
+            assignee_group: "OSX04SMG" #"DINFDECO" DINFDECO
+            ptr_logs: "{{ support_groups }}" 
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"                 
+          register: ptr_out_storage_cleanup  
+          when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is not search("INFO")
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: filter owner group
+          categorize_servers:
+            path: phy_storage_cleanup_failure.txt
+          delegate_to: localhost
+          register: failure_servers_list
+          when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is not search("INFO")
+
+        - debug:
+            var: failure_servers_list
+          when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is not search("INFO")
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_out_storage_cleanup.id }}"
+            event: "Physical DECO: Storage cleanup failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}" 
+          loop: "{{ failure_servers_list.Status.Failure }}"  
+          register: ptr_add
+          when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is not search("INFO")
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_storage_cleanup }}"
+            prob_id: "{{ ptr_out_storage_cleanup.id }}"                   
+          register: update_overview  
+          when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is not search("INFO")             
+
+########################  Pending Partial implementation  ############################################
+        # - name: Implementation partial that is closing the implementation as partial
+        #   tr_partial_imp:
+        #     win_url: "WIN@PROACH_URL"
+        #     username: "{{ winaproach_username }}"
+        #     password: "{{ winaproach_password }}"
+        #     task_id: "{{ record_id_storage_cleanup }}"
+        #   register: partial_implement
+        #   when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is search("INFO")
+ 
+
+# ########################  Close Partial implementation  ############################################
+        # - name: Implementation partial that is closing the implementation as partial
+        #   tr_partial_close:
+        #     win_url: "WIN@PROACH_URL"
+        #     username: "{{ winaproach_username }}"
+        #     password: "{{ winaproach_password }}"
+        #     task_id: "{{ record_id_storage_cleanup }}"
+        #     closing_comment: "{{ result_storage_cleanup_fin_v }}"
+        #   register: close_partial_implement
+        #   when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is search("INFO")
+
+
+############################################################################################################
+
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key1: "{{ present_key1 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_storage_cleanup_fail is defined and item in content_storage_cleanup_fail
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name1: "{{ allowner_name1 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key1 }}"
+          when: content_storage_cleanup_fail is defined 
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final1: | 
+              {% for key,value in allowner_name1.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_storage_cleanup_fail is defined 
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_storage_cleanup_fail}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final1}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_storage_cleanup_fail is defined 
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups1
+          when: content_storage_cleanup_fail is defined 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups1: "{{ result_groups1.stdout }}" 
+          delegate_to: localhost
+          when: content_storage_cleanup_fail is defined 
+
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "PHYSICAL DECO: storage cleanup failure list and details with failed TR - {{ record_id_storage_cleanup }}"
+            tr_map: "{{ record_id_storage_cleanup }}"
+            assignee_group: "OSX04SMG" #"DINFDECO" DINFDECO 
+            ptr_logs: "{{ support_groups1 }}" 
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"                  
+          register: ptr_out_storage_cleanup  
+          when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is search("INFO")
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: filter owner group
+          categorize_servers:
+            path: phy_storage_cleanup_failure.txt
+          delegate_to: localhost
+          register: failure_servers_list
+          when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is search("INFO")
+
+        - debug:
+            var: failure_servers_list
+          when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is search("INFO")
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_out_storage_cleanup.id }}"
+            event: "Physical DECO: Storage cleanup failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}" 
+          loop: "{{ failure_servers_list.Status.Failure }}"  
+          register: ptr_add
+          when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is search("INFO")
+
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_storage_cleanup }}"
+            prob_id: "{{ ptr_out_storage_cleanup.id }}"                   
+          register: update_overview  
+          when: result_storage_cleanup_fin_v is search("ERROR") and result_storage_cleanup_fin_v is search("INFO")     
+
+        - name: Check snow api call back
+          update_snow:
+            action: Phase2
+            ritm_number: "{{ ritm_number }}"
+            status: Success
+            comments: SAN cleanup has been successfully completed for all the CIs. All the servers have been completely decommissioned.
+            username: "{{ SN_USERNAME }}"
+            password: "{{ SN_PASSWORD }}"
+          run_once: True  
+          register: api_result       
+          when: result_storage_cleanup_fin_v is not search("ERROR")
+
+        - name: Check snow api call back
+          update_snow:
+            action: Phase2
+            ritm_number: "{{ ritm_number }}"
+            status: Waiting
+            comments: SAN cleanup has been failed due to certain issue. DCAT team will look into it and revert back to you.
+            username: "{{ SN_USERNAME }}"
+            password: "{{ SN_PASSWORD }}"
+          run_once: True  
+          register: api_result       
+          when: result_storage_cleanup_fin_v is search("ERROR")
+
+############################# closing implementation as success ####################            
+        # - name: END Implementation that is closing the implementation as success
+        #   winaproach:
+        #     system: prod #"{{ winaproach_env }}"
+        #     type: task_record
+        #     operation: end_implementation
+        #     username: "{{ winaproach_username }}"
+        #     password: "{{ winaproach_password }}"
+        #     fields:
+        #         task_id: "{{ record_id_storage_cleanup }}" #"{{ record_id }}"
+        #         text: "{{ result_storage_cleanup_fin_v }}"
+        #   register: end_implementation
+        #   when: result_storage_cleanup_fin_v is not search("ERROR") and result_storage_cleanup_fin_v is search("INFO")
+ 
+
+        # - name: start Validate Implementation for closing the success TR
+        #   winaproach:
+        #     system: prod #"{{ winaproach_env }}"
+        #     type: task_record
+        #     operation: validate
+        #     username: "{{ winaproach_username }}"
+        #     password: "{{ winaproach_password }}"
+        #     fields:
+        #       task_id: "{{ record_id_storage_cleanup }}" #"{{ record_id }}"
+        #       text: "{{ result_storage_cleanup_fin_v }}"
+        #   register: validation
+        #   when: result_storage_cleanup_fin_v is not search("ERROR") and result_storage_cleanup_fin_v is search("INFO")
+
+############################################################################################################
+
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key2: "{{ present_key2 | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: result_file_storage_cleanup_suc_vol is defined and item in result_file_storage_cleanup_suc_vol
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name2: "{{ allowner_name2 | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key2 }}"
+          when: result_file_storage_cleanup_suc_vol is defined 
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final2: | 
+              {% for key,value in allowner_name2.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: result_file_storage_cleanup_suc_vol is defined 
+
+
+        - name: "writing output to File"
+          shell: echo -e "{{result_file_storage_cleanup_suc_vol}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final2}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: result_file_storage_cleanup_suc_vol is defined 
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups2
+          when: result_file_storage_cleanup_suc_vol is defined 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups2: "{{ result_groups2.stdout }}" 
+          delegate_to: localhost
+          when: result_file_storage_cleanup_suc_vol is defined 
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "PHYSICAL DECO: storage cleanup failure list and details with failed TR - {{ record_id_storage_cleanup }}"
+            tr_map: "{{ record_id_storage_cleanup }}"
+            assignee_group: "OSX04SMG" #"DINFDECO" DINFDECO 
+            ptr_logs: "{{ support_groups2 }}" 
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"                  
+          register: ptr_out_storage_cleanup  
+          when: result_file_storage_cleanup_suc_vol is search("Volume protection")
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: filter owner group
+          categorize_servers:
+            path: phy_storage_cleanup_failure.txt
+          delegate_to: localhost
+          register: failure_servers_list
+          when: result_file_storage_cleanup_suc_vol is search("Volume protection")
+
+        - debug:
+            var: failure_servers_list
+          when: result_file_storage_cleanup_suc_vol is search("Volume protection")
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ item }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_out_storage_cleanup.id }}"
+            event: "Physical DECO: Storage cleanup failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}" 
+          loop: "{{ failure_servers_list.Status.Failure }}"  
+          register: ptr_add
+          when: result_file_storage_cleanup_suc_vol is search("Volume protection")
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_storage_cleanup }}"
+            prob_id: "{{ ptr_out_storage_cleanup.id }}"                   
+          register: update_overview  
+          when: result_file_storage_cleanup_suc_vol is search("Volume protection")           
+
+        
+      rescue:
+        - debug:
+            msg: "Exception occurred so rescued the main tr result block for storage cleanup"
+                  

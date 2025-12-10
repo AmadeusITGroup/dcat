@@ -1,0 +1,96 @@
+---
+# - name: "This playbook collect all logs"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:  
+#     network_success: "network_success.yml"
+#     network_failure: "network_failure.yml" 
+#     final_network: "final_network.yml"
+#     network_logging: "network_log.yml"
+#     graceperiod_flag: true 
+#     network: False
+#     nas_check: true
+        
+         
+    
+#   ####collect logs####
+
+#   tasks:             
+    - name: "Handling node list, TR and retention days"
+      block:                                             
+      
+        - name: VM_host list
+          shell: cat network_success.yml
+          delegate_to: localhost
+          register: success_network             
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            net_success: "{{ success_network.stdout }}" 
+          delegate_to: localhost
+
+        - name: "success log list"
+          shell: echo '{{net_success}}' >> final_network.yml                     
+          delegate_to: localhost
+          when: network_success != ""
+
+
+        - name: VM_host list
+          shell: cat network_failure.yml
+          delegate_to: localhost
+          register: failure_network             
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            net_failure: "{{ failure_network.stdout }}" 
+          delegate_to: localhost
+
+        - name: "success log list"
+          shell: echo '{{net_failure}}' >> final_network.yml                     
+          delegate_to: localhost
+          when: network_failure != ""       
+       
+
+        - name: VM_host list
+          shell: cat final_network.yml
+          delegate_to: localhost
+          register: vm_final             
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            final_list: "{{ vm_final.stdout_lines }}"
+          delegate_to: localhost       
+
+        - debug:
+            var: final_list
+
+        - name: Find uniqe entries
+          shell: cat final_network.yml | sort -u | uniq -u | grep -v -e '^[[:space:]]*$' > network_log.yml
+          delegate_to: localhost 
+
+      rescue:
+        - debug:
+            var: final_list          
+
+                  
+
+                                
+                
+
+      
+        
+
+        
+              
+
+                        
+    
+    
+   
+    
+
+    
+        
+    
+        
+    

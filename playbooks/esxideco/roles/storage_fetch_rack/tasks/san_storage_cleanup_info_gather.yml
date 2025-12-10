@@ -1,0 +1,343 @@
+---
+    - name: Initiating the storage info fetch module task
+      throttle: 1
+      block:
+
+        - set_fact:
+            file_success_storage_info: "storage_info_fetch_success.yml"
+            file_failure_storage_info: "storage_info_fetch_failure.yml" 
+            file_storage_info_final: "storage_fetch_information_final.txt"
+            file_info_storage_esxi: "info_storage_esxi.txt"   
+            filtered_output: []
+            filtered_output_no_info: []
+            alias_host: []
+            file_wwpn: "wwpn{{ inventory_hostname }}.txt"
+            current_host: "{{ inventory_hostname }}"            
+   
+        - name: Display the JSON file content
+          shell: cat record_for_storage_info_gather.json
+          delegate_to: localhost
+          register: TR_result_storage_info_gather 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_server_info_gather: "{{ TR_result_storage_info_gather.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: TR_result_storage_info_gather == "" 
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost 
+
+################################# check san_info_fetch and server_info #########################################
+        - name: "Check entry for DECO server"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost       
+
+        - set_fact: 
+            fqdn_info: '{{idem_status.module_update.fqdn_info}}'
+
+        - set_fact: 
+            san_info_fetch: '{{idem_status.module_update.san_info_fetch}}'
+                 
+        - set_fact: 
+            server_info: '{{idem_status.module_update.server_info}}' 
+
+        - name: End play for this host
+          meta: end_host
+          when: server_info != "T" or san_info_fetch != "F"
+
+        - name: "Check entry for DECO server and fetch wwpn information of host"
+          storage_state_value_fetch_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"                        
+          register: info_result_host
+          delegate_to: localhost 
+        
+        - debug:
+            var: info_result_host         
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+        
+        - name: "unable to fetch data from state file writing to failure file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], unable to fetch data from state file.{{ info_result_host.module_update }}" >> {{file_failure_storage_info}}                    
+          delegate_to: localhost 
+          when: info_result_host.module_update is search("Error")
+
+        - meta: end_host
+          when: info_result_host.module_update is search("Error")
+
+        - name: "Host WWPN - Output"
+          set_fact:
+            host_wwpns_info: "{{ info_result_host.module_update.host_info}}"
+
+        - set_fact:
+            host_wwpns: "{{ host_wwpns_info.WWPN }}"
+
+        - name: Check if storage info file exists and is empty
+          stat:
+            path: "{{ file_info_storage_esxi }}"
+          register: storage_info_file
+          delegate_to: localhost
+
+        - name: Write header if file does not exist or is empty
+          copy:
+            content: |-
+              Please Proceed with the SAN Storage cleanup of following Servers
+
+              Please find attached the file for reference
+            dest: "{{ file_info_storage_esxi }}"
+            mode: '0644'
+          when: storage_info_file.stat.exists == false or storage_info_file.stat.size == 0
+          delegate_to: localhost
+          run_once: true
+
+        - name: Append inventory_hostname to file
+          lineinfile:
+            path: "{{ file_info_storage_esxi }}"
+            line: "{{ inventory_hostname }}"
+            create: yes
+            insertafter: EOF
+          delegate_to: localhost
+
+        - name: converting each wwpn into the format with colon
+          set_fact:
+            formatted_wwpn: "{{formatted_wwpn | default([]) + [item | regex_replace('(\\w{2})','\\1:')]}}"
+          loop:  "{{host_wwpns}}"        
+
+        - name: removing the trailing colons
+          set_fact: 
+            formatted_wwpn: "{{formatted_wwpn | map('regex_replace','(:$)','') | list}}"
+
+        - debug:
+            var: formatted_wwpn 
+
+        - name: creating a file
+          file:
+            path: "{{file_wwpn}}"
+            state: touch 
+          delegate_to: localhost
+          register: file_create
+
+        - name: write elements to the file
+          lineinfile:
+            path: "{{file_wwpn}}"    
+            line: "{{ item }}"
+          with_items: "{{ formatted_wwpn }}"
+          delegate_to: localhost
+          register: file_output
+
+        - set_fact:
+            env_data: "{{ env_data | default('dev') }}"  # Default to 'dev' if not set
+
+        - set_fact:
+            broc_file: brocade_inventory.yml
+          when: env_data == "prod"                      
+
+        - set_fact:
+            broc_file: brocade_inventory_dev.yml
+          when: env_data == "dev"  
+
+
+        - name: Fetching all the switch IPs into list variable- Read YAML file
+          slurp:
+            path: "{{ broc_file }}"
+          delegate_to: localhost
+          register: switch_ip_yaml_file
+
+        - name: Extract IP adresses to list
+          set_fact:
+            decoded_out: "{{ switch_ip_yaml_file.content| b64decode | from_yaml }}" #| map(attribute='server_ip') | list }}"
+  
+        - set_fact:
+            switch_ip_list : "{{ decoded_out | regex_findall('\\bserver_ip=([\\d.]+)')}}"    
+
+        - debug:
+            var: switch_ip_list 
+            
+        - name: "Fetch FQDN from Azure table"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+
+        - set_fact: 
+            server_fqdn: '{{idem_status.module_update.fqdn_info}}' 
+
+        - set_fact: 
+            remote_username: "{{ remote_username }}" 
+
+        - set_fact: 
+            remote_keyfile: "{{ remote_password }}"
+
+        - name: "ESXi server information gathering"
+          gather_info_with_ports:
+            hostname: '{{ server_fqdn }}'
+            username: "{{ remote_username }}"
+            password: "{{ remote_keyfile }}"                            
+          delegate_to: localhost
+          register: output_gather_info
+
+        - debug:
+            var: output_gather_info        
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Failure information to file for exception scenario"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ output_gather_info.host_result }} " >> {{file_server_info_failure}}                    
+          delegate_to: localhost
+          when: '"ERROR" in output_gather_info.host_result'
+
+        - meta: end_host
+          when: '"ERROR" in output_gather_info.host_result' 
+
+        - set_fact:
+            wwpn_host: "{{output_gather_info.host_result.WWPN}}"
+          when: output_gather_info.host_result.WWPN is defined 
+
+        - set_fact:
+            clustername: "{{ cluster_data.cluster }}"
+          when: cluster_data is defined 
+
+        - set_fact:  
+            fqdn_host: "{{output_gather_info.host_result.fqdn}}"
+          when: output_gather_info.host_result.fqdn is defined 
+
+        - set_fact:  
+            ip_host: "{{output_gather_info.host_result.ip}}"
+          when: output_gather_info.host_result.ip is defined
+
+        - set_fact: 
+            os_host: "{{output_gather_info.host_result.os_name}}"
+          when: output_gather_info.host_result.os_name is defined
+
+        - set_fact:
+            storage_ports_info: "{{ output_gather_info.host_result.storage_ports }}"
+          when: output_gather_info.host_result.storage_ports is defined
+
+        - name: Combine and clean ESXi details into a single dictionary
+          set_fact:
+            combined_host_info:
+              storage_ports: "{{ output_gather_info.host_result.storage_ports }}"
+              # nic_ports: "{{ output_gather_info.host_result.nic_ports }}"
+              os_name: "{{ output_gather_info.host_result.os_name }}"
+              WWPN: "{{ output_gather_info.host_result.WWPN }}"
+              fqdn: "{{ output_gather_info.host_result.fqdn }}"
+              ip: "{{ output_gather_info.host_result.ip | regex_replace('-------------\\n', '') | trim }}"
+              
+        - name: "update storage cleanup state file for DECO server"
+          storage_state_values_update_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{ inventory_hostname }}"
+            module_name: "info_storage_cleanup"
+            status: "{{ combined_host_info | to_json}}"               
+          register: update_status_info_gather_fetch
+          delegate_to: localhost
+          when: fqdn_host!= "NA" or ip_host!= "NA" 
+          
+        - set_fact:
+             check_update_flag_server: "{{ update_status_info_gather_fetch.module_update }}"
+          when: update_status_info_gather_fetch.module_update is defined   
+
+        - name: "collecting failure info to failure file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to update the information to state file.{{ check_update_flag_server }}" >> {{file_failure_storage_info}}                    
+          delegate_to: localhost 
+          when: check_update_flag_server is defined and check_update_flag_server is not search("successfully")
+
+        - meta: end_host
+          when: check_update_flag_server is defined and check_update_flag_server is not search("successfully")
+
+        # - name: "collecting success info to success file"
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], Successfully fetched server information and updated to state file.{{ combined_host_info | to_json }}" >> {{file_server_info_success}}                    
+        #   delegate_to: localhost 
+        #   when: check_update_flag_server is defined and check_update_flag_server is search("successfully")
+           
+        # - name: Safely log success message
+        #   shell: |
+        #     echo "{{ inventory_hostname }}, {{ time }}, [INFO], Successfully fetched server information and updated to state file.{{ combined_host_info | to_json | quote }}" >> {{ file_server_info_success }}
+        #   delegate_to: localhost
+        #   when: check_update_flag_server is defined and check_update_flag_server is search("successfully")
+
+        # - name: "collecting success info to success file"
+        #   # shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], Successfully fetched server information and updated to state file.{{ combined_host_info | to_json }}" >> {{file_success_storage_info}}    
+        #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], Successfully fetched server information and updated to state file.{{ combined_host_info | to_json | quote }}" >> {{ file_success_storage_info }}                
+        #   delegate_to: localhost 
+        #   when: check_update_flag_server is defined and check_update_flag_server is search("successfully")
+
+
+        - name: Append success log with combined_host_info
+          blockinfile:
+            path: "{{ file_success_storage_info }}"
+            block: |
+              {{ inventory_hostname }}, {{ time }}, [INFO], Successfully fetched server information and updated to state file.
+              {{ combined_host_info | to_json }}
+            create: yes
+            marker: ""  
+          delegate_to: localhost
+          when: check_update_flag_server is defined and check_update_flag_server is search("successfully")
+
+
+
+        - name: "update entry for DECO server "
+          azure_update_module_vals_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "san_info_fetch"
+            status: "T"            
+          register: update_status_state_file
+          delegate_to: localhost
+          when: check_update_flag_server is defined and check_update_flag_server is search("successfully") #and (alias_host_map ==[] or zone_host_map ==[]))
+
+        - set_fact:
+             check_state_flag: "{{ update_status_state_file.state_update }}"
+          when: update_status_state_file.state_update is defined 
+
+        - name: "collecting failure info of state file updation "
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to update state file as TRUE.{{ check_state_flag }}" >> {{file_failure_storage_info}}                    
+          delegate_to: localhost 
+          when: check_state_flag is defined and check_state_flag is not search("successfully")
+
+        - debug:
+            var: update_status_state_file
+
+      rescue: 
+        - name: When above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors on san_storage_cleanup_main" 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp 
+
+        - set_fact:
+              time: "{{tstamp.stdout}}"
+              
+        - name: "collecting failure info to failure file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], check errors on san_storage_cleanup_wwpn_info_gather module." >> {{file_failure_storage_info}}                    
+          delegate_to: localhost  
+  

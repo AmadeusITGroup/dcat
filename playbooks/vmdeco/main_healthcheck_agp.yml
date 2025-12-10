@@ -1,0 +1,48 @@
+---
+- name: "healthcheck second trigger"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: True
+  tasks:
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: health_check_agp.yml
+
+
+# - name: "healthcheck second trigger"
+#   hosts: all:vmdeco
+#   serial: "{{ hostvars.localhost.serial_number.msg }}"
+#   gather_facts: no    
+#   tasks:
+#     - name: healthcheck second trigger
+#       ansible.builtin.import_role:
+#         name: healthcheck_agp
+#         tasks_from: validate_vm_info.yml
+
+#     - name: healthcheck second trigger
+#       ansible.builtin.import_role:
+#         name: healthcheck_agp
+#         tasks_from: vcenter_fetch_agp.yml
+
+- name: "Create TR for healthcheck second trigger"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: True
+  tasks:
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: create_tr_health_check_agp.yml
+
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: add_info_healthcheck_agp.yml
+
+    - name: healthcheck second trigger
+      ansible.builtin.import_role:
+        name: healthcheck_agp
+        tasks_from: create_ptr_health_check_agp.yml

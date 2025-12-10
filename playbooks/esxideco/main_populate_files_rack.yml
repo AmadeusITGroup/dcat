@@ -1,0 +1,124 @@
+---
+- name: "Check output files"
+  hosts: localhost
+  gather_facts: no    
+  tasks: 
+    - name: Create result files
+      copy:
+        dest: "{{ item }}"
+        mode: 0644
+        content: |
+          F
+      with_items:
+        - fqdn_pre.json
+      no_log: True
+
+    - name: Create result files
+      copy:
+        dest: "{{ item }}"
+        mode: 0644
+        content: |
+          T
+      with_items:
+        - fqdn.json
+        - record_for_fetch_fqdn_ph.json
+      no_log: True
+
+    - name: generate output files for every module
+      file:
+        path: "{{ item }}"
+        state: touch
+        mode: 0644
+      with_items:
+        - record_for_server_info_gather.json
+        - esxi_stat_failure.yml
+        - esxi_stat_success.yml
+        - esxi_stat_failure_cmdb.yml
+        - esxi_stat_failure_owner.yml
+        - esxi_stat_final.yml
+        - ptr_system.yml
+        - cmdb_stat_success.yml
+        - cmdb_stat_failure_cmdb_agp_phy.yml
+        - cmdb_stat_failure_owner_agp_phy.yml
+        - cmdb_stat_failure_cmdb.yml
+        - cmdb_stat_failure_owner.yml
+        - cmdb_success.yml
+        - cmdb_failure.yml
+        - cmdb_dup_failure.yml
+        - record_for_storage_info_gather.json
+        - storage_info_fetch_success.yml
+        - storage_info_fetch_failure.yml
+        - storage_info_fetch_final.yml
+        - cmdb_final.yml     
+        - host_list_fqdn_fetch_phy.yml
+        - host_list_storage_info_fetch.yml
+        - host_list_server_info_gather.yml
+        - host_list_shutdown.yml
+        - server_info_success.yml
+        - server_info_failure.yml
+        - server_info_final.yml
+        - shutdown_success.yml
+        - record_dns.json
+        - shutdown_failure.yml
+        - esxi_shutdown_final.yml
+        - ilo_success.yml
+        - cisco_sw_yes_list.yml
+        - host_list_vcenter.yml
+        - record_vcenter.json
+        - ilo_failure.yml
+        - esxi_ilo_final.yml
+        - cmdb_stat_failure.yml
+        - host_list_cmdb_duplicate_check.yml
+        - fqdn_success_phy.yml
+        - fqdn_success_esxi.yml
+        - fqdn_failure_esxi.yml
+        - check_remedy_success.yml
+        - check_remedy_fail.yml
+        - check_remedy.yml
+        - ilo_command_success.yml
+        - ilo_command_fail.yml
+        - san_switches_success.yml
+        - san_switches_fail.yml
+        - esxi_ssh_success.yml
+        - esxi_ssh_fail.yml
+        - check_synergon_success.yml
+        - check_synergon_fail.yml
+        - check_synergon.yml
+        - vcenter_api_success.yml
+        - sw_arista_info.yml
+        - vcenter_api_fail.yml
+        - ESXI_list_firewall.yml
+        - vcenter_host_facts_success.yml
+        - vcenter_host_facts_fail.yml
+        - arista_sw_no_list.yml
+        - cisco_sw_list.yml
+        - record_net_cisco.json
+        - record_for_storage_info_fetch.json
+        - network_no_sw.yml
+        - net_fail_cisco.yml
+        - network_tr_cisco_final.yml
+        - arista_sw_list.yml
+        - record_net_arista.json
+        - arista_sw_yes_list.yml
+        - san_box.yml
+        - synergon_url.yml
+        - record_healthcheck.json
+        - record_for_cmdb_dup_info.json
+        - record_cmdb_fetch.json
+        - check_final_success.yml
+        - check_final_fail.yml 
+        - winaproach_category.yml
+        - groups_ptr.yml
+        - host_list_oview_rack.yml
+        - record_oneview.json
+        - host_list_ip_dns.yml
+        - host_list_cmdb_fetch_bgp.yml
+        - record_ilo.json
+        - record_shutdown.json
+        - dcm.yml
+        - host_list_cmdb_update_esxi.yml
+        - record_cmdb_update_esxi.json
+        - esxi_dns_success.yml
+        - esxi_dns_failure.yml
+        - dns_success.yml
+      no_log: true

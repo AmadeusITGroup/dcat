@@ -1,0 +1,672 @@
+---
+    - name: handle the error before grace period vcenter search for vm
+      throttle: 1 
+      block:
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server"
+          azure_update_ref:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status
+          delegate_to: localhost
+
+        - set_fact: 
+            fqdn: '{{idem_status.module_update.fqdn}}'
+                               
+
+        - meta: end_host
+          when: fqdn != "" and fqdn != "F"
+
+      rescue: 
+        - name: before graceperiod check
+          debug:
+            msg: "before graceperiod check"
+
+
+    - name: handle the error before grace period vcenter search for vm 
+      block:      
+         
+
+        - name: Display the JSON file content
+          shell: cat check_synergon.yml
+          delegate_to: localhost
+          register: result_check_synergon
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_synergon: "{{ result_check_synergon.stdout }}" 
+          delegate_to: localhost      
+
+        - meta: end_host
+          when: check_synergon != ""
+
+        - set_fact:
+            v_center_before: "" 
+
+        - name: "Test custom module fetch vcenter details before grace period"
+          fetch_vcentre:
+            vmname: '{{ inventory_hostname }}'     
+            synergon_api: '{{ synergon_url }}'
+            instance_id_vm: '{{ instanceid }}'
+          delegate_to: localhost
+          register: vcenter_output
+          until: '"Successfully" in vcenter_output.msg or "Unable to find" in vcenter_output.msg or "duplicate entries" in vcenter_output.msg'
+          retries: 3
+          delay: 10 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                          
+        - set_fact:
+            time: "{{tstamp.stdout}}" 
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{vcenter_output.msg}}" >> check_vcenter.yml                  
+          delegate_to: localhost 
+          when: '"Successfully" not in vcenter_output.msg'
+
+        - name: "VM failure list"
+          shell: echo "{{ inventory_hostname }}" >> failure_vm_bgp.yml                   
+          delegate_to: localhost
+          when: '"Successfully" not in vcenter_output.msg'          
+
+        - meta: end_host
+          when: '"Successfully" not in vcenter_output.msg' 
+
+        - set_fact:
+            v_center_before: "{{vcenter_output.vcenter}}" 
+            v_center_msg: "{{vcenter_output.msg}}"
+
+        - set_fact:
+            fqdn_vc: ""            
+           
+        - set_fact:
+            fqdn_vc: .muc.msp.net
+          when: v_center_before is not search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|MUCAMNAZ1|MUCAMNVCPA1|MUCAMNVCPA2|MUCAMNAZ2|MUCAMNVCPB1|MUCAMNVCPB2|MUCAMNAZ3|MUCAMNVCPC1|MUCAMNVCPC2") and v_center_before is not search(".muc.msp.net") 
+
+        - set_fact:
+            fqdn_vc: .vclassic.net
+          when: v_center_before is search("mucvcdts02|mucvcdts01|fracol1vcsa1|mucvcsacb01|MUCAMNAZ1|MUCAMNVCPA1|MUCAMNVCPA2|MUCAMNAZ2|MUCAMNVCPB1|MUCAMNVCPB2|MUCAMNAZ3|MUCAMNVCPC1|MUCAMNVCPC2") and v_center_before is not search(".vclassic.net") 
+
+        - set_fact:
+            proto: https://
+
+        - set_fact:
+            v_center: "{{ proto ~ v_center_before ~ fqdn_vc }}"
+
+        - set_fact:
+            v_center_fqdn: "{{ v_center_before ~ fqdn_vc }}"                                              
+
+        - name: Check if api up or not
+          uri:
+            url: "{{ v_center }}"
+            validate_certs: no
+          delegate_to: localhost                 
+          register: result
+          until: "result.status == 200"
+          retries: 3
+          delay: 10
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"             
+
+        - name: "vcenter status"
+          shell: echo "#{{ inventory_hostname }}, {{ time }}, [INFO], vcenter - {{ v_center_fqdn }} is up and runing for the VM {{ inventory_hostname }} good to proceed for VM deco trigger 1" >> check_vcenter_success.yml   
+          delegate_to: localhost           
+
+      rescue: 
+        - name: when the before grace period module throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors for vcentre_details module in before grace period "
+
+        - name: handle the error before grace period vcenter search for vm 
+          block:
+
+            - name: Display the JSON file content
+              shell: cat private_endpoint_connection_string.yml
+              delegate_to: localhost
+              register: result_private_endpoint_connection_string
+        
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+              delegate_to: localhost
+                    
+            - name: "Check entry for DECO server"
+              azure_update_ref:
+                connection_string: "{{ private_endpoint_connection_string }}"
+                hostname: "{{inventory_hostname}}"
+              register: idem_status
+              delegate_to: localhost
+
+            - set_fact: 
+                fqdn: '{{idem_status.module_update.fqdn}}'
+
+            - meta: end_host
+              when: fqdn != "" and fqdn != "F"
+
+          rescue: 
+            - name: after graceperiod check
+              debug:
+                msg: "after graceperiod check"                                       
+
+        # - set_fact:
+        #     v_center_msg: "Exception occurred in before grace period module of vcenter fetch but rescued for server'{{ inventory_hostname }}': '{{vcenter_output.msg}}'" 
+
+##################################################################################
+
+        - name: handle the error before grace period vcenter search for vm 
+          block:
+
+            - name: Get timestamp from the system
+              shell: "date +%Y-%m-%d/%H:%M"
+              delegate_to: localhost
+              register: tstamp  
+                          
+            - set_fact:
+                time: "{{tstamp.stdout}}"                
+
+            - name: "VM host list failure to file before grace period"
+              shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], {{vcenter_output.msg}}" >> check_vcenter.yml                    
+              delegate_to: localhost            
+              when: '"Exception" in vcenter_output.msg'
+
+            # - meta: end_host
+            #   when: '"Exception" in vcenter_output.msg'
+
+                
+            - name: "vcenter status"
+              shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], vcenter - {{ v_center_fqdn }} is down currently for the VM {{ inventory_hostname }} after 3 retries needs attention" >> check_vcenter.yml   
+              delegate_to: localhost
+              when: v_center_before != ""
+
+            # - meta: end_host
+            #   when: v_center_before != ""             
+
+          rescue: 
+            - name: vcenter status
+              debug:
+                msg: "vcenter status"
+
+                                    
+
+    - name: "Fetch FQDN"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat check_vcenter.yml
+          delegate_to: localhost
+          register: vcenter_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            vm_vcent: "{{ vcenter_healthcheck.stdout }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: vm_vcent != ""                
+
+        - set_fact:
+            fqdn: ""      
+
+        - name: fetch FQDN
+          fetch_fqdn_synergon:
+            vmname: "{{ inventory_hostname }}"
+            synergon_api: '{{ synergon_url }}'
+          delegate_to: localhost            
+          register: results
+          until: '"Successfully" in results.msg'
+          retries: 3
+          delay: 10
+
+        - set_fact:
+            fqdn: "{{ results.host_fqdn }}"  
+
+        - name: set results to file
+          set_fact:
+            result: "{{ results.msg }}"  
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                          
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Synergon status"
+          shell: echo "!Synergon api - {{ time }}, {{ results.msg }} - unable to fetch fqdn for the vm {{ inventory_hostname }}" >> check_synergon.yml   
+          delegate_to: localhost
+          when: fqdn == ""
+
+        # - meta: end_host
+        #   when: fqdn == ""                     
+
+      rescue:
+        - debug:
+            var: 'results'
+          
+
+        - name: handle the error before grace period vcenter search for vm 
+          block:
+
+            - name: Get timestamp from the system
+              shell: "date +%Y-%m-%d/%H:%M"
+              delegate_to: localhost
+              register: tstamp  
+                          
+            - set_fact:
+                time: "{{tstamp.stdout}}"            
+
+            - name: "Synergon status"
+              shell: echo "!Synergon api - {{ time }}, {{ results.msg }} - unable to fetch fqdn for the vm {{ inventory_hostname }}" >> check_synergon.yml   
+              delegate_to: localhost
+              when: fqdn == ""
+
+            # - meta: end_host
+            #   when: fqdn == ""               
+
+          rescue: 
+            - name: synergon rescue
+              debug:
+                msg: "synergon issue and rescued"              
+
+    - name: "Handling VM's"
+      block:
+
+        - set_fact: 
+            nas_validate: ""
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost     
+
+        - name: "Check entry for DECO server"
+          azure_update_ref:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status
+          delegate_to: localhost
+
+        - set_fact: 
+            nas_validate: '{{idem_status.module_update.nas_validate}}' 
+                               
+
+        - meta: end_host
+          when: nas_validate == "manual"
+
+        - name: Display the JSON file content
+          shell: cat check_synergon.yml
+          delegate_to: localhost
+          register: synergon_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            vm_synergon: "{{ synergon_healthcheck.stdout }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: vm_synergon != ""                  
+
+
+        # - set_fact:
+        #     os: ""
+
+        - name: "Check entry for DECO server"
+          azure_update_ref:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status
+          delegate_to: localhost
+
+        - set_fact: 
+            os: '{{idem_status.module_update.os}}'                
+                   
+        - name: "Gather Network detailed information associated with the given VM"
+          vmware_guest_info:
+            hostname: '{{ v_center_fqdn }}'
+            username: "{{ paccount_username }}" 
+            password: "{{ paccount_password }}" 
+            name: "{{ inventory_hostname }}"      
+            validate_certs: no
+            datacenter: ""
+          delegate_to: localhost            
+          register: os_info
+          when: os == "F"    
+      
+        - set_fact:
+            os: "{{ os_info.instance.hw_guest_full_name | lower }}"
+          when: os == "F"    
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: os == "F"   
+                          
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: os == "F"                   
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], unable to fetch OS information for the vm {{ inventory_hostname }} using vmware_guest_info module and from Synergon" >> check_vcenter.yml                    
+          delegate_to: localhost            
+          when: os == "F" 
+
+        # - meta: end_host
+        #   when: os == ""                                  
+                                                                     
+        
+      rescue:
+        - debug:
+            var: 'os_info'
+
+        - name: handle the error before grace period vcenter search for vm 
+          block:
+
+            - name: Display the JSON file content
+              shell: cat private_endpoint_connection_string.yml
+              delegate_to: localhost
+              register: result_private_endpoint_connection_string
+        
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+              delegate_to: localhost
+
+            - name: "Check entry for DECO server"
+              azure_update_ref:
+                connection_string: "{{ private_endpoint_connection_string }}"
+                hostname: "{{inventory_hostname}}"
+              register: idem_status
+              delegate_to: localhost
+
+            - set_fact: 
+                fqdn: '{{idem_status.module_update.fqdn}}'
+
+            - meta: end_host
+              when: fqdn != "" and fqdn != "F"
+
+          rescue: 
+            - name: after graceperiod check
+              debug:
+                msg: "after graceperiod check"
+
+        - name: handle the error before grace period vcenter search for vm 
+          block:
+
+            - name: Get timestamp from the system
+              shell: "date +%Y-%m-%d/%H:%M"
+              delegate_to: localhost
+              register: tstamp
+              when: os == "F"   
+                          
+            - set_fact:
+                time: "{{tstamp.stdout}}"
+              when: os == "F"                   
+
+            - name: "VM host list failure to file before grace period"
+              shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], unable to fetch OS information using vmware_guest_info module and from Synergon" >> check_vcenter.yml                    
+              delegate_to: localhost            
+              when: os == "F" 
+
+            # - meta: end_host
+            #   when: os == "" 
+
+          rescue: 
+            - name: vcenter status
+              debug:
+                msg: "vcenter status"                                        
+
+
+    - name: "Deco Health check status"
+      block:
+
+        - set_fact: 
+            nas_validate: ""    
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost 
+
+        - name: "Check entry for DECO server"
+          azure_update_ref:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status
+          delegate_to: localhost
+
+        - set_fact: 
+            nas_validate: '{{idem_status.module_update.nas_validate}}' 
+                               
+
+        - meta: end_host
+          when: nas_validate == "manual"
+
+
+        - name: "SSH connection - Linux"
+          ssh_check_linux:
+            hostname: "{{ fqdn }}"  
+            username: "{{ remote_username }}"                                     
+            key_filename: "{{ remote_keyfile }}"                  
+          delegate_to: localhost                       
+          register: connect
+          until: '"Successfully" in connect.msg'
+          retries: 3
+          delay: 10
+          when: os is search("linux") or os is search("centos")
+        
+        - meta: end_host
+          when: connect.msg is not defined or os is not search("linux") or os is not search("centos")
+
+        - debug:
+            var: connect
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"          
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "#{{ inventory_hostname }}, {{ time }}, [INFO], SSH connectivity from AWX using svc-deco-app-lnx status is good for the Linux VM {{ inventory_hostname }}" >> check_ssh_linux_success.yml                   
+          delegate_to: localhost
+          when: os is search("linux") or os is search("centos") and ('"Successfully" in connect.msg')
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> ssh_linux_failure.txt                    
+          delegate_to: localhost
+          when: '"Exception" in connect.msg'
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to SSH to the linux VM {{ inventory_hostname }} from AWX using svc-deco-app-lnx" >> check_ssh_linux.yml                   
+          delegate_to: localhost
+          when: '"Exception" in connect.msg'
+
+        - name: "VM failure list"
+          shell: echo "{{ inventory_hostname }}" >> failure_vm_bgp.yml                   
+          delegate_to: localhost
+          when: '"Exception" in connect.msg' 
+
+        - meta: end_host
+          when: '"Exception" in connect.msg'                   
+
+      rescue:
+        - debug:
+            msg: "SSH connection issue - Linux"
+
+        - name: handle the error before grace period vcenter search for vm 
+          block:            
+
+            - name: Get timestamp from the system
+              shell: "date +%Y-%m-%d/%H:%M"
+              delegate_to: localhost
+              register: tstamp  
+                          
+            - set_fact:
+                time: "{{tstamp.stdout}}"      
+
+            - name: "VM host list failure to file before grace period"
+              shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to SSH to the linux VM {{ inventory_hostname }} from AWX using svc-deco-app-lnx" >> check_ssh_linux.yml                   
+              delegate_to: localhost
+              when: '"Exception" in connect.msg'
+            
+            - name: "Write Failure host to file"
+              shell: echo "{{ inventory_hostname }} Failure" >> ssh_linux_failure.txt                    
+              delegate_to: localhost
+              when: '"Exception" in connect.msg'
+
+            - name: "VM failure list"
+              shell: echo "{{ inventory_hostname }}" >> failure_vm_bgp.yml                   
+              delegate_to: localhost
+              when: '"Exception" in connect.msg' 
+
+            - meta: end_host
+              when: '"Exception" in connect.msg'
+
+          rescue: 
+            - name: rescue on SSH connection issue - Linux
+              debug:
+                msg: "rescue SSH connection issue - Linux"
+                         
+
+    - name: "Deco Health check status"
+      ignore_unreachable: true
+      block:
+
+        - set_fact: 
+            nas_validate: ""   
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost  
+
+        - name: "Check entry for DECO server"
+          azure_update_ref:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status
+          delegate_to: localhost
+
+        - set_fact: 
+            nas_validate: '{{idem_status.module_update.nas_validate}}' 
+                               
+
+        - meta: end_host
+          when: nas_validate == "manual"                
+                       
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "{{ inventory_hostname }}" >> s_list.yml                   
+          delegate_to: localhost
+          when: os is search("windows")           
+            
+
+        - name: WinRM connection-windows      
+          win_shell: |
+                    hostname
+          vars:
+            ansible_host: "{{ fqdn }}"
+            ansible_user: "{{ win_user }}"
+            ansible_password: "{{ win_password }}"                        
+            ansible_connection: winrm
+            ansible_port: 5985
+            ansible_winrm_scheme: http
+            ansible_shell_type: cmd
+            ansible_winrm_server_cert_validation: ignore
+            ansible_winrm_transport: ntlm                      
+          register: name_list         
+          when: os is search("windows")
+
+        - set_fact:
+            server_name: "{{ name_list.stdout_lines}}"
+
+        - set_fact:
+            server_name: "{{ server_name | lower }}"
+          
+                
+
+        - name: "VM host list success to file before grace period"
+          shell: echo "{{ inventory_hostname }}" >> serv_list.yml                   
+          delegate_to: localhost
+          when: os is search("windows") and os is defined and server_name is search("{{ inventory_hostname }}") and name_list is defined
+
+        - name: "VM host list Sucess to file before grace period"
+          shell: echo "#{{ inventory_hostname }}, {{ time }}, [INFO], WinRM connectivity status is good for the Windows VM {{ inventory_hostname }}" >> check_ssh_windows_success.yml                   
+          delegate_to: localhost
+          when: os is search("windows") and os is defined and server_name is search("{{ inventory_hostname }}") and name_list is defined         
+
+        - set_fact:
+            os: ""
+          when: os is search("windows") and os is defined and server_name is search("{{ inventory_hostname }}") and name_list is defined                       
+     
+
+      rescue:
+        - debug:
+            msg: "WinRM connection issue - Windows"
+
+    - name: handle the error before grace period vcenter search for vm 
+      block:  
+           
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                          
+        - set_fact:
+            time: "{{tstamp.stdout}}"        
+
+        - name: "VM host list failure to file before grace period"
+          shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to WinRM to the Windows VM {{ inventory_hostname }} from AWX using svc-deco-app-windows either connection or credential issue." >> check_ssh_windows.yml                   
+          delegate_to: localhost
+          when: os is search("windows") and server_name is not search("{{ inventory_hostname }}") or name_list is not defined
+
+        - name: "VM failure list"
+          shell: echo "{{ inventory_hostname }}" >> failure_vm_bgp.yml                   
+          delegate_to: localhost
+          when: os is search("windows") and server_name is not search("{{ inventory_hostname }}") or name_list is not defined                
+
+        - meta: end_host
+          when: os is search("windows")
+
+      rescue: 
+        - name: rescue on WinRM connection validation - Windows
+          debug:
+            msg: "rescue WinRM connection validation - Windows"

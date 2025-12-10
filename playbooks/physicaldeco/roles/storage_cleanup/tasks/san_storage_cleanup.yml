@@ -1,0 +1,204 @@
+- name: "SAN_cleanup"
+  throttle: 1
+  block:
+
+    - set_fact:
+        ip_addr: "{{ ipaddr.2.0}}"
+        ports: "{{ ipaddr.3}}"
+        aliases: "{{ ipaddr.4}}"
+        zone_names: "{{ ipaddr.5}}"
+        fabric: "{{ ipaddr.6.0}}"
+
+    - name: "Test custom module for san process confirmation before cleanup"
+      san_process_check:
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        ipaddr: "{{ ip_addr }}" 
+        hostname: "{{ inventory_hostname }}"
+        port_name: "{{ inner_item }}"
+      delegate_to: localhost        
+      loop: "{{ ports }}"
+      loop_control:
+        loop_var: inner_item
+      register: san_process_before
+      ignore_errors: True
+
+    - set_fact:
+        san_pre_check: "{{ san_process_before.results.0.a_check }}"
+
+    - debug:
+        var: san_process_before
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp 
+
+    - set_fact:
+        time: "{{tstamp.stdout}}" 
+
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+      when: '"Exception" in san_pre_check'
+
+    - name: "writting to failure file for pre checkup failure error"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR],SAN CLEANUP pre-check failed for switch IP {{ip_addr}} " >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost  
+      when: '"Exception" in san_pre_check'  
+
+    - meta: end_host 
+      when: '"Exception" in san_pre_check'  
+
+    - name: "writting to success file already cleanup completed or doesnt required"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO],SAN CLEANUP HAS COMPLETED already for switch IP {{ip_addr}} " >> {{file_storage_cleanup_suc}}                    
+      delegate_to: localhost  
+      when: san_pre_check == "san cleanup success"
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }} - Aliases for {{ip_addr}} - {{aliases}}, port connected- {{ports}},fabric- {{fabric}}." >> {{file_info_san}}                    
+      delegate_to: localhost  
+      when: san_pre_check == "san cleanup fail"
+
+      ################## ZONES ######################
+    - name: "Test custom module for fetching zone names."
+      fetch_zone_names:
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        hostname: "{{ inventory_hostname }}"
+        ipaddr: "{{ ip_addr }}" #"10.82.108.151" #
+      delegate_to: localhost
+      when: san_pre_check == "san cleanup fail"
+      register: zone_data
+      ignore_errors: True
+
+    - set_fact:
+          zones_wwpn: "{{ zone_data.zone_names }}"   
+          zones_wwpn_info: "{{ zone_data.zone_names_info }}"
+      when: san_pre_check == "san cleanup fail"
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }} - Zones for {{ip_addr}} -{{ zones_wwpn }}" >> {{file_info_san}}                    
+      delegate_to: localhost          
+      when: san_pre_check == "san cleanup fail"
+    #############################  DELETION PART ###################################
+
+    - name: "Testing cfg_remove module"
+      cfg_remove:
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        ip_addr:  "{{ ip_addr }}"
+        cfg-name: "{{ fabric }}"
+        zone-name: "{{ inner_item }}"
+      loop: "{{ zone_names }}"
+      loop_control:
+        loop_var: inner_item
+      delegate_to: localhost
+      when: zone_names is defined and zone_names!=[] and san_pre_check == "san cleanup fail"
+      register: cfg_remove_output
+      ignore_errors: True
+    - name: "Debug cfg_remove module output"
+      debug:
+        var: cfg_remove_output
+
+    - name: "Testing zone_delete module"
+      zone_delete:
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        ip_addr: "{{ ip_addr }}"
+        zone-name: "{{ inner_item }}"
+      loop: "{{ zone_names }}"
+      loop_control:
+        loop_var: inner_item
+      delegate_to: localhost
+      when: zone_names is defined and zone_names!=[] and san_pre_check == "san cleanup fail"
+      register: zone_delete_output
+      ignore_errors: True
+    - name: "Debug zone_delete module output"
+      debug:
+        var: zone_delete_output
+
+    - name: "Testing cfg_enable module"
+      cfg_enable:
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        ip_addr: "{{ ip_addr }}"
+        cfg-name: "{{ fabric }}"
+      delegate_to: localhost  
+      when: san_pre_check == "san cleanup fail"
+      register: cfg_enable_output
+      ignore_errors: True
+    - name: "Debug cfg_enable module output"
+      debug:
+        var: cfg_enable_output
+
+    - name: "Testing Aliases_Delete Module"
+      aliases_delete:
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        ip_addr: "{{ ip_addr }}"
+        alias-name: "{{ inner_item }}"
+      loop: "{{ aliases }}"
+      loop_control:
+        loop_var: inner_item
+      delegate_to: localhost
+      when: aliases is defined and aliases!=[] and san_pre_check == "san cleanup fail"
+      register: aliases_delete_output
+      ignore_errors: True
+
+    - name: "Debug Aliases_Delete Module output"
+      debug:
+        var: aliases_delete_output
+        
+    - name: "Testing cfg_enable module"
+      cfg_enable:
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        ip_addr: "{{ ip_addr }}"
+        cfg-name: "{{ fabric }}"
+      delegate_to: localhost  
+      register: cfg_enable_output
+      ignore_errors: True
+    - name: "Debug cfg_enable module output"
+      debug:
+        var: cfg_enable_output
+
+    - name: "Testing Port Rename and Disable module"
+      port_rename_disable:
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        ip_addr: "{{ ip_addr }}" #"10.82.108.151"  #
+        port_name: "{{ inner_item }}"
+      loop: "{{ ports }}"
+      loop_control:
+        loop_var: inner_item
+      delegate_to: localhost
+      when: san_pre_check == "san cleanup fail"
+      register: port_rename_disable_output
+      ignore_errors: True
+
+    - name: "Debugging Port Rename and Disable output"
+      debug:
+        var: port_rename_disable_output
+
+  rescue: 
+
+    - name: When above one throws error the below task should execute
+      debug:
+        msg: "Exception occurred but rescued - check errors on san_storage_cleanup" 
+    
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+    
+    - set_fact:
+          time: "{{tstamp.stdout}}"
+    
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], check errors on san_storage_cleanup module." >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost  

@@ -1,0 +1,349 @@
+---
+    - name: "Handling TR record_id for implementation and validation result"
+      block:
+ #############  success info gathering ##########################
+        - name : handling error in the success block
+          block:
+
+            - set_fact:
+                json_nas_suc: "record_nas_success.json"
+                file_nas_suc: "nas_hostname_success.yml"
+                json: "record_nas_fail.json"
+                file_nas_fail: "nas_hostname_failure.yml"
+                nas_info_log: "nas_info_gather.txt"
+                nas_validate_log: "nas_validation_check_volume.txt"
+                vm_nas_proceed: "vm_nas_proceed.yml"              
+
+            - name: Display the JSON file content for NAS cleanup
+              shell: cat record_nas.json
+              delegate_to: localhost
+              register: TR_result_nas  
+
+            - name: save the Json data to a Variable as a Fact for NAS cleanup
+              set_fact:
+                record_id_nas: "{{ TR_result_nas.stdout[1:-1] }}"
+              delegate_to: localhost         
+
+            - meta: end_host
+              when: record_id_nas == ""
+                        
+            - name: Display the JSON file content
+              shell: cat nas_hostname_success.yml
+              delegate_to: localhost
+              register: result_nas_suc
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_nas_suc_v: "{{ result_nas_suc.stdout }}" 
+              delegate_to: localhost 
+
+            - name: Extracting storage info TR content from the final result
+              shell: cat vm_nas_proceed.yml
+              delegate_to: localhost
+              register: suc_list_cont
+            
+            - name: Save to variable- success list
+              set_fact:
+                vm_nas_ready: "{{ suc_list_cont.stdout }}"
+              delegate_to: localhost
+            
+          # WHEN NO VMS ARE TO BE TAKEN OFFLINE [NO EXPORT POLICIES FOUND OR SUCCESSFULLY DELETED]
+            - set_fact:
+                form1: "************************************************************************"
+                form2: "NAS Module Success Results:"
+                form3: "************************************************************************"
+              when: result_nas_suc_v != "" and vm_nas_ready == ""
+
+            - set_fact:
+                content_nas_suc: "{{ form1 +'\n'+ form2 + '\n'+ form3 + '\n' + result_nas_suc_v }}" 
+              when: result_nas_suc_v != "" and vm_nas_ready == ""
+          
+          # WHEN VMS ARE TO BE TAKEN OFFLINE [EXPORT POLICIES FOUND AND SUCCESSFULLY DELETED + UNMOUNTED]  
+            - set_fact:
+                form1: "************************************************************************"
+                form2: |
+                  Dear Storage Team,
+                   
+                  Kindly take the following NAS volume(s) offline, as all required clean-up has been completed via Deco automation.
+                form3: "************************************************************************"
+                form4: "************************************************************************"
+                form5: |
+                  Following information is only for your information to indicate the actions performed through Deco Automation. 
+                  
+                  [No MANUAL ACTION NEEDED BY STORAGE TEAM]
+                form6: "************************************************************************"
+              when: result_nas_suc_v != "" and vm_nas_ready != ""
+              
+            - set_fact:
+                content_nas_suc: "{{ form1 +'\n'+ form2 +'\n'+ vm_nas_ready +'\n'+ form3 +'\n'+ form4 + '\n' + form5 + '\n'+ result_nas_suc_v + '\n' + form6 }}" 
+              when: result_nas_suc_v != "" and vm_nas_ready != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no success file found and continue"      
+  ####################### Failure info gathering ########################## 
+        - name : handling error in the failure block
+          block:          
+            - name: Display the JSON file content
+              shell: cat nas_hostname_failure.yml
+              delegate_to: localhost
+              register: result_nas_fail
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_nas_fail_v: "{{ result_nas_fail.stdout }}" 
+              delegate_to: localhost                     
+   
+            - set_fact:
+                form1: "************************************************************************"
+                form2: "NAS Module Failure Results:"
+                form3: "************************************************************************"
+
+            - set_fact:
+                content_nas_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_nas_fail_v }}" 
+              when: result_nas_fail_v != ""
+
+
+            - name: " Merge Failure information to to single final file"
+              shell: echo "{{ content_nas_fail }}" >> vm_nas_final.yml                    
+              delegate_to: localhost
+              when: result_nas_fail_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no failure file found and continue"
+
+##########################  merging both failure and success results ###########################
+
+        - name: Display the JSON file content
+          shell: cat vm_nas_final.yml
+          delegate_to: localhost
+          register: result_nas_fin
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            result_nas_fin_v: "{{ result_nas_fin.stdout }}" 
+          delegate_to: localhost
+        
+############################ Add message to TR with results ##############################################
+#Add success message -> in case of no volumes ready to take offline -> TR is assigned to DCAT so this message will be in DCAT TR/ But in case of volumes ready to take offline -> TR is assigned to Storage team and will have info of volumes
+        - name: "Add message to TR for Success Results"
+          add_message_to_tr:
+            record_id: "{{record_id_nas}}"
+            message: "{{ content_nas_suc }}"             
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}" 
+          delegate_to: localhost
+          register: add_msg_output_suc
+          when: result_nas_suc_v != ""
+#When there are no success results, add failure message to TR -> in this case vm_nas_ready will be empty and this TR is assigned to DCAT team.       
+        - name: "Add message to TR for No Success Results"
+          add_message_to_tr:
+            record_id: "{{record_id_nas}}"
+            message: "No Success VMs for NAS Cleanup, PTR assigned to DCAT with relevant details."             
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}" 
+          delegate_to: localhost
+          register: add_msg_output_fail
+          when: result_nas_suc_v == ""
+
+######################### Adding attachment to the TR ###################################
+        - name: "Add attachments to TR"
+          block:              
+
+            - name: Get stats about nas info gathering file
+              stat:
+                path: nas_info_gather.txt
+              register: nas_info_file
+          
+
+            - name: Get stats about nas validation before volume offline
+              stat:
+                path: nas_validation_check_volume.txt
+              register: nas_validation_file   
+
+
+            - name: "Add message to TR nas info"
+              add_attachment_to_tr:
+                record_id: "{{record_id_nas}}"
+                attachments: "{{ nas_info_log }}"             
+                username: "{{ winaproach_username }}"     
+                password: "{{ winaproach_password }}"                       
+              delegate_to: localhost
+              register: add_attachment_output_info
+              when :  nas_info_file.stat.exists
+
+            - name: "Add message to TR nas validate before volume offline"
+              add_attachment_to_tr:
+                record_id: "{{record_id_nas}}"
+                attachments: "{{ nas_validate_log }}"             
+                username: "{{ winaproach_username }}"     
+                password: "{{ winaproach_password }}"                       
+              delegate_to: localhost
+              register: add_attachment_output_validate
+              when :  nas_validation_file.stat.exists 
+
+          rescue:
+            - debug:
+                msg: "Unable to add attachments to the TR"   
+                     
+################################### PTR Creation #########################################################################
+################################  PTR Creation for complete failure  ######################################################
+      
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost
+
+        - name: FAILURE- Create PTR #for failure assigned to DCAT team
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "CSTY::DECO::DCAT::VM DECO: NAS cleanup failure list and details with failed TR - {{ record_id_nas }}"
+            tr_map: "{{ record_id_nas }}"
+            assignee_group: "DINFDECO"  
+            ptr_logs: "{{ result_nas_fin_v }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_out_nas
+          until: '"Successfully" in ptr_out_nas.msg'
+          retries: 3
+          delay: 10           
+          when: result_nas_fin_v is search("ERROR") 
+
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_nas }}"
+            prob_id: "{{ ptr_out_nas.id }}"                   
+          register: update_overview  
+          when: result_nas_fin_v is search("ERROR")           
+
+      rescue:
+        - debug:
+            msg: "Exception occurred so rescued the main tr result block for NAS cleanup"
+
+############################################# PTR creation for manual NAS Cleanup ########################################################
+  
+    - name: "Handling TR record_id for manual work"
+      block: 
+
+        - name: Display the JSON file content
+          shell: cat nas_vm_manual_work.yml
+          delegate_to: localhost
+          register: result_nas_vm_manual_work
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            nas_vm_manual_work: "{{ result_nas_vm_manual_work.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Set content for PTR
+          set_fact:
+            header: "As per the discussion with Kamalesh it has been decided for any VMs submitted for NAS cleanup via DCAT tool is in powered off state or ssh is not enabled those servers are not validated by DCAT tool. Hence manual validation/cleanup by the storage team is required:"
+
+        - set_fact:
+            content_nas_manual: "{{ header + '\n' + nas_vm_manual_work }}" 
+          when: nas_vm_manual_work != ""       
+
+        - name: MANUAL- Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "VM DECO: Manual NAS cleanup - {{ record_id_nas }}"
+            tr_map: "{{ record_id_nas }}"
+            assignee_group: "OSX04SMG"
+            ptr_logs: "{{ content_nas_manual }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_out_nas_manual
+          until: '"Successfully" in ptr_out_nas_manual.msg'
+          retries: 3
+          delay: 10  
+          when: nas_vm_manual_work != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_nas }}"
+            prob_id: "{{ ptr_out_nas_manual.id }}"                   
+          register: update_overview  
+          when: nas_vm_manual_work != ""     
+
+############################# closing TR  ####################            
+        - name: "Close TR for NAS Cleanup"
+          close_tr:
+            record_id: "{{record_id_nas}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+          register: close_tr_output 
+          when: vm_nas_ready == ""
+          
+      rescue:
+        - debug:
+            msg: "Exception occurred so rescued the main tr result block for NAS cleanup"
+
+############################# closing implementation as success ####################            
+        - name: END Implementation that is closing the implementation as success
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: end_implementation
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+                task_id: "{{ record_id_nas }}" #"{{ record_id }}"
+                text: "{{ result_nas_fin_v }}"
+          register: end_implementation
+          when: result_nas_fin_v is not search("ERROR") and result_nas_fin_v is search("INFO")
+ 
+
+        - name: start Validate Implementation for closing the success TR
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: validate
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+              task_id: "{{ record_id_nas }}" #"{{ record_id }}"
+              text: "{{ result_nas_fin_v }}"
+          register: validation
+          when: result_nas_fin_v is not search("ERROR") and result_nas_fin_v is search("INFO") 
+
+        
+      rescue:
+        - debug:
+            msg: "Exception occurred so rescued the main tr result block for NAS cleanup"
+            
+             

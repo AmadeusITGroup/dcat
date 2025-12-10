@@ -1,0 +1,434 @@
+---
+- block:
+
+    - set_fact:
+        oview_lxca_success: "oview_lxca_success.yml"
+        oview_lxca_failure: "oview_lxca_failure.yml"
+
+    - name: Fetch LXCA for the blade
+      lxca_pattern_match:
+        blade_name: "{{ inventory_hostname }}"
+      delegate_to: localhost
+      register: lxca_output
+
+    - name: Set fact for LXCA URL
+      set_fact:
+        lxca_host: "{{ lxca_output.lxca_url }}"
+      
+    - name: Debug LXCA host
+      debug:
+        var: lxca_host
+
+    - name: "update entry for DECO server for for LXCA"
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+        module_name: "oneview_xclarity_info"
+        status: "{{ lxca_host }}"            
+      register: update_status_info_state
+      delegate_to: localhost
+
+    - name: Collect unique LXCA hosts from inventory (run once, control node)
+      set_fact:
+        unique_lxca_hosts: >-
+          {{
+            groups['all']
+            | map('extract', hostvars, 'lxca_host')
+            | select('defined')
+            | reject('equalto', None)
+            | reject('equalto', '')
+            | list
+            | unique
+          }}
+      delegate_to: localhost
+      run_once: true
+
+    - name: Ensure /tmp/lxca_cache exists
+      file:
+        path: "/tmp/lxca_cache"
+        state: directory
+        mode: '0755'
+      run_once: true
+      delegate_to: localhost
+
+    - name: Fetch and cache LXCA nodes directly to disk (sequential, memory-safe)
+      get_url:
+        url: "{{ item }}/nodes"
+        url_username: "{{ domain_username }}"
+        url_password: "{{ domain_password }}"
+        force_basic_auth: yes
+        validate_certs: no
+        dest: >-
+          /tmp/lxca_cache/{{
+            item
+            | regex_replace('^https?://', '')
+            | regex_replace('/$', '')
+            | lower
+          }}.json
+        mode: '0600'
+        timeout: 60
+        force: yes
+      loop: "{{ unique_lxca_hosts }}"
+      loop_control:
+        loop_var: item
+      delegate_to: localhost
+      run_once: true
+      when:
+        - unique_lxca_hosts is defined
+        - unique_lxca_hosts | length > 0
+
+    # - name: Fetch nodes for each unique LXCA host (executed once on localhost, sequential)
+    #   uri:
+    #     url: "{{ item }}/nodes"
+    #     method: GET
+    #     user: "{{ domain_username }}"
+    #     password: "{{ domain_password }}"
+    #     force_basic_auth: yes
+    #     validate_certs: no
+    #     return_content: yes
+    #     timeout: 30
+    #   loop: "{{ unique_lxca_hosts }}"
+    #   loop_control:
+    #     loop_var: item
+    #   delegate_to: localhost
+    #   run_once: true
+    #   register: raw_nodes_results
+
+    # - name: Write each LXCA node response to /tmp/lxca_cache
+    #   copy:
+    #     content: "{{ item.content }}"
+    #     dest: >-
+    #       /tmp/lxca_cache/{{
+    #         item.item
+    #         | regex_replace('^https?://', '')
+    #         | regex_replace('/$', '')
+    #         | lower
+    #       }}.json
+    #   loop: "{{ raw_nodes_results.results }}"
+    #   loop_control:
+    #     loop_var: item
+    #   delegate_to: localhost
+    #   run_once: true
+    #   when: raw_nodes_results is defined
+
+
+    - name: Normalize this host's lxca_host (safe lookup key)
+      set_fact:
+        _lxca_key: >-
+          {{ (lxca_host | default('')) 
+            | regex_replace('^https?://', '') 
+            | regex_replace('/$', '') 
+            | lower
+          }}
+      delegate_to: localhost
+      vars:
+        lxca_host: "{{ lxca_host | default('') }}"
+
+    # - name: Load LXCA cache JSON once
+    #   set_fact:
+    #     lxca_json: >-
+    #       {{ lookup('ansible.builtin.file',
+    #                 '/tmp/lxca_cache/' ~ _lxca_key ~ '.json')
+    #         | from_json }}
+    #   delegate_to: localhost
+
+    # - name: Filter with Jinja2 (case-insensitive)
+    #   set_fact:
+    #     matched_blade: >-
+    #       {{
+    #         lxca_json.nodeList
+    #         | selectattr('name', 'match', '(?i)^' ~ inventory_hostname ~ '$')
+    #         | list
+    #         | first | default({})
+    #       }}
+    #   delegate_to: localhost
+
+
+    # Instead of loading whole JSON -> filter with jq before storing
+    - name: Extract blade for this host only
+      command: >
+        jq -c '.nodeList[]
+          | select(.name | ascii_downcase == "{{ inventory_hostname | lower }}")'
+          /tmp/lxca_cache/{{ _lxca_key }}.json
+      register: blade_json
+      delegate_to: localhost
+      changed_when: false
+
+    - name: Set matched_blade fact (only small JSON)
+      set_fact:
+        matched_blade: "{{ (blade_json.stdout | from_json) if blade_json.stdout else {} }}"
+
+
+
+    - name: Debug when matched_blade is empty
+      debug:
+        msg: "No blade found in LXCA for host {{ inventory_hostname }}"
+      when: matched_blade | length == 0
+      delegate_to: localhost
+
+
+
+    # - name: Load LXCA cache file for this host
+    #   slurp:
+    #     src: "/tmp/lxca_cache/{{ _lxca_key }}.json"
+    #   register: lxca_nodes_raw
+    #   delegate_to: localhost
+    #   when: _lxca_key is defined
+
+
+    # - name: Parse LXCA cache JSON for this host
+    #   set_fact:
+    #     lxca_nodes: "{{ (lxca_nodes_raw.content | b64decode | from_json).nodeList }}"
+    #   delegate_to: localhost
+    #   when: lxca_nodes_raw is defined
+
+    # - name: Extract blade info for this host
+    #   set_fact:
+    #     matched_blade: >-
+    #       {{
+    #         lxca_nodes
+    #         | selectattr('name','match','(?i)^' + inventory_hostname + '$')
+    #         | list
+    #         | first
+    #       }}
+    #   delegate_to: localhost
+    #   when: lxca_nodes is defined
+
+    - name: Debug when matched_blade is empty
+      debug:
+        msg: "No blade found in LXCA for host {{ inventory_hostname }}"
+      when:
+        - lxca_nodes is defined
+        - (lxca_nodes | selectattr('name','match','(?i)^' + inventory_hostname + '$') | list | length) == 0
+
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      run_once: true
+      register: tstamp              
+
+    - set_fact:
+        time: "{{tstamp.stdout}}"
+      run_once: true
+
+    - name: Log Success for Server Profile Deletion (LXCA)
+      shell: |
+        echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Server profile deleted manually (LXCA)." >> {{ oview_lxca_success }}
+      delegate_to: localhost
+      when:
+        - matched_blade is not defined or matched_blade|length == 0
+
+    - name: "update entry for DECO server for Oneview LXCA Deregister"
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+        module_name: "oneview_xclarity_removal"
+        status: "T"           
+      register: update_status_info_state
+      delegate_to: localhost
+      when:
+        - matched_blade is not defined or matched_blade|length == 0
+
+
+
+
+
+    # - name: Log Failure for Blade fetch (LXCA)
+    #   shell: |
+    #     echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - not found in LXCA." >> {{ oview_lxca_failure }}
+    #   delegate_to: localhost
+    #   when:
+    #     - matched_blade is not defined or matched_blade|length == 0
+
+    - meta: end_host
+      when:
+        - matched_blade is not defined or matched_blade|length == 0
+
+
+
+
+
+
+    - name: Set blade UUID and IP
+      set_fact:
+        blade_uuid: "{{ matched_blade.uuid }}"
+        blade_ip: "{{ matched_blade.mgmtProcIPaddress }}"
+      when: matched_blade is defined and matched_blade is not none and matched_blade | length > 0
+
+    - name: Debug blade UUID and IP
+      debug:
+        var: blade_uuid
+    - debug:
+        var: blade_ip
+
+    - name: Log Failure for Server Profile Deletion (LXCA)
+      shell: |
+        echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - not found in LXCA." >> {{ oview_lxca_failure }}
+      delegate_to: localhost
+      when: blade_uuid is not defined or blade_uuid == ""
+
+    - meta: end_host
+      when: blade_uuid is not defined or blade_uuid == ""
+
+    - name: Fetch raw profiles JSON for this blade
+      uri:
+        url: "{{ lxca_host }}/profiles?uuid={{ blade_uuid }}"
+        method: GET
+        user: "{{ domain_username }}"
+        password: "{{ domain_password }}"
+        force_basic_auth: yes
+        validate_certs: no
+        return_content: yes
+      register: profile_info
+      when: blade_uuid is defined and blade_uuid != ''
+      delegate_to: localhost
+
+    - name: Extract profile ID by matching profileName with blade name (case-insensitive)
+      set_fact:
+        blade_profile_id: >-
+          {{
+            (
+              (profile_info.content | from_json)['items']
+              | selectattr('profileName', 'match', '(?i)^' + inventory_hostname + '$')
+              | map(attribute='id')
+              | list
+            ) | first
+          }}
+      when: >
+        (
+          (profile_info.content | from_json)['items']
+          | selectattr('profileName', 'match', '(?i)^' + inventory_hostname + '$')
+          | list
+        ) | length > 0
+
+    - name: Debug extracted profile ID
+      debug:
+        msg: "Extracted blade_profile_id for {{ inventory_hostname }} => {{ blade_profile_id | default('NOT FOUND') }}"
+
+
+    - name: No profile found, skipping deletion
+      debug:
+        msg: "No server profile found for blade '{{ inventory_hostname }}', skipping deletion."
+      when: blade_profile_id is not defined or blade_profile_id == ""
+
+    - name: Log Failure - No Profile Found, Skipping Deletion
+      shell: |
+        echo "{{ inventory_hostname }}, {{ time }}, [INFO] - No server profile found for blade , skipping deletion." >> {{ oview_lxca_failure }}
+      delegate_to: localhost
+      when:
+        - blade_profile_id is not defined or blade_profile_id == ""
+
+    - name: Extract profile status for target blade
+      set_fact:
+        blade_profile_status: >-
+          {{
+            (
+              (profile_info.content | from_json)['items']
+              | selectattr('profileName', 'match', '(?i)^' + inventory_hostname + '$')
+              | map(attribute='profileStatus')
+              | list
+            ) | first
+          }}
+      when: blade_profile_id is defined and blade_profile_id | length > 0
+
+
+    - name: Debug extracted profile status
+      debug:
+        msg: "Extracted blade_profile_status for {{ inventory_hostname }} => {{ blade_profile_status | default('NOT FOUND') }}"
+
+    - name: Deactivate LXCA Server Profile via /profiles/unassign/{{ id }} endpoint
+      uri:
+        url: "{{ lxca_host }}/profiles/unassign/{{ blade_profile_id }}"
+        method: POST
+        user: "{{ domain_username }}"
+        password: "{{ domain_password }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 202, 204]
+        timeout: 90
+      register: deactivate_response
+      delegate_to: localhost
+      retries: 5
+      delay: 15
+      until: deactivate_response.status in [200, 202, 204]
+      when: blade_profile_status is defined and blade_profile_status not in ['UNASSIGNED']
+
+
+    - name: Delete the blade's server profile using DELETE /profiles/{{ blade_profile_id }}
+      uri:
+        url: "{{ lxca_host }}/profiles/{{ blade_profile_id }}"
+        method: DELETE
+        user: "{{ domain_username }}"
+        password: "{{ domain_password }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 202, 204]
+        return_content: true
+        headers:
+          Content-Type: application/json
+      register: delete_profile_response
+      when: blade_profile_id is defined and blade_profile_id | length > 0
+      delegate_to: localhost
+
+    - name: Show deletion response
+      debug:
+        var: delete_profile_response
+      when: delete_profile_response is defined
+
+    - name: Show deletion response
+      debug:
+        var: delete_profile_response
+      when: delete_profile_response is defined
+
+    - name: Log Failure for Server Profile Deletion (LXCA)
+      shell: |
+        echo "{{ inventory_hostname }}, {{ time }}, [ERROR] - Server profile deletion FAILED (LXCA)." >> {{ oview_lxca_failure }}
+      delegate_to: localhost
+      when:
+        - delete_profile_response.status is defined
+        - delete_profile_response.status not in [200, 202, 204]
+
+    - meta: end_host
+      when:
+        - delete_profile_response.status is defined
+        - delete_profile_response.status not in [200, 202, 204]
+
+
+    - name: Log Success for Server Profile Deletion (LXCA)
+      shell: |
+        echo "{{ inventory_hostname }}, {{ time }}, [INFO] - Server profile deletion completed successfully (LXCA)." >> {{ oview_lxca_success }}
+      delegate_to: localhost
+      when:
+        - delete_profile_response.status is defined
+        - delete_profile_response.status in [200, 202, 204]
+
+    - name: "update entry for DECO server for Oneview LXCA Deregister"
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+        module_name: "oneview_xclarity_removal"
+        status: "T"           
+      register: update_status_info_state
+      delegate_to: localhost
+      when:
+        - delete_profile_response.status is defined
+        - delete_profile_response.status in [200, 202, 204]
+
+
+  rescue: 
+    - name: when above one throws error the below task should execute
+      debug:
+        msg: "Exception occurred but rescued - check errors for Oneview LXCA module"  
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp              
+              
+    - set_fact:
+        time: "{{tstamp.stdout}}"
+
+    - name: "Failure information to file in rescue block"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Kindly check Oneview Xclarity module for esxi servers" >> {{ oview_lxca_failure }}                    
+      delegate_to: localhost

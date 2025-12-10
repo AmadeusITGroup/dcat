@@ -1,0 +1,64 @@
+---
+    - name: "Check entry for DECO server for filter host list in server info gather module"
+      throttle: 1
+      block:
+ 
+        - set_fact:
+            host_list: host_list_server_info_gather.yml
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""
+                
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server"
+          azure_update_ref_esxi:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+                 
+        - set_fact: 
+            server_info: '{{idem_status.module_update.server_info}}'                  
+
+        - set_fact: 
+            esxi_type: '{{idem_status.module_update.esxi_type}}'
+
+        - set_fact: 
+            fqdn_info: '{{idem_status.module_update.fqdn_info}}'    
+
+        - set_fact: 
+            cmdb_fetch: '{{idem_status.module_update.cmdb_fetch}}'    
+
+
+        - name: "esxi server list qualified for server info gather"
+          shell: echo "{{ inventory_hostname }}," >> {{ host_list }}                   
+          delegate_to: localhost
+          # when: server_info == "F" and esxi_type !="F" and fqdn_info !="F" and vcenter_info !="F" 
+          when: server_info == "F" and cmdb_fetch == "T"
+
+
+          
+           
+      rescue:
+        - debug:
+            msg: "Failed to fetch hostlist for server info gather "      
+

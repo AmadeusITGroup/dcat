@@ -1,0 +1,34 @@
+{
+ "collection_info": {
+  "namespace": "brocade",
+  "name": "fos",
+  "version": "1.3.3",
+  "authors": [
+   "Brocade Automation Team <Automation.BSN@broadcom.com>"
+  ],
+  "readme": "README.md",
+  "tags": [
+   "brocade",
+   "fos",
+   "storage"
+  ],
+  "description": "Collection of modules to manage Brocade FOS FC switches",
+  "license": [
+   "GPL-2.0-or-later"
+  ],
+  "license_file": null,
+  "dependencies": {},
+  "repository": "https://github.com/brocade/ansible",
+  "documentation": "https://github.com/brocade/ansible",
+  "homepage": null,
+  "issues": "https://github.com/brocade/ansible/issues"
+ },
+ "file_manifest_file": {
+  "name": "FILES.json",
+  "ftype": "file",
+  "chksum_type": "sha256",
+  "chksum_sha256": "747b5decea5a6348cd012aaabfe6e4afa85034e64e4efb7061c697c2b4d8680f",
+  "format": 1
+ },
+ "format": 1
+}

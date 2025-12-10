@@ -1,0 +1,249 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    azure_client_id: '{{ az_client_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}"
+    auth_username: "{{ auth_username }}"
+    auth_password: "{{ auth_password }}"
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"    
+
+  tasks:
+
+    - name: register env information
+      debug: 
+        msg: "{{ env }}"
+      register: env_data
+
+    - set_fact:
+        storage_account_name: "awxdcatdev"
+      when: env_data is search("dev") 
+
+    - set_fact:
+        resource_group: "dcat"
+
+    - set_fact:
+        azure_subscription_id: "c7fe37a6-85d1-4afc-b695-13a64f545042"
+
+    - set_fact:
+        storage_account_name: "awxdcatprod"
+      when: env_data is search("prod")                              
+
+
+    - name: Retrieve Storage Account Key
+      azure_rm_storageaccount_info:
+        resource_group: "{{ resource_group }}"
+        name: "{{ storage_account_name }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_client_secret }}"
+        tenant: "{{ azure_tenant_id }}"
+        subscription_id: '{{ azure_subscription_id }}'
+        show_connection_string: true
+      register: storage_account_info
+
+    - name: Set Storage Account Key
+      set_fact:
+        storage_account_key: "{{ storage_account_info.storageaccounts[0].primary_endpoints.key }}"
+
+    - name: Get Private Endpoint Connection String
+      set_fact:
+        private_endpoint_connection_string: "DefaultEndpointsProtocol=https;AccountName={{ storage_account_name }};AccountKey={{ storage_account_key }};EndpointSuffix=core.windows.net"
+
+    - name: "data check"
+      shell: echo "{{ private_endpoint_connection_string }}" >> private_endpoint_connection_string.yml   
+      delegate_to: localhost  
+
+
+    - name: "Check entry for DECO server"
+      get_data:
+        connection_string: "{{ private_endpoint_connection_string }}"
+      register: get_data
+      delegate_to: localhost
+
+    - debug:
+        var: get_data
+
+
+    # - name: Extract values for app_tr
+    #   set_fact:
+    #     app_tr: "{{ get_data.create_entity_result | selectattr('ci_event', 'equalto', 'Application removal validation') | map(attribute='ci') | zip_longest(get_data.create_entity_result | selectattr('ci_event', 'equalto', 'Application removal validation') | map(attribute='cr'), get_data.create_entity_result | selectattr('ci_event', 'equalto', 'Application removal validation') | map(attribute='event_number')) | list }}"
+
+    - name: App_tr data- Group entries by TR number
+      set_fact:
+        grouped_app: >-
+          {{
+            get_data.create_entity_result
+            | selectattr('ci_event', 'equalto', 'Application removal validation')
+            | groupby('event_number')
+          }}
+
+    - name: Extract grouped ci lists
+      set_fact:
+        ci_lists_app: "{{ grouped_app | map('last') | map('list') | map('map', attribute='ci') | map('list') | list }}"
+    
+    - name: Extract TR numbers
+      set_fact:
+        event_numbers_app: "{{ grouped_app | map('first') | list }}"
+    
+    - name: Extract CR numbers
+      set_fact:
+        cr_numbers_app: "{{ grouped_app | map('last') | map('first') | map(attribute='cr') | list }}"
+    
+    - name: Build final app_tr
+      set_fact:
+        app_tr: "{{ event_numbers_app | zip(ci_lists_app) | zip(cr_numbers_app) | map('flatten', levels=1) | list }}"
+
+
+    # - name: Extract values for owner_tr
+    #   set_fact:
+    #     owner_tr: "{{ get_data.create_entity_result | selectattr('ci_event', 'equalto', 'Server owner approval') | map(attribute='ci') | zip_longest(get_data.create_entity_result | selectattr('ci_event', 'equalto', 'Server owner approval') | map(attribute='cr'), get_data.create_entity_result | selectattr('ci_event', 'equalto', 'Server owner approval') | map(attribute='event_number')) | list }}"
+    
+    - name: Owner_tr data- Group entries by TR number
+      set_fact:
+        grouped_owner: >-
+          {{
+            get_data.create_entity_result
+            | selectattr('ci_event', 'equalto', 'Server owner approval')
+            | groupby('event_number')
+          }}
+
+    - name: Extract grouped ci lists
+      set_fact:
+        ci_lists_own: "{{ grouped_owner | map('last') | map('list') | map('map', attribute='ci') | map('list') | list }}"
+    
+    - name: Extract TR numbers
+      set_fact:
+        event_numbers_own: "{{ grouped_owner | map('first') | list }}"
+    
+    - name: Extract CR numbers
+      set_fact:
+        cr_numbers_own: "{{ grouped_owner | map('last') | map('first') | map(attribute='cr') | list }}"
+    
+    - name: Build final owner_tr
+      set_fact:
+        owner_tr: "{{ event_numbers_own | zip(ci_lists_own) | zip(cr_numbers_own) | map('flatten', levels=1) | list }}"
+ 
+ 
+    - debug:
+        var: owner_tr
+    
+    - debug:
+        var: app_tr
+
+    - include: schedule_validator_owner_tr.yml
+      loop: "{{ owner_tr }}"
+
+    - include: schedule_validator_app_tr.yml
+      loop: "{{ app_tr }}" 
+
+    - debug:
+        msg: "DECO terminated!!! No open tickets in queue - DECO will validate after 1hr "
+      when: app_tr == [] or owner_tr == []         
+
+    - name: Extract ritm_number values
+      set_fact:
+        ritm_numbers: "{{ get_data.create_entity_result | selectattr('ritm_number', 'defined') | map(attribute='ritm_number') | unique | list }}"
+    
+    - debug:
+        var: ritm_numbers
+
+      
+
+    - name: Initialize empty list to store formatted data
+      set_fact:
+        formatted_data: []
+
+    - name: Iterate through create_entity_result
+      set_fact:
+        formatted_data: "{{ formatted_data + [ [ item.ritm_number, [item.ci], item.cr, item.requestor_name, item.requestor_group, item.retention_days, item.pillar, [item.event_number]] ] }}"
+      loop: "{{ get_data.create_entity_result }}"
+      loop_control:
+        label: "{{ item.ritm_number }}"
+
+    - name: Remove duplicates from formatted data
+      set_fact:
+        formatted_data: "{{ formatted_data | unique }}"
+    
+    - debug:
+        var: formatted_data 
+
+    - name: format_data
+      format_data:
+        data_in: "{{ formatted_data }}" 
+      register: data_out
+      delegate_to: localhost 
+      
+
+    - name: Display final result
+      debug:
+        var: data_out.output
+
+    - set_fact:
+        data_val: "{{ data_out.output }}"   
+        
+
+    - name: "Check entry for DECO server"
+      get_data:
+        connection_string: "{{ private_endpoint_connection_string }}"
+      register: get_data_check
+      delegate_to: localhost
+
+    - debug:
+        var: get_data_check 
+
+    - name: "Validate whether both Server Owner and Application Removal TRs are created for the given CR"
+      check_approval_cr:
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+        win_target: "WIN@PROACH_URL"
+        cr: "{{ item.2 }}"
+      loop: "{{ data_val }}"
+      register: validate_approval_trs
+      delegate_to: localhost
+
+    - name: "Filter valid data_val entries where both TRs are present"
+      set_fact:
+        valid_data_val: >-
+          {{
+            data_val
+            | zip(validate_approval_trs.results)
+            | selectattr('1.flags', 'equalto', true)
+            | map(attribute='0')
+            | list
+          }}           
+
+    - include: scheduler_update.yml
+      loop: "{{ valid_data_val }}"
+      when: get_data_check is not search("{{ item.0 }}")
+
+    - name: Check if task should run today
+      shell: date +%H
+      register: current_hour
+
+    - name: format_data
+      data_snow:
+        data_in: "{{ valid_data_val }}" 
+      register: snow_data
+      delegate_to: localhost 
+
+    - debug:
+        var : snow_data.output  
+    
+    - set_fact:
+        data_update: "{{ snow_data.output }}"
+
+    - name: Check snow api call back
+      update_snow:
+        action: Approval
+        ritm_number: "{{ item.0 }}"
+        status: Waiting
+        comments: Waiting for owners approval for the following TR {{ item.1 | unique }}. 
+        username: "{{ SN_USERNAME }}"
+        password: "{{ SN_PASSWORD }}"
+      loop: "{{ data_update }}"      
+      register: api_result
+      when: get_data_check is search("{{ item.0 }}") and current_hour.stdout == "05"

@@ -1,0 +1,9 @@
+---
+- name: "failure handler test"
+  hosts: all:vmdeco
+  gather_facts: no
+  tasks:
+    - name: grouping
+      ansible.builtin.import_role:
+        name: grouping
+        tasks_from: owner_grouping

@@ -1,0 +1,86 @@
+---
+    - name: "Deco Health check status SAN"
+      block:
+
+        - name: "data check"
+          shell: echo "{{ san_box }}" >> san_box.yml   
+          delegate_to: localhost
+          run_once: True  
+
+        - name: Display the JSON file content
+          shell: cat san_box.yml
+          delegate_to: localhost
+          register: result_state_file                   
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            san_input: "{{ result_state_file.stdout }}"
+
+        - debug:
+            var: san_input
+
+        - debug:
+            msg: "{{ synergon_username }}"            
+
+        - name: "Deco Health check status SAN"
+          healthcheck_phy_san:
+            username: "{{ synergon_username }}"
+            password: "{{ synergon_password }}"
+            ipaddr: "{{ item }}"
+          loop: "{{ san_input }}"                 
+          delegate_to: localhost                       
+          register: san_validation
+          until: '"Successfully" in san_validation.msg'
+          retries: 3
+          delay: 10
+
+        - set_fact:
+            san_res : "{{ san_validation.results }}"
+          delegate_to: localhost
+
+        - debug:
+            var: san_res
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "SAN validation success - Prod"
+          shell: echo "#SAN Switches, {{ time }}, [INFO], :SAN Switch {{ item }} SSH connectivity is enabled" >> san_switches_success.yml   
+          delegate_to: localhost 
+          loop: "{{ san_input }}"         
+          when: san_res is search("Successfully ssh to SAN box {{ item }} ") and san_res is not search("mucfsp054|mucfsp154")
+
+        - name: "SAN validation success - Dev"
+          shell: echo "#SAN Switches, {{ time }}, [INFO], :SAN Switch {{ item }} SSH connectivity is enabled" >> san_switches_success.yml   
+          delegate_to: localhost 
+          loop: "{{ san_input }}"         
+          when: san_res is search("Successfully ssh to SAN box {{ item }}") and san_res is search("mucfsp054|mucfsp154")
+
+        - name: "SAN validation failure"
+          shell: echo "!SAN Switches, {{ time }}, [ERROR], :SAN Switch {{ item }} SSH connectivity has issue either connection or credential issue" >> san_switches_fail.yml
+          delegate_to: localhost
+          loop: "{{ san_input }}"
+          when: san_res is search("Failed to ssh {{ item }} ") and san_res is search("ERROR")                    
+
+      rescue:
+        - debug:
+            var: san_validation         
+            
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                          
+        - set_fact:
+            time: "{{tstamp.stdout}}"        
+
+        - name: "SAN validation failure"
+          shell: echo "!SAN Switches, {{ time }}, [ERROR], :SAN Switch {{ item }} SSH connectivity has issue either connection or credential issue" >> san_switches_fail.yml
+          delegate_to: localhost
+          loop: "{{ san_input }}"
+          when: san_res is search("Failed to ssh {{ item }}") and san_res is search("ERROR")                    

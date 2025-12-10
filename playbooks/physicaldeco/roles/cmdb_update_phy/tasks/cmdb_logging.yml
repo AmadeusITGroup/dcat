@@ -1,0 +1,86 @@
+---
+# - name: "This playbook collect all logs for cmdb"
+#   hosts: all
+#   gather_facts: no
+#   vars:  
+#     file_cmdb_suc: "vm_cmdb_success.yml"   
+#     file_cmdb: "vm_cmdb_failure.yml"
+#     graceperiod_flag: true
+#     cmdb_check: False
+#     serial: 2
+#     cmdb_log: "cmdb_log.yml"
+#     final_cmdb_log: "final_cmdb_log.yml"
+#     file_cmdb_fin : "vm_cmdb_final.yml"
+#     vmdelete: true
+                  
+#   ####collect logs####
+
+#   tasks:             
+    - name: "collecting logs for cmdb success and failure"
+      block:
+
+        - name: Handle the error if success file empty
+          block:
+
+            - set_fact:
+                file_cmdb_suc: "vm_cmdb_success.yml"
+                file_cmdb: "vm_cmdb_failure.yml"
+                cmdb_log: "cmdb_log.yml"
+                final_cmdb_log: "final_cmdb_log.yml"
+                file_cmdb_fin : "vm_cmdb_final.yml"           
+
+            - name: Display the JSON file content for cmdb update
+              shell: cat record_cmdb_upd.json
+              delegate_to: localhost
+              register: TR_result_cmdb_up  
+
+            - name: save the Json data to a Variable as a Fact for cmdb update
+              set_fact:
+                record_id_cmdb_up: "{{ TR_result_cmdb_up.stdout[1:-1] }}"
+              delegate_to: localhost         
+
+            - meta: end_host
+              when: record_id_cmdb_up == ""
+
+            - name: Read CMDB update final information
+              shell: cat vm_cmdb_final.yml
+              delegate_to: localhost
+              register: success_cmdb        
+
+            - name: save the vm list to a Variable as a Fact
+              set_fact:
+                cmdb_success_n: "{{ success_cmdb.stdout }}" 
+              delegate_to: localhost
+
+            - name: "success log list"
+              shell: echo "{{ cmdb_success_n }}" >> cmdb_log.yml                     
+              delegate_to: localhost
+              when: '"{{ inventory_hostname }}" in cmdb_success_n'
+
+          rescue:
+            - debug:
+                msg: "exception occurred as success cmdb file is empty"
+      
+        - name: Find unique entries
+          shell: cat cmdb_log.yml | sort -u | uniq -u | grep -v -e '^[[:space:]]*$' > final_cmdb_log.yml
+          delegate_to: localhost           
+         
+
+      rescue:
+        - debug:
+            var: final_cmdb                
+
+      
+               
+
+                        
+    
+    
+   
+    
+
+    
+        
+    
+        
+    

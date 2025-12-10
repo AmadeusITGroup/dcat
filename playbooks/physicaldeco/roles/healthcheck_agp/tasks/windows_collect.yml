@@ -1,0 +1,48 @@
+---
+- name: "Physical DECO collect information for windows"
+  hosts: all
+  gather_facts: yes
+  vars:
+    ansible_user: "{{ phy_ssh_username }}"
+    ansible_password: "{{ phy_ssh_password }}" 
+    ansible_connection: winrm
+    ansible_port: 5985
+    ansible_winrm_scheme: http
+    ansible_winrm_server_cert_validation: ignore
+    ansible_winrm_transport: ntlm
+    ansible_winrm_kerberos_delegation: true
+
+  tasks:
+    - name: "Collect host information"
+      set_fact:
+        msg: |
+          os: "{{ ansible_os_family }}"
+          host_ips: "{{ ansible_ip_addresses }}"
+          ilo: "{{ inventory_hostname }}rib"
+          ilo1: "ilo{{ ansible_product_serial }}"
+          setup: "{{ ansible_product_name }}"
+          hostname: "{{ ansible_hostname }}"
+          fqdn: "{{ ansible_fqdn }}"
+
+    - name: "Display collected informations"
+      debug:
+        msg: "{{ msg.split('\n') }}"
+
+    - name: "Gathering windows informations"      
+      set_fact:
+        os: "{{ ansible_os_family }}"
+        host_ips: "{{ ansible_ip_addresses }}"
+        ilo: "{{ inventory_hostname }}rib"
+        ilo1: "ilo{{ ansible_product_serial }}"
+        setup: "{{ ansible_product_name }}"
+        hostname: "{{ ansible_hostname }}"
+        fqdn: "{{ ansible_fqdn }}"
+
+    - name: "Collect WWN Details"
+      win_shell: |
+        Get-InitiatorPort | Select-Object -Property PortAddress
+      register: WWN
+
+    - name: "Show Windows WWN"
+      debug:
+        var: WWN

@@ -1,0 +1,116 @@
+---
+      - set_fact:
+          client_match : '{{ inventory_hostname }}'
+          export_rule_index: ""
+          file_export: "{{ inventory_hostname }}.yml"  
+          export_result: []
+          share_result: []
+          export_result_ip: []
+          share_result_ip: []
+          collect_export_result: []
+          fail_output_no_cleanup: []
+          nas_os_detail_w: ""
+          nas_os_detail_result: ""
+          cifs_share_access_control: ""
+          time: ""
+          storage_inventory_list: "{{ nas_box }}"
+          file_export_collect: "collect{{ inventory_hostname }}.yml"
+          file_failure: "nas_hostname_failure.yml"
+          file_success: "nas_hostname_success.yml"
+          nas_no_cleanup_check: ""
+          graceperiod_flag: ""
+          nas_info_log: "nas_info_gather.txt"
+          cifs_info_log: "cifs_info_gather.txt"
+
+      - include: "fetch_os_type.yml"
+
+      #no action required for servers with nas_validate absent or manual only logging data and updating the statefile
+
+      - name: when there is no rules for nfs server and ip
+        throttle: 1
+        block:
+
+            - name: Display the JSON file content
+              shell: cat private_endpoint_connection_string.yml
+              delegate_to: localhost
+              register: result_private_endpoint_connection_string
+        
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+              delegate_to: localhost
+
+            - name: "Check entry for DECO server"
+              azure_update_ref:
+                connection_string: "{{ private_endpoint_connection_string }}"
+                hostname: "{{inventory_hostname}}"
+              register: idem_status
+              delegate_to: localhost
+          
+
+            - set_fact: 
+                os: '{{idem_status.module_update.os}}'
+
+            - debug:
+                var: os
+
+            - debug:
+                var: nas_os_detail_w                
+
+            - set_fact:
+                nas_os_detail_w: "{{ os }}" 
+              when: nas_os_detail_w is not search("linux|windows") and os is search("linux|windows")
+
+
+            - name: Get timestamp from the system
+              shell: "date +%Y-%m-%d/%H:%M"
+              delegate_to: localhost
+              register: tstamp              
+                      
+            - set_fact:
+                time: "{{tstamp.stdout}}"     
+                
+          # For nas_validate = absent; Add logs to success log file
+            - name: "VM host list"
+              shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], There are  no rules with server or ip name for the associated vm." >> {{file_success}}                    
+              delegate_to: localhost
+              when: nas_os_detail_w == "linux" and nas_validate == "absent"
+
+            # - name: "VM host list"
+            #   shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], There are no shares with system account name for the associated vm." >> {{file_success}}                    
+            #   delegate_to: localhost
+            #   when: nas_os_detail_w == "windows" and nas_validate == "absent"
+          
+          # For nas_validate = manual; Add logs to success log file 
+            - name: "VM host list"
+              shell: echo "{{ inventory_hostname }}, [INFO], As per the discussion with Kamalesh it has been decided for any VMs submitted for NAS cleanup via DCAT tool is in powered off state or ssh is not enabled those servers are not validated by DCAT tool. Hence manual validation/cleanup by the storage team is required. PTR assigned for the same!" >> {{file_success}}                    
+              delegate_to: localhost
+              when: nas_validate == "manual" 
+          
+          # Add manual nas cleanup vms list to file to provide to storage TR
+            - name: "VM host list"
+              shell: echo "{{ inventory_hostname }}" >> nas_vm_manual_work.yml                     
+              delegate_to: localhost
+              when: nas_validate == "manual"                    
+          
+          # Add failure logs
+            - name: "VM host list"
+              shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to Get OS information from VCenter using vmware_guest_info module" >> {{file_failure}}                    
+              delegate_to: localhost
+              when: nas_os_detail_w is not search("linux|windows")
+
+            - name: "update entry for DECO server"
+              azure_update_module_vals:
+                connection_string: "{{ private_endpoint_connection_string }}"
+                hostname: "{{inventory_hostname}}"
+                module_name: "nasstorage"
+                status: "T"             
+              register: update_status
+              delegate_to: localhost
+              when: nas_os_detail_w == "windows" or nas_os_detail_w == "linux"
+
+
+        rescue:
+          - name: when updating the idempotency for the no rules present with server name and ip
+            debug:
+              msg: "Exception occurred while updating the idempotency or the server collect file for nas storage in nas no cleanup server file "      

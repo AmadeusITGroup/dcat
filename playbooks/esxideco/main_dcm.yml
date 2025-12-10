@@ -1,0 +1,20 @@
+---
+- name: "Dcm_update"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  vars:
+    cmdb_url_update: "{{ hostvars['localhost']['config_data']['cmdb_url_update'] }}"
+  tasks: 
+    - name: Fetching DCM specific data
+      ansible.builtin.import_role:
+        name: dcm
+        tasks_from: fetching_dcm_info.yml
+
+- name: "Create TR for dcm_update"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: dcm_update
+      ansible.builtin.import_role:
+        name: dcm
+        tasks_from: create_tr_dcm.yml

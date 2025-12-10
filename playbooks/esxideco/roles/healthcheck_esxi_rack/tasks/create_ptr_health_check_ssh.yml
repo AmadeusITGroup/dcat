@@ -1,0 +1,44 @@
+---
+# - name: "This playbook is to create PTR for PHYSCIAL deco service health check"
+#   hosts: localhost
+#   gather_facts: no
+           
+        
+#   tasks:      
+#####################################################################################################################        
+                               
+
+    - name: "Handling PTR record_id for ESXI deco"
+      block:
+        - name: Create PTR
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            ptr_title: "ESXI DECO: Service health check on SSH connectivity referring to failed TR - {{ record_healthcheck_ssh }}"
+            tr_map: "{{ 30517695 }}"
+            assignee_group: "DINFDECO"  
+            ptr_logs: "{{ support_groups }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_esxi_ssh_fail
+          until: '"Successfully" in ptr_esxi_ssh_fail.msg'
+          retries: 3
+          delay: 10
+          when: 'esxi_ssh_fail != "" and "Successfully" in ptr_esxi_ssh_fail.msg'
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            task_id: "{{ 30517695 }}"
+            prob_id: "{{ ptr_esxi_ssh_fail.id }}"                   
+          register: update_overview  
+          when: 'esxi_ssh_fail != "" and "Successfully" in ptr_esxi_ssh_fail.msg'
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - SSH connectivity"                               
+############################################################################################################
+

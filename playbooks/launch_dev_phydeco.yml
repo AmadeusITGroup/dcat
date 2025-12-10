@@ -1,0 +1,14 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: "{{ graceperiod_flag }}"   
+
+  tasks:
+  - name: set env for deco
+    set_fact:
+      env_name: dev
+
+- import_playbook: "phy_{{ graceperiod_flag | lower }}.yml"
+  vars:
+    env: "{{ env_name }}"

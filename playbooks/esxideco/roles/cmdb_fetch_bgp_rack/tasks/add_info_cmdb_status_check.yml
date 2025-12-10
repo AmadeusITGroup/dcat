@@ -1,0 +1,403 @@
+---   
+        
+    - name: "Handling TR record_id for implementation and validation result for CMDB status check"
+      block:
+        - set_fact:
+            file_cmdb_stat_fin : "cmdb_stat_final.yml"
+            file_failure_stat: "cmdb_stat_failure.yml"
+            file_suc_cmdb_stat: "cmdb_stat_success.yml"
+            #record_id_cmdb_status_json: "record_cmdb_fetch.json"               
+        
+        - name: Display the JSON file content
+          shell: cat record_cmdb_fetch.json
+          delegate_to: localhost
+          register: TR_result_cmdb_fetch  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_cmdb_fetch: "{{ TR_result_cmdb_fetch.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: record_id_cmdb_fetch == ""     
+
+ #############  success info gathering ##########################
+        - name : handling error in the success block
+          block:
+            - name: Display the JSON file content
+              shell: cat cmdb_stat_success.yml
+              delegate_to: localhost
+              register: result_cmdb_stat_suc
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_cmdb_stat_suc_v: "{{ result_cmdb_stat_suc.stdout }}" 
+              delegate_to: localhost  
+     
+            
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are the CMDB status check success results for the esxi servers"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_cmdb_stat_suc: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_cmdb_stat_suc_v }}" 
+              when: result_cmdb_stat_suc_v != ""  
+
+            - name: " Merge Success information to single final file "
+              shell: echo "{{content_cmdb_stat_suc}}" >> cmdb_stat_final.yml                    
+              delegate_to: localhost
+              when: result_cmdb_stat_suc_v != "" 
+
+          rescue:
+            - debug:
+                msg: "Rescue for no success file found and continue"   
+                   
+  ####################### Failure info gathering ########################## 
+        - name : handling error in the failure block
+          block:          
+            - name: Display the JSON file content
+              shell: cat cmdb_stat_failure.yml
+              delegate_to: localhost
+              register: result_cmdb_stat_fail
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_cmdb_stat_fail_v: "{{ result_cmdb_stat_fail.stdout }}" 
+              delegate_to: localhost  
+    
+            
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are the CMDB FETCH STATUS failure results for the esxi servers"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_cmdb_stat_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_cmdb_stat_fail_v }}"
+              when: result_cmdb_stat_fail_v != ""   
+           
+
+            - name: " Merge Failure information to to single final file"
+              shell: echo "{{ content_cmdb_stat_fail }}" >> cmdb_stat_final.yml                    
+              delegate_to: localhost
+              when: result_cmdb_stat_fail_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no failure file found and continue"
+
+##########################  merging both failure and success results ###########################
+
+        - name: Display the JSON file content
+          shell: cat cmdb_stat_final.yml
+          delegate_to: localhost
+          register: result_cmdb_stat_fin
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            result_cmdb_stat_fin_v: "{{ result_cmdb_stat_fin.stdout }}" 
+          delegate_to: localhost  
+
+        # - name: Display the JSON file content
+        #   shell: cat winaproach_category.yml
+        #   delegate_to: localhost
+        #   register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "I" #"{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost 
+
+########################  closing implementation as failed  ############################################
+        - name: Implementation Failed that is closing the implementation as failed
+          winaproach:
+            system: prod
+            type: task_record
+            operation: fail_implementation
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+              task_id: "{{ record_id_cmdb_fetch }}"
+              text: "{{ result_cmdb_stat_fin_v }}"
+          register: fail_implementation  
+          when: result_cmdb_stat_fin_v is search("ERROR") and result_cmdb_stat_fin_v is not search("INFO")             
+
+########################  Pending Partial implementation  ############################################
+        - name: Implementation partial that is closing the implementation as partial
+          tr_partial_imp:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_cmdb_fetch }}"
+          register: partial_implement
+          when: result_cmdb_stat_fin_v is search("ERROR") and result_cmdb_stat_fin_v is search("INFO")
+
+
+# ########################  Close Partial implementation  ############################################
+        - name: Implementation partial that is closing the implementation as partial
+          tr_partial_close:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_cmdb_fetch }}"
+            closing_comment: "{{ result_cmdb_stat_fin_v }}"
+          register: close_partial_implement
+          when: result_cmdb_stat_fin_v is search("ERROR") and result_cmdb_stat_fin_v is search("INFO")
+
+################   PTR CREATION FOR CMDB AND OWNER GROUPS SEPARATELY #############################
+
+        - name: Display the JSON file content
+          shell: cat cmdb_stat_failure_cmdb.yml
+          delegate_to: localhost
+          register: result_check_failure_cmdb
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_failure_cmdb: "{{ result_check_failure_cmdb.stdout }}" 
+          delegate_to: localhost
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are failure results for the servers while fetching data from cmdb"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_failure_cmdb: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_failure_cmdb }}"
+          when: check_failure_cmdb != ""
+
+        # - name: Display the JSON file content
+        #   shell: cat winaproach_category.yml
+        #   delegate_to: localhost
+        #   register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "I" #"{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost          
+
+############################################################################################################
+        # - name: read yaml file from the specific location 
+        #   set_fact:
+        #     file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        # - name: split the file content
+        #   set_fact:
+        #     lines: "{{file_content.split('\n')}}"
+
+        # - name: convert the lines in the file to dict
+        #   set_fact:
+        #     res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]:item.split('\t')[1] }) }}"
+        #   loop: "{{ lines }}"
+
+
+        # - name: find which key is preset in the log
+        #   set_fact: 
+        #     present_key: "{{ present_key | default([]) + [item] }}"
+        #   loop: "{{ res_dict.keys() }}"
+        #   when: content_failure_cmdb is defined and item in content_failure_cmdb
+
+        # - name: print the corresponded  value of the key present
+        #   set_fact:
+        #     allowner_name: "{{ allowner_name | default({}) | combine({item:res_dict[item]}) }}"
+        #   loop: "{{ present_key }}"
+        #   when: content_failure_cmdb is defined
+
+        # - name: all owners with format
+        #   set_fact:
+        #     all_owner_Final: | 
+        #       {% for key,value in allowner_name.items()%}
+        #       {{ key }} : {{ value }}
+        #       {% endfor %}
+        #   when: content_failure_cmdb is defined
+
+        # - set_fact:
+        #     Requester_group: "Requester_group: {{requester_group}}"
+        #     Requester_name: "Requester_name: {{requester_name}}"
+
+        # - name: "writing output to File"
+        #   shell: echo -e "{{content_failure_cmdb}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final}}" > groups_ptr.yml
+        #   delegate_to: localhost
+        #   when: content_failure_cmdb is defined
+
+        # - name: Display the JSON file content
+        #   shell: cat groups_ptr.yml
+        #   delegate_to: localhost
+        #   register: result_groups
+        #   when: content_failure_cmdb is defined
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     support_groups: "{{ result_groups.stdout }}" 
+        #   delegate_to: localhost 
+        #   when: content_failure_cmdb is defined
+
+
+        - name: Create PTR for cmdb team
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "ESXi DECO: CMDB fetch details with failed TR - {{ record_id_cmdb_fetch }}"
+            tr_map: "{{ record_id_cmdb_fetch }}"
+            assignee_group: "OEA02SNM"  
+            ptr_logs: "{{ support_groups }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"
+          register: ptr_out_cmdb
+          until: '"Successfully" in ptr_out_cmdb.msg'
+          retries: 3
+          delay: 10
+          when: check_failure_cmdb != ""
+
+        - name: Update TR with PTR for cmdb team
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_cmdb_fetch }}"
+            prob_id: "{{ ptr_out_cmdb.id }}"                   
+          register: update_overview  
+          when: check_failure_cmdb != "" 
+
+        - name: Display the JSON file content
+          shell: cat cmdb_stat_failure_owner.yml
+          delegate_to: localhost
+          register: result_check_failure_owner
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_failure_owner: "{{ result_check_failure_owner.stdout }}" 
+          delegate_to: localhost
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are results for the servers not in deco in progress"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_failure_owner: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ check_failure_owner}}"
+          when: check_failure_owner != ""
+
+              ############################################################################################################
+
+        # - name: find which key is preset in the log
+        #   set_fact: 
+        #     present_key1: "{{ present_key1 | default([]) + [item] }}"
+        #   loop: "{{ res_dict.keys() }}"
+        #   when: content_failure_owner is defined and item in content_failure_owner
+
+        # - name: print the corresponded  value of the key present
+        #   set_fact:
+        #     allowner_name1: "{{ allowner_name1 | default({}) | combine({item:res_dict[item]}) }}"
+        #   loop: "{{ present_key1 }}"
+        #   when: content_failure_owner is defined
+
+        # - name: all owners with format
+        #   set_fact:
+        #     all_owner_Final1: | 
+        #       {% for key,value in allowner_name1.items()%}
+        #       {{ key }} : {{ value }}
+        #       {% endfor %}
+        #   when: content_failure_owner is defined
+
+        # - name: "writing output to File"
+        #   shell: echo -e "{{content_failure_owner}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final1}}" > groups_ptr.yml
+        #   delegate_to: localhost
+        #   when: content_failure_owner is defined
+
+        # - name: Display the JSON file content
+        #   shell: cat groups_ptr.yml
+        #   delegate_to: localhost
+        #   register: result_groups1
+        #   when: content_failure_owner is defined
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     support_groups1: "{{ result_groups1.stdout }}" 
+        #   delegate_to: localhost 
+        #   when: content_failure_owner is defined
+
+        - name: Create PTR for owner
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "ESXi DECO: CMDB fetch details with failed TR - {{ record_id_cmdb_fetch }}"
+            tr_map: "{{ record_id_cmdb_fetch }}"
+            assignee_group: "DINFDECO"  
+            ptr_logs: "{{ support_groups1 }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"
+          register: ptr_out_owner
+          until: '"Successfully" in ptr_out_owner.msg'
+          retries: 3
+          delay: 10
+          when: check_failure_owner != ""
+
+        - name: Update TR with PTR for owner
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_cmdb_fetch }}"
+            prob_id: "{{ ptr_out_owner.id }}"                   
+          register: update_overview  
+          when: check_failure_owner != "" 
+
+############################# closing implementation as success ####################            
+        - name: END Implementation that is closing the implementation as success
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: end_implementation
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+                task_id: "{{ record_id_cmdb_fetch }}" #"{{ record_id }}"
+                text: "{{ result_cmdb_stat_fin_v }}"
+          register: end_implementation
+          when: result_cmdb_stat_fin_v is not search("ERROR") and result_cmdb_stat_fin_v is search("INFO")
+ 
+
+        - name: start Validate Implementation for closing the success TR
+          winaproach:
+            system: prod #"{{ winaproach_env }}"
+            type: task_record
+            operation: validate
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+              task_id: "{{ record_id_cmdb_fetch }}" 
+              text: "{{ result_cmdb_stat_fin_v }}"
+          register: validation
+          when: result_cmdb_stat_fin_v is not search("ERROR") and result_cmdb_stat_fin_v is search("INFO") 
+
+        
+      rescue:
+        - debug:
+            msg: "Exception occurred so rescued the main tr result block for CMDB status check"
+
+
+
+
+
+                           
+        
+            
+             

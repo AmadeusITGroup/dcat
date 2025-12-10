@@ -1,0 +1,195 @@
+---
+
+- name: "Filter hostlist blades healthcheck"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: Filter hostlist blades healthcheck
+      ansible.builtin.import_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: filter_hostlist_blades_healthcheck.yml
+
+- name: "Create TR Healthcheck for blades"
+  hosts: localhost
+  gather_facts: no
+  vars:
+  tasks:
+    - name: TR Healthcheck for blades
+      ansible.builtin.import_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: create_tr_health_check.yml
+
+        
+- name: Fetch ESXi details from blades
+  hosts: "{{ target_hosts }}"
+  gather_facts: no
+  vars:
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+    synergon_url: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+  tasks:
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      run_once: true
+      register: result_private_endpoint_connection_string
+
+    - name: Save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      run_once: true
+      delegate_to: localhost   
+
+    - name: Check entry for DECO server for filter hostlist for blade healthcheck
+      azure_update_ref_esxi.py:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{ inventory_hostname }}"
+      register: idem_status 
+      delegate_to: localhost
+
+    - name: Set server shutdown status
+      set_fact: 
+        server_shutdown: "{{ idem_status.module_update.server_shutdown }}"
+
+    - name: End play for shutdown servers
+      meta: end_host
+      when: server_shutdown == "T"
+
+    - name: Fetch ESXi details
+      enclosure_synergon_data_fetch:
+        enclosure: "{{ inventory_hostname }}"
+        synergon_api: "{{ synergon_url }}"
+      delegate_to: localhost
+      register: esxi_data
+
+    # - name: Extract FQDNs from fetched data
+    #   set_fact:
+    #     all_fqdns: "{{ esxi_data.results | map(attribute='esxi_details') | list | flatten | map(attribute='fqdn') | list }}"
+
+    - name: Extract FQDNs from fetched data
+      set_fact:
+        all_fqdns: "{{ esxi_data.esxi_details | map(attribute='fqdn') | list }}"
+
+    - name: Debug - Show fetched FQDNs
+      debug:
+        var: all_fqdns
+
+    # - name: Extract vCenter from fetched data
+    #   set_fact:
+    #     all_vcenter: "{{ esxi_data.results | map(attribute='esxi_details') | list | flatten | map(attribute='vcenter') | list }}"
+
+    - name: Extract vCenter from fetched data
+      set_fact:
+        all_vcenter: "{{ esxi_data.esxi_details | map(attribute='vcenter') | list }}"
+
+# =======================================================================================================
+# Perform vCenter healthcheck for each ESXi, check for Maintenance Mode and Enable SSH from vCenter
+# =======================================================================================================
+
+    - name: Ensure lists are of equal length
+      set_fact:
+        min_length: "{{ [all_vcenter | length, all_fqdns | length] | min | int }}"
+
+    - name: Create list of vCenter and ESXi FQDN pairs
+      set_fact:
+        vcenter_esxi_pairs: "{{ vcenter_esxi_pairs | default([]) + [{'vcenter': all_vcenter[item | int], 'esxi_fqdn': all_fqdns[item | int]}] }}"
+      loop: "{{ range(0, min_length | int) | list }}"
+      loop_control:
+        loop_var: item
+
+    - name: Debug combined vCenter and ESXi pairs
+      debug:
+        var: vcenter_esxi_pairs
+
+    - name: Execute vCenter health check for each ESXi host, check for Maintenance mode and Enable SSH configs
+      include_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: health_check_vcenter.yml
+      vars:
+        vcenter: "{{ item.vcenter }}"
+        esxi_fqdn: "{{ item.esxi_fqdn }}"
+      loop: "{{ vcenter_esxi_pairs }}"
+      when: vcenter_esxi_pairs | length > 0
+  
+
+# =======================================================================================================
+# Perform SSH healthcheck for each ESXi Host
+# =======================================================================================================
+
+
+
+    # - name: Fetch ESXi details
+    #   enclosure_synergon_data_fetch:
+    #     enclosure: "{{ item }}"
+    #     synergon_api: "{{ synergon_url }}"
+    #   loop: "{{ groups['target_servers'] }}"
+    #   register: esxi_data
+
+    # - name: Create mapping of Enclosure and ESXi FQDNs
+    #   set_fact:
+    #     enclosure_esxi_map: "{{ enclosure_esxi_map | default([]) + esxi_data.results | map(attribute='esxi_details') | list | flatten | map('combine', {'enclosure': item}) | list }}"
+    #   loop: "{{ groups['target_servers'] }}"
+    #   loop_control:
+    #     loop_var: item
+
+    # - name: Debug enclosure to ESXi mapping
+    #   debug:
+    #     var: enclosure_esxi_map
+
+    # - name: Execute SSH health check for each ESXi host
+    #   include_role:
+    #     name: enclosure_esxi_healthcheck
+    #     tasks_from: health_check_ssh.yml
+    #   # vars:
+    #   #   esxi_fqdn: "{{ item.fqdn }}"
+    #   #   enclosure: "{{ item.enclosure }}"
+    #   # loop: "{{ enclosure_esxi_map }}"
+    #   # when: enclosure_esxi_map | length > 0
+
+    - name: Execute SSH health check for each ESXi host
+      include_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: health_check_ssh.yml
+      vars:
+        esxi_fqdn: "{{ item }}"
+        # remote_username: root
+        # remote_password: N1Flheim!
+        remote_username: "{{ elk_user }}"
+        remote_password: "{{ elk_password }}"  
+        # remote_username: "{{ remote_username }}"
+        # remote_password: "{{ remote_password }}"  
+      loop: "{{ all_fqdns }}"
+      when: all_fqdns | length > 0
+
+# =======================================================================================================
+# Perform ILO Healthcheck for eack host
+# =======================================================================================================
+
+    # - name: Run health checks
+    #   ansible.builtin.import_role:
+    #     name: enclosure_esxi_healthcheck
+    #     tasks_from: health_check_ilo.yml
+
+- name: "Update TR for healthcheck ESXi"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+        
+    - name: Healthcheck create PTR
+      ansible.builtin.import_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: create_ptr_health_check_blades.yml
+
+    - name: Healthcheck add info
+      ansible.builtin.import_role:
+        name: enclosure_esxi_healthcheck
+        tasks_from: add_info_healthcheck_blades.yml
+

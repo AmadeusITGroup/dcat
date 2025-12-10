@@ -1,0 +1,711 @@
+---
+    # - name: "Deco Health check status"
+    #   block:
+
+    #     - name: Display the JSON file content
+    #       shell: cat state_file.yml
+    #       delegate_to: localhost
+    #       register: result_state_file
+
+    #     - name: save the Json data to a Variable as a Fact
+    #       set_fact:
+    #         state_file: "{{ result_state_file.stdout }}" 
+    #       delegate_to: localhost      
+
+    #     - name: Check if artifact api up or not
+    #       uri:
+    #         url: https://{{ state_file }}
+    #       register: result_artifacts
+    #       until: "result_artifacts.status == 200"
+    #       retries: 3
+    #       delay: 10
+
+    #     - name: Get timestamp from the system
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp  
+                      
+    #     - set_fact:
+    #         time: "{{tstamp.stdout}}"             
+
+    #     - name: "artifact repo status"
+    #       shell: echo "#Artifacts repo - {{ time }}, [INFO], {{ state_file }} is up and running, good to proceed with VM deco trigger 2" >> check_artifacts_success.yml   
+    #       delegate_to: localhost           
+
+
+
+    #   rescue:
+    #     - debug:
+    #         msg: "artifact repo unavaiable"
+
+    #     - name: Get timestamp from the system
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp  
+                      
+    #     - set_fact:
+    #         time: "{{tstamp.stdout}}"             
+
+    #     - name: "artifact repo status"
+    #       shell: echo "!Artifacts repo - {{ time }}, [ERROR], {{ state_file }} is down currently after 3 retries needs attention" >> check_artifacts.yml   
+    #       delegate_to: localhost 
+
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat synergon_url.yml
+          delegate_to: localhost
+          register: result_synergon_url
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            synergon_url: "{{ result_synergon_url.stdout }}" 
+          delegate_to: localhost        
+
+        - name: Check if synergon api up or not
+          uri:
+            url: https://{{ synergon_url }}/v1/ui#/vm/list_vms_vms__get           
+          register: result_synergon
+          until: "result_synergon.status == 200"
+          retries: 3
+          delay: 10
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Synergon status"
+          shell: echo "#Synergon api - {{ time }}, [INFO], {{ synergon_url }} is up and running, good to proceed with VM deco trigger 2" >> check_synergon_success.yml   
+          delegate_to: localhost          
+
+
+      rescue:
+        - debug:
+            msg: "Synergon is unavaiable" 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Synergon status"
+          shell: echo "!Synergon api - {{ time }}, [ERROR], {{ synergon_url }} is down currently after 3 retries needs attention" >> check_synergon.yml   
+          delegate_to: localhost 
+
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat cmdb_url_update.yml
+          delegate_to: localhost
+          register: result_cmdb_url_update
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            cmdb_url_update: "{{ result_cmdb_url_update.stdout }}" 
+          delegate_to: localhost      
+
+        - name: Check if remedy api up or not
+          uri:
+            url: "{{ cmdb_url_update }}/api/arsys/v1/entry" # http://{{ cmdb_url_update }}:8008/api/arsys/v1/entry
+          register: result_remedy
+          until: "result_remedy.status == 200"
+          retries: 3
+          delay: 10
+          when: cmdb_url_update is search("{{CMDB_URL}}")
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: cmdb_url_update is search("{{CMDB_URL}}")  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: cmdb_url_update is search("{{CMDB_URL}}")              
+
+        - name: "Remedy status"
+          shell: echo "#Remedy - {{ time }}, [INFO], {{ cmdb_url_update }} is up and running, good to proceed with VM deco trigger 2" >> check_remedy_success.yml   
+          delegate_to: localhost
+          when: cmdb_url_update is search("{{CMDB_URL}}")          
+
+
+      rescue:
+        - debug:
+            msg: "Remedy is unavaiable to update CMDB"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp 
+          when: cmdb_url_update is search("{{CMDB_URL}}")  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: cmdb_url_update is search("{{CMDB_URL}}")               
+
+        - name: "Remedy status"
+          shell: echo "!Remedy - {{ time }}, [ERROR], {{ cmdb_url_update }} is down currently after 3 retries needs attention" >> check_remedy.yml   
+          delegate_to: localhost
+          when: cmdb_url_update is search("{{CMDB_URL}}") 
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat cmdb_url_update.yml
+          delegate_to: localhost
+          register: result_cmdb_url_update
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            cmdb_url_update: "{{ result_cmdb_url_update.stdout }}" 
+          delegate_to: localhost      
+
+        - name: Check if remedy api up or not
+          uri:
+            url: "{{ cmdb_url_update }}/api/arsys/v1/entry" # http://{{ cmdb_url_update }}:8008/api/arsys/v1/entry   
+          register: result_remedy
+          until: "result_remedy.status == 200"
+          retries: 3
+          delay: 10
+          when: cmdb_url_update is search("{{CMDB_URL}}") 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: cmdb_url_update is search("{{CMDB_URL}}")  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: cmdb_url_update is search("{{CMDB_URL}}")              
+
+        - name: "Remedy status"
+          shell: echo "#Remedy - {{ time }}, [INFO], {{ cmdb_url_update }} is up and running, good to proceed with VM deco trigger 2" >> check_remedy_success.yml   
+          delegate_to: localhost
+          when: cmdb_url_update is search("{{CMDB_URL}}")          
+
+
+      rescue:
+        - debug:
+            msg: "Remedy is unavaiable to update CMDB"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: cmdb_url_update is search("{{CMDB_URL}}")   
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: cmdb_url_update is search("{{CMDB_URL}}")             
+
+        - name: "Remedy status"
+          shell: echo "!Remedy - {{ time }}, [ERROR], {{ cmdb_url_update }} is down currently after 3 retries needs attention" >> check_remedy.yml   
+          delegate_to: localhost
+          when: cmdb_url_update is search("{{CMDB_URL}}")
+           
+
+    # - name: "Deco Health check status"
+    #   block:
+
+    #     - name: Display the JSON file content
+    #       shell: cat ipam_grid.yml
+    #       delegate_to: localhost
+    #       register: result_ipam_grid
+
+    #     - name: save the Json data to a Variable as a Fact
+    #       set_fact:
+    #         ipam_grid: "{{ result_ipam_grid.stdout }}" 
+    #       delegate_to: localhost  
+
+
+    #     - name: Check if Infoblox api up or not
+    #       uri:
+    #         url: https://{{ ipam_grid }}/ui/
+    #         validate_certs: no 
+    #       register: result_ipamm
+    #       until: "result_ipamm.status == 200"
+    #       retries: 3
+    #       delay: 10
+
+    #     - name: Get timestamp from the system
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp  
+                      
+    #     - set_fact:
+    #         time: "{{tstamp.stdout}}"            
+
+    #     - name: "IPAM status"
+    #       shell: echo "#Infoblox - {{ time }}, [INFO], {{ ipam_grid }}/ui/ is up and running, good to proceed with VM deco trigger 2" >> check_ipam_success.yml   
+    #       delegate_to: localhost            
+
+    #   rescue:
+    #     - debug:
+    #         msg: "Infoblox api unavaiable"
+
+    #     - name: Get timestamp from the system
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp  
+                      
+    #     - set_fact:
+    #         time: "{{tstamp.stdout}}"            
+
+    #     - name: "IPAM status"
+    #       shell: echo "!Infoblox - {{ time }}, [ERROR], {{ ipam_grid }}/ui/ is down currently after 3 retries needs attention" >> check_ipam.yml   
+    #       delegate_to: localhost
+
+
+    # - name: "Deco Health check status"
+    #   block:
+
+    #     - name: Display the JSON file content
+    #       shell: cat dns_grid.yml
+    #       delegate_to: localhost
+    #       register: result_dns_grid
+
+    #     - name: save the Json data to a Variable as a Fact
+    #       set_fact:
+    #         dns_grid: "{{ result_dns_grid.stdout }}" 
+    #       delegate_to: localhost       
+
+    #     - name: Check if Infoblox api up or not
+    #       uri:
+    #         url: https://{{ dns_grid }}/ui/
+    #         validate_certs: no       
+    #       register: result_ipam
+    #       until: "result_ipam.status == 200"
+    #       retries: 3
+    #       delay: 10
+
+    #     - name: Get timestamp from the system
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp  
+                      
+    #     - set_fact:
+    #         time: "{{tstamp.stdout}}"            
+
+    #     - name: "IPAM status"
+    #       shell: echo "#Infoblox - {{ time }}, [INFO], {{ dns_grid }}/ui/ is up and running, good to proceed with VM deco trigger 2" >> check_ipam_success.yml   
+    #       delegate_to: localhost           
+
+    #   rescue:
+    #     - debug:
+    #         msg: "Infoblox api unavaiable"
+
+    #     - name: Get timestamp from the system
+    #       shell: "date +%Y-%m-%d/%H:%M"
+    #       delegate_to: localhost
+    #       register: tstamp  
+                      
+    #     - set_fact:
+    #         time: "{{tstamp.stdout}}"            
+
+    #     - name: "IPAM status"
+    #       shell: echo "!Infoblox - {{ time }}, [ERROR], {{ dns_grid }}/ui/ is down currently after 3 retries needs attention" >> check_ipam.yml   
+    #       delegate_to: localhost
+
+
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat prod_box_c.yml
+          delegate_to: localhost
+          register: result_prod_box_c
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            prod_box_c: "{{ result_prod_box_c.stdout }}" 
+          delegate_to: localhost        
+
+        - name: Check if storage api up or not
+          uri: 
+            url: https://{{ prod_box_c }}          
+            validate_certs: no                     
+          register: result_n0142
+          until: "result_n0142.status == 200"
+          retries: 3
+          delay: 10
+          when: prod_box_c != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: prod_box_c != ""  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: prod_box_c != ""              
+
+        - name: "Storage NAS status"
+          shell: echo "#Storage NAS box - {{ time }}, [INFO], {{ prod_box_c }} is up and running, good to proceed with VM deco trigger 2" >> check_nas_success.yml   
+          delegate_to: localhost
+          when: prod_box_c != ""          
+
+      rescue:
+        - debug:
+            msg: "Storage box <storage_box> unavaiable"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Storage NAS status"
+          shell: echo "!Storage NAS box - {{ time }}, [ERROR], <storage_box> is down currently after 3 retries needs attention" >> check_nas.yml   
+          delegate_to: localhost
+
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat prod_box_d.yml
+          delegate_to: localhost
+          register: result_prod_box_d
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            prod_box_d: "{{ result_prod_box_d.stdout }}" 
+          delegate_to: localhost       
+
+        - name: Check if storage api up or not
+          uri: 
+            url: https://{{ prod_box_d }}           
+            validate_certs: no                       
+          register: result_n0143
+          until: "result_n0143.status == 200"
+          retries: 3
+          delay: 10
+          when: prod_box_d != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: prod_box_d != ""  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: prod_box_d != ""              
+
+        - name: "Storage NAS status"
+          shell: echo "#Storage NAS box - {{ time }}, [INFO], {{ prod_box_d }} is up and running, good to proceed with VM deco trigger 2" >> check_nas_success.yml   
+          delegate_to: localhost
+          when: prod_box_d != ""           
+
+      rescue:
+        - debug:
+            msg: "Storage box <storage_box> unavaiable"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Storage NAS status"
+          shell: echo "!Storage NAS box - {{ time }}, [ERROR], <storage_box> is down currently after 3 retries needs attention" >> check_nas.yml   
+          delegate_to: localhost
+
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat prod_box_e.yml
+          delegate_to: localhost
+          register: result_prod_box_e
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            prod_box_e: "{{ result_prod_box_e.stdout }}" 
+          delegate_to: localhost       
+
+        - name: Check if storage api up or not
+          uri: 
+            url: https://{{ prod_box_e }}          
+            validate_certs: no                     
+          register: result_nafs01_c1
+          until: "result_nafs01_c1.status == 200"
+          retries: 3
+          delay: 10
+          when: prod_box_e != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp 
+          when: prod_box_e != "" 
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: prod_box_e != ""            
+
+        - name: "Storage NAS status"
+          shell: echo "#Storage NAS box - {{ time }}, [INFO], {{ prod_box_e }} is up and running, good to proceed with VM deco trigger 2" >> check_nas_success.yml   
+          delegate_to: localhost
+          when: prod_box_e != ""           
+
+      rescue:
+        - debug:
+            msg: "Storage box <storage_box> unavaiable"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Storage NAS status"
+          shell: echo "!Storage NAS box - {{ time }}, [ERROR], <storage_box> is down currently after 3 retries needs attention" >> check_nas.yml   
+          delegate_to: localhost
+
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat prod_box_f.yml
+          delegate_to: localhost
+          register: result_prod_box_f
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            prod_box_f: "{{ result_prod_box_f.stdout }}" 
+          delegate_to: localhost       
+
+        - name: Check if storage api up or not
+          uri: 
+            url: https://{{ prod_box_f }}           
+            validate_certs: no                      
+          register: result_nafs02
+          until: "result_nafs02.status == 200"
+          retries: 3
+          delay: 10
+          when: prod_box_f != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: prod_box_f != ""  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: prod_box_f != ""            
+
+        - name: "Storage NAS status"
+          shell: echo "#Storage NAS box - {{ time }}, [INFO], {{ prod_box_f }} is up and running, good to proceed with VM deco trigger 2" >> check_nas_success.yml   
+          delegate_to: localhost
+          when: prod_box_f != ""           
+
+      rescue:
+        - debug:
+            msg: "Storage box <storage_box> unavaiable"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Storage NAS status"
+          shell: echo "!Storage NAS box - {{ time }}, [ERROR], <storage_box> is down currently after 3 retries needs attention" >> check_nas.yml   
+          delegate_to: localhost
+
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat prod_box_g.yml
+          delegate_to: localhost
+          register: result_prod_box_g
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            prod_box_g: "{{ result_prod_box_g.stdout }}" 
+          delegate_to: localhost       
+
+        - name: Check if storage api up or not
+          uri: 
+            url: https://{{ prod_box_g }}           
+            validate_certs: no                      
+          register: result_nsdsclus01
+          until: "result_nsdsclus01.status == 200"
+          retries: 3
+          delay: 10
+          when: prod_box_g != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: prod_box_g != ""  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: prod_box_g != ""            
+
+        - name: "Storage NAS status"
+          shell: echo "#Storage NAS box - {{ time }}, [INFO], {{ prod_box_g }} is up and running, good to proceed with VM deco trigger 2" >> check_nas_success.yml   
+          delegate_to: localhost
+          when: prod_box_g != ""           
+
+      rescue:
+        - debug:
+            msg: "Storage box <storage_box> unavaiable"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Storage NAS status"
+          shell: echo "!Storage NAS box - {{ time }}, [ERROR], <storage_box> is down currently after 3 retries needs attention" >> check_nas.yml   
+          delegate_to: localhost
+
+
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat dev_box_a.yml
+          delegate_to: localhost
+          register: result_dev_box_a
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            dev_box_a: "{{ result_dev_box_a.stdout }}" 
+          delegate_to: localhost          
+
+        - name: Check if storage api up or not
+          uri: 
+            url: https://{{ dev_box_a }}                    
+            validate_certs: no                 
+          register: result_n0129
+          until: "result_n0129.status == 200"
+          retries: 3
+          delay: 10
+          when: dev_box_a != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: dev_box_a != ""  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}" 
+          when: dev_box_a != ""             
+
+        - name: "Storage NAS status"
+          shell: echo "#Storage NAS box - {{ time }}, [INFO], {{ dev_box_a }} is up and running, good to proceed with VM deco trigger 2" >> check_nas_success.yml   
+          delegate_to: localhost
+          when: dev_box_a != ""          
+         
+      rescue:
+        - debug:
+            msg: "Storage box <storage_box> unavaiable"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Storage NAS status"
+          shell: echo "!Storage NAS box - {{ time }}, [ERROR], <storage_box> is down currently after 3 retries needs attention" >> check_nas.yml   
+          delegate_to: localhost
+
+
+    - name: "Deco Health check status"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat dev_box_b.yml
+          delegate_to: localhost
+          register: result_dev_box_b
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            dev_box_b: "{{ result_dev_box_b.stdout }}" 
+          delegate_to: localhost          
+
+        - name: Check if storage api up or not
+          uri: 
+            url: https://{{ dev_box_b }}        
+            validate_certs: no               
+          register: result_n0128
+          until: "result_n0128.status == 200"
+          retries: 3
+          delay: 10
+          when: dev_box_b != ""
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp
+          when: dev_box_b != ""  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+          when: dev_box_b != ""              
+
+        - name: "Storage NAS status"
+          shell: echo "#Storage NAS box - {{ time }}, [INFO], {{ dev_box_b }} is up and running, good to proceed with VM deco trigger 2" >> check_nas_success.yml   
+          delegate_to: localhost 
+          when: dev_box_b != ""          
+      
+      rescue:
+        - debug:
+            msg: "Storage box <storage_box> unavaiable"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                      
+        - set_fact:
+            time: "{{tstamp.stdout}}"            
+
+        - name: "Storage NAS status"
+          shell: echo "!Storage NAS box - {{ time }}, [ERROR], <storage_box> is down currently after 3 retries needs attention" >> check_nas.yml   
+          delegate_to: localhost
+
+
+
+                   

@@ -1,0 +1,83 @@
+---
+# - name: "This playbook is to Create TR"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+#     record_id_net: ""
+#     network: False
+#     graceperiod_flag: true
+#     nas_check: true
+#     network_failure: "network_failure.yml" 
+
+
+#       #### TR creatation#####  
+      
+    
+#   tasks:    
+
+    - name: "Handling Create TR- Win@proach "
+      block:
+
+        - name: VM_host list
+          shell: cat arista_sw_list.yml
+          delegate_to: localhost
+          register: arista_sw_list              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            arista_sw_list: "{{ arista_sw_list.stdout }}" 
+          delegate_to: localhost
+
+        - meta: end_host
+          when: arista_sw_list == ""       
+
+        - name: VM_host list
+          shell: cat sw_arista_info_final.yml
+          delegate_to: localhost
+          register: vm_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            sw_arista_info_final: "{{ vm_result.stdout }}" 
+          delegate_to: localhost
+
+        - meta: end_host
+          when: sw_arista_info_final == ""      
+
+    
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: Physical DECO - Network Switch port details - Arista"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO" #"OIPSVSE"   #"DINFDECO"            
+            severity: "4"
+            overview: "Physical Deco - Network Switch port details - Arista"
+            parent_id: "{{ cr }}"            
+            username: "DecoP112686" #"{{ winaproach_username }}"     
+            password: "opFCtCpIMzmC" #"{{ winAproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output
+        
+        - set_fact:
+            record_net_arista: "{{create_tr_output.record_id}}"
+             
+
+        - copy:
+            content: '{{ record_net_arista|to_json }}'
+            dest: record_net_arista.json
+          delegate_to: localhost
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_net_arista }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Failed to Create Physical DECO - Network Switch port details - Arista TR"            

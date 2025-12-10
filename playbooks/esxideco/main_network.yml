@@ -1,0 +1,29 @@
+---
+- name: "Network Cleanup"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no 
+  tasks: 
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup
+        tasks_from: filter_hostlist_network.yml
+
+
+- name: "network Cleanup"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no
+  vars: 
+    cmdb_url_update: "{{ hostvars['localhost']['config_data']['cmdb_url_update'] }}"
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}" 
+  tasks: 
+    - name: Set facts using hostvars from localhost
+      set_fact:
+        ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+        win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+
+
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup
+        tasks_from: network_switch_port.yml

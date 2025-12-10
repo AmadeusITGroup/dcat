@@ -1,0 +1,68 @@
+---
+- name: "server_shutdown cleanup"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: server_shutdown cleanup
+      ansible.builtin.import_role:
+        name: server_shutdown
+        tasks_from: filter_hostlist_server_shutdown.yml
+
+- name: "Create TR for server_shutdown cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    # server_shutdown: "false"
+    # graceperiod_flag: True
+    # cmdb_fetch_bgp: true
+    # bird_api: "{{ hostvars['localhost']['config_data']['bird_api'] }}"
+    # win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        bird_api: "{{ config_data.bird_api }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+    - name: server_shutdown cleanup
+      ansible.builtin.import_role:
+        name: server_shutdown
+        tasks_from: create_tr_server_shutdown.yml
+
+- name: "server_shutdown cleanup"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no   
+  vars: 
+    # remote_username: "{{ remote_username }}"
+    # remote_password: "{{ remote_password }}"  
+    remote_username: "{{ elk_user }}"
+    remote_password: "{{ elk_password }}"  
+    # remote_username: root
+    # remote_password: N1Flheim!
+  tasks: 
+    - name: server_shutdown cleanup
+      ansible.builtin.import_role:
+        name: server_shutdown
+        tasks_from: server_shutdown_main.yml
+      # when: (shutdown == "F") and shutdown is defined and (ilo_reset == "T") and ilo_reset is defined
+
+- name: "Add info TR for server_shutdown cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    # graceperiod_flag: True
+    # server_shutdown: "false"
+    # cmdb_fetch_bgp: "true"
+    # win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    # ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+    - name: server_shutdown cleanup
+      ansible.builtin.import_role:
+        name: server_shutdown
+        tasks_from: add_info_server_shutdown.yml

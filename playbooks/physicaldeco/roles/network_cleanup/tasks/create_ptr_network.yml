@@ -1,0 +1,202 @@
+---
+# - name: "This playbook is to create PTR for PYHSICAL deco service health check"
+#   hosts: localhost
+#   gather_facts: no
+            
+        
+#   tasks:      
+#####################################################################################################################        
+                              
+############################################################################################################
+
+    - name: "Handling PTR record_id for PYHSICAL deco"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_net_cisco.json
+          delegate_to: localhost
+          register: TR_result_record_net_cisco 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_net_cisco: "{{ TR_result_record_net_cisco.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat record_net_arista.json
+          delegate_to: localhost
+          register: TR_result  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_net_arista: "{{ TR_result.stdout[1:-1] }}"
+          delegate_to: localhost           
+
+        - meta: end_host
+          when: record_net_cisco == "" and record_net_arista == ""      
+
+        - name: Display the JSON file content
+          shell: cat net_jump.yml
+          delegate_to: localhost
+          register: result_network_fail
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            network_fail: "{{ result_network_fail.stdout }}" 
+          delegate_to: localhost 
+
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Below are the Network jump server issue details which needs support"
+            form3: "***********************************************************************"
+        - set_fact:
+            content_network_healthcheck_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ network_fail }}"
+          when: network_fail != ""
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat ptr_system.yml
+          delegate_to: localhost
+          register: result_ptr_system
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ptr_sys: "{{ result_ptr_system.stdout }}" 
+          delegate_to: localhost                    
+
+############################################################################################################
+        - name: read yaml file from the specific location 
+          set_fact:
+            file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        - name: split the file content
+          set_fact:
+            lines: "{{file_content.split('\n')}}"
+
+        - name: convert the lines in the file to dict
+          set_fact:
+            res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+          loop: "{{ lines }}"
+
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key: "{{ present_key | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_network_healthcheck_fail is defined and item in content_network_healthcheck_fail
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name: "{{ allowner_name | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key }}"
+          when: content_network_healthcheck_fail is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final: | 
+              {% for key,value in allowner_name.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_network_healthcheck_fail is defined
+
+        - set_fact:
+            Requester_group: "Requester_group: {{requester_group}}"
+            Requester_name: "Requester_name: {{requester_name}}"
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_network_healthcheck_fail}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_network_healthcheck_fail is defined
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups
+          when: content_network_healthcheck_fail is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups: "{{ result_groups.stdout }}" 
+          delegate_to: localhost
+          when: content_network_healthcheck_fail is defined
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            ptr_title: "PYHSICAL DECO: Service health check Network jump server referring to failed TR - {{ record_id_healthcheck }}"
+            tr_map: "{{ record_id_healthcheck }}"
+            assignee_group: "DINFDECO"  
+            ptr_logs: "{{ support_groups }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"         
+          register: ptr_network_healthcheck_fail
+          when: network_healthcheck_fail != ""
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+            time: "{{tstamp.stdout}}"
+
+        - name: "Send data to azure table"
+          send_ptr_info_to_azure:
+            ci: "{{ inventory_hostname }}"
+            cr: "{{ cr }}"
+            event_number: "{{ ptr_network_healthcheck_fail.id }}"
+            event: "PYHSICAL DECO: Service health check Network jump server failure"
+            event_status: "open"
+            created_on: "{{ time }}"
+            last_update: "{{ time }}"
+            connection_string: "{{ private_endpoint_connection_string }}"  
+          register: ptr_add
+          when: network_healthcheck_fail != ""
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "WIN@PROACH_URL"
+            username: "DecoP112686"
+            password: "opFCtCpIMzmC"
+            task_id: "{{ record_id_healthcheck }}"
+            prob_id: "{{ ptr_network_healthcheck_fail.id }}"                   
+          register: update_overview  
+          when: network_healthcheck_fail != "" 
+
+      rescue:
+        - debug:
+            msg: "Exception occurred PTR service health check - Network"                               
+############################################################################################################
+                              

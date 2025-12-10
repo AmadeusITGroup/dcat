@@ -1,0 +1,408 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    associated_cis: "{{ associated_cis }}"
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}" 
+    input: "{{ lookup('file','physicaldeco/config.json') | from_json }}"
+    azure_client_id: "{{ az_client_id }}"
+    azure_client_secret: "{{ az_client_password }}"
+    azure_tenant_id: "{{ az_tenant_id }}"
+    storage_account_name: "{{ input.prod.storage_account_name }}"
+    resource_group: "{{ input.prod.resource_group }}"
+    azure_subscription_id: "{{ input.prod.azure_subscription_id }}"
+
+  tasks: 
+
+  - name: Display input JSON
+    set_fact:
+      serial: 20 #15
+
+  - name: register env information
+    debug: 
+      msg: "{{ serial }}"
+    register: serial_number
+
+  - name: Display input JSON
+    set_fact:
+      jsondata: "{{ associated_cis }}"
+       
+  
+  - name: fetch host details
+    diff_server:
+      host: "{{ associated_cis | to_json }}"
+      cmdb_rtu: "{{CMDB_URL}}"
+    register: host_list
+
+  - name: fetch host details
+    diff_server:
+      host: "{{ associated_cis | to_json }}"
+      cmdb_rtu: "{{CMDB_URL}}"
+    register: host_list
+
+  - name: Update SNOW with failure status
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ ritm_number }}"
+      status: Waiting
+      comments: |
+        Trigger-1 failed as we were unable to fetch host details from RTU. Investigation in progress.
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost
+    run_once: true
+    register: api_result
+    when: host_list is not defined or (host_list.phy_list | length == 0)     
+
+  - name: Fail if no hosts found in the list
+    fail:
+      msg: "No hosts were found in RTU. Hence stopping execution."
+    when: host_list is not defined or (host_list.phy_list | length == 0) 
+
+  - name: display data
+    debug:
+      var: host_list    
+
+  - set_fact:
+      phy_group: "{{ host_list.phy_list }}" 
+
+  - name: Retrieve Storage Account Key
+    azure_rm_storageaccount_info:
+      resource_group: "{{ resource_group }}"
+      name: "{{ storage_account_name }}"
+      client_id: "{{ azure_client_id }}"
+      secret: "{{ azure_client_secret }}"
+      tenant: "{{ azure_tenant_id }}"
+      subscription_id: '{{ azure_subscription_id }}'
+      show_connection_string: true
+    register: storage_account_info
+
+  - name: Set Storage Account Key
+    set_fact:
+      storage_account_key: "{{ storage_account_info.storageaccounts[0].primary_endpoints.key }}"
+
+  - name: Get Private Endpoint Connection String
+    set_fact:
+      private_endpoint_connection_string: "DefaultEndpointsProtocol=https;AccountName={{ storage_account_name }};AccountKey={{ storage_account_key }};EndpointSuffix=core.windows.net"
+
+  - name: "Test CMDB custom module"
+    fqdn_fetch_cmdb:
+      conn_str: "{{ private_endpoint_connection_string }}"
+      server_name: '{{ item }}'
+      cmdb_server: "{{CMDB_URL}}"
+      user_name: "{{ emdb_username }}"
+      pass_word: "{{ emdb_password }}" 
+    delegate_to: localhost
+    register: host_fqdn_list
+    loop: "{{ phy_group }}"
+    loop_control:
+      loop_var: item
+
+  - debug:
+      var: host_fqdn_list.results
+
+  - name: Initialize fqdn_list
+    set_fact:
+      fqdn_list: []
+
+  - name: Add to fqdn_list
+    set_fact:
+      fqdn_list: "{{ fqdn_list + [item.item + '.' + item.cmdb_result_fqdn] }}"
+    loop: "{{ host_fqdn_list.results }}"
+    loop_control:
+      loop_var: item
+    when: item.cmdb_result_fqdn is defined
+    
+  - debug:
+      var: fqdn_list   
+
+  - name: App validation task
+    app_validation:
+      hostname: "{{ item }}"
+      username: "{{ app_validation_username }}"
+      password: "{{ secret_key }}"
+      mount_point: "/ama/obe/PRD"
+    register: app_result
+    delegate_to: localhost
+    loop: "{{ fqdn_list }}"
+    loop_control:
+      loop_var: item
+
+
+  - debug:
+      var: app_result.results
+
+  - name: Initialize variables for hostnames
+    set_fact:
+      deco_proceed: []
+      deco_stop: []
+      failed_ssh: []
+      final_out: []
+  - name: Process each result and separate hostnames based on the mount point status
+    set_fact:
+      final_out: "{{ final_out + [item.status] }}"
+    loop: "{{ app_result.results }}"
+    loop_control:
+      loop_var: item
+
+  - debug:
+      var: final_out
+      
+  - name: Initialize variables for hostnames
+    set_fact:
+      deco_proceed: []
+      deco_stop: []
+      failed_ssh: []
+
+  - name: Process each result and separate hostnames based on the mount point status
+    set_fact:
+      deco_proceed: "{{ deco_proceed + [item.item] }}"
+    when: "'does not exist' in item.status or 'is empty' in item.status"
+    loop: "{{ app_result.results }}"
+    loop_control:
+      loop_var: item
+
+  - name: Process each result and separate hostnames based on the mount point status
+    set_fact:
+      deco_stop: "{{ deco_stop + [item.item] }}"
+    when: "'has files or subdirectories' in item.status"
+    loop: "{{ app_result.results }}"
+    loop_control:
+      loop_var: item
+
+  - name: Process each result and separate hostnames based on the mount point status
+    set_fact:
+      failed_ssh: "{{ failed_ssh + [item.item] }}"
+    when: "'Error' in item.status"
+    loop: "{{ app_result.results }}"
+    loop_control:
+      loop_var: item
+
+  - debug:
+      var: deco_stop
+
+  - debug:
+      var: deco_proceed
+  
+  - debug:
+      var: failed_ssh
+
+  - name: Update SNOW with failure status for app validation
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ ritm_number }}"
+      status: Waiting
+      comments: |
+        Trigger-1 failed during app validation. Investigation in progress.
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost
+    run_once: True
+    register: api_result
+    when: deco_proceed | length == 0 and deco_stop | length == 0 and failed_ssh | length > 0
+  
+  - name: Fail if deco_proceed is empty
+    fail:
+      msg: "There are errors with app validation module, hence stopping execution."
+    when: deco_proceed | length == 0 and deco_stop | length == 0 and failed_ssh | length > 0
+
+  - name: Initialize app result
+    set_fact:
+      app_status: []
+
+  - name: Add to app final list
+    set_fact:
+      app_status: "{{ app_status + [item.status] }}"
+    loop: "{{ app_result.results }}"
+    when: "'has files or subdirectories' in item.status"
+    loop_control:
+      loop_var: item   
+
+  - debug:
+      var: app_status
+
+  - name: "Custom module [CREATE TR]"
+    create_tr:
+      record_type: "TR"
+      title: "CSTY:DECO:DCAT: PHYSICAL DECO - Application Validation"
+      assignee_name: "DecoP112686"
+      assignee_group: "DINFDECO"           
+      severity: "4"
+      overview: "PHYSICAL DECO - Application Validation"
+      parent_id: "{{ cr }}"            
+      username: "{{ winaproach_username }}"     
+      password: "{{ winaproach_password }}"
+    delegate_to: localhost  
+    no_log: False
+    register: create_tr_output
+    when: deco_stop | length > 0
+  
+  - set_fact:
+      record_fetch_app: "{{create_tr_output.record_id}}"
+    when: deco_stop | length > 0
+
+  - name: adding documentation tag
+    tr_documentation:
+      username: "{{ winaproach_username }}"    
+      password: "{{ winaproach_password }}"
+      win_url: "WIN@PROACH_URL"
+      task_id: "{{ record_fetch_app }}"
+    register: add_document
+    delegate_to: localhost
+    when: deco_stop | length > 0
+
+  - set_fact:
+      form1: "*****************************************************************************************"
+      form2: "!Below Servers are still having applications running "
+      form3: "!and will not be considered for DECO "
+      form4: "*****************************************************************************************"
+      form5: "Kindly remove all applications for the below mentioned servers:"
+
+  - set_fact:
+      content_app_failure: "{{ form1 + '\n' + form2 + '\n' + form3+ '\n' + form4 + '\n' + app_status | join('\n') }}" 
+    when: deco_stop | length > 0
+
+  - name: "add message to TR"
+    add_message_to_tr:
+      record_id: "{{record_fetch_app}}"
+      message: "{{ content_app_failure }}"             
+      username: "{{ winaproach_username }}"
+      password: "{{ winaproach_password }}"
+    delegate_to: localhost
+    register: add_msg_output
+    when: deco_stop | length > 0
+
+  - name: Check snow api call back
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ ritm_number }}"
+      status: Waiting
+      comments: |
+        DCAT found applications still running on hosts and will not be proceeding until all the apps are removed. Details below -
+        {{ app_status }}
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost
+    run_once: True  
+    register: api_result
+    when: deco_stop | length > 0
+
+
+  - name: "Freeze Check module"
+    freeze_check:
+      oms_url: '{{OMS_URL}}'
+      change_type_level1: "Infrastructure"
+      change_type_level2: " "
+      change_methods: " "
+      hosts: "{{ phy_group }}"
+      environment: " "
+    delegate_to: localhost
+    register: freeze_information
+    
+  - name: "Debug Freeze_list if present"
+    debug:
+      var: freeze_information.status.Freeze_list
+    when: freeze_information.status is defined and freeze_information.status.Freeze_list is defined
+    
+    
+  - name: Update SNOW with freeze status
+    update_snow:
+      action: Phase1
+      ritm_number: "{{ ritm_number }}"
+      status: Waiting
+      comments: |
+        Following servers are in freeze, automation will be triggered after freeze ends  -
+        {{ freeze_information.status.Freeze_list }}
+      username: "{{ SN_USERNAME }}"
+      password: "{{ SN_PASSWORD }}"
+    delegate_to: localhost
+    run_once: true
+    register: api_result
+    when:
+      - freeze_information.status is defined
+      - freeze_information.status.Freeze_list is defined
+      - freeze_information.status.Freeze_list | length > 0
+  
+  - name: Fail if freeze is in place
+    fail:
+      msg: "Ending execution as all hosts are within the scope of a freeze. Please retry once the freeze lifts."
+    when:
+      - freeze_information.status is defined
+      - (freeze_information.status.No_freeze | default([], true)) | length == 0
+      - freeze_information.status.Freeze_list | length > 0 
+    
+  - debug:
+      var: freeze_information.status.No_freeze
+    
+  - name: Extract hostnames
+    set_fact:
+      target_servers: "{{ freeze_information.status.No_freeze | map('regex_replace', '^([^.]+).*', '\\1') | list }}"
+    
+  - name: Show hostnames
+    debug:
+      var: target_servers
+
+  - name: Add hosts to phydeco group
+    add_host:
+      hostname: "{{ item }}"
+      groups: physicaldeco
+    loop: '{{ target_servers }}'
+  
+  - name: register env information
+    debug: 
+      msg: "{{ env }}"
+    register: env_data
+  
+  - debug:
+      var: associated_cis
+         
+  - debug:
+      var: cr
+
+  - debug:
+      var: graceperiod_flag
+
+  - debug:
+      var: retention_days
+
+- import_playbook: physicaldeco/physicaldeco_master_play_phase1.yml
+  vars:
+    phy_group: "{{hostvars.localhost.phy_group}}"
+    serial_number: "{{ serial_number }}"
+    associated_cis: "{{ associated_cis }}"  
+    cr: "{{ cr }}" 
+    graceperiod_flag: "{{ graceperiod_flag }}"
+    retention_days: "{{ retention_days }}"
+    requester_name: "{{ requester_name }}"
+    requester_group: "{{ requester_group }}"    
+    ritm_number: "{{ ritm_number }}"
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"
+    phy_ssh_username: "{{ pAccount_username }}"
+    phy_ssh_password: "{{ secret_key }}"
+    infoblox_username: "{{ infoblox_username }}"
+    infoblox_password: "{{ infoblox_password }}"
+    user_iloroot: "{{ ansible_user }}"
+    password_iloroot: "{{ ansible_password }}"    
+    emdb_username: "{{ emdb_username }}" 
+    emdb_password: "{{ emdb_password }}"
+    remote_username: "{{ secret }}"
+    remote_keyfile: "{{ secret_key }}"   
+    artifacts_user: "{{ auth_username }}"
+    artifacts_password: "{{ auth_password }}"
+    btmp_user: "{{ si_username }}"
+    btmp_password: "{{ si_password }}"
+    user_iloadm: "{{ elk_user }}"
+    password_iloadm: "{{ elk_password }}"        
+    ilo_interface_user: "{{ synergon_username }}"
+    ilo_interface_password: "{{ synergon_password }}" 
+    network_username: '{{ ar_username }}'    
+    network_password: '{{ ar_token }}'
+    network_usergroup: "{{ lookup('env', 'VROPS_USERNAME') }}"
+    network_grouppass: "{{ lookup('env', 'VROPS_PASSWORD') }}"    
+    SN_USERNAME: "{{ lookup('env', 'SN_USERNAME') }}"
+    SN_PASSWORD: "{{ lookup('env', 'SN_PASSWORD') }}"
+  no_log: true
+  run_once: True
+  when: phy_group | length > 0 

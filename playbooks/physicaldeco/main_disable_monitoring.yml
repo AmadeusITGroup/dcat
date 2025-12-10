@@ -1,0 +1,45 @@
+---
+- name: "disable_monitoring cleanup"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: disable_monitoring cleanup
+      ansible.builtin.import_role:
+        name: disable_monitoring
+        tasks_from: filter_hostlist_dns_ilo_removal.yml
+
+- name: "Create TR for disable_monitoring cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    disable_monitoring: "false"
+    graceperiod_flag: True
+    cmdb_fetch_bgp: true
+  tasks:
+    - name: disable_monitoring cleanup
+      ansible.builtin.import_role:
+        name: disable_monitoring
+        tasks_from: create_tr_dns.yml
+
+- name: "disable_monitoring cleanup"
+  hosts: physicaldeco
+  gather_facts: no   
+  tasks: 
+    - name: disable_monitoring cleanup
+      ansible.builtin.import_role:
+        name: disable_monitoring
+        tasks_from: main_disable_monitoring.yml
+      when: ('"false" in disable_monitoring') and disable_monitoring is defined and ('"true" in cmdb_fetch_bgp') and cmdb_fetch_bgp is defined
+
+- name: "Add info TR for disable_monitoring cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    graceperiod_flag: True
+    disable_monitoring: "false"
+    cmdb_fetch_bgp: "true"
+  tasks:
+    - name: disable_monitoring cleanup
+      ansible.builtin.import_role:
+        name: disable_monitoring
+        tasks_from: add_info_ilo.yml

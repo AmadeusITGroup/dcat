@@ -1,0 +1,39 @@
+---
+- name: "Enclosure_storage"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  # vars:
+    # cmdb_url_update: "{{ hostvars['localhost']['config_data']['cmdb_url_update'] }}"
+  tasks: 
+    - name: Fetching Storage specific data for Enclosure
+      ansible.builtin.import_role:
+        name: storage_enclosure
+        tasks_from: filter_hostlist_storage.yml
+
+# - name: "Create TR for dcm_update"
+#   hosts: localhost
+#   gather_facts: no
+#   tasks:
+#     - name: storage_enclosure
+#       ansible.builtin.import_role:
+#         name: storage_enclosure
+#         tasks_from: create_tr_dcm.yml
+
+- name: "Create TR for Enclosure Storage"
+  hosts: localhost
+  gather_facts: no
+  # vars:
+  #   bird_api: "{{ hostvars['localhost']['config_data']['bird_api'] }}"
+  #   win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+  tasks:
+
+    # - name: Set local variables from config_data
+    #   set_fact:
+    #     bird_api: "{{ config_data.bird_api }}"
+    #     win_category: "{{ config_data.winaproach_category }}"
+
+        
+    - name: storage_enclosure
+      ansible.builtin.import_role:
+        name: storage_enclosure
+        tasks_from: create_tr_storage_enclosure.yml

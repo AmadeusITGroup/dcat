@@ -1,0 +1,52 @@
+---
+- hosts: localhost
+  gather_facts: no
+  # vars:
+  #   graceperiod_flag: "{{ graceperiod_flag }}"   
+
+  tasks:
+  - name: set env for deco
+    set_fact:
+      env_data: dev
+
+# - import_playbook: "main_esxi_enclosure.yml"
+- import_playbook: "esxi_parent_play.yml"
+  vars:
+    env_data: "{{ env_data }}"
+    # esxi_group: "{{hostvars.localhost.esxideco}}"
+    serial_number: "{{ serial_number }}"
+    associated_cis: "{{ associated_cis }}"  
+    cr: "{{ cr }}" 
+    # retention_days: "{{ retention_days }}"
+    requester_name: "{{ requester_name }}"
+    requester_group: "{{ requester_group }}"    
+    winaproach_username: "{{ winAproach_username }}"
+    winaproach_password: "{{ winAproach_password }}"
+    phy_ssh_username: "{{ pAccount_username }}"
+    phy_ssh_password: "{{ pAccount_password }}"
+    infoblox_username: "{{ infoblox_username }}"
+    infoblox_password: "{{ infoblox_password }}"
+    user_iloroot: "{{ ansible_user }}"
+    password_iloroot: "{{ ansible_password }}"    
+    emdb_username: "{{ emdb_username }}" 
+    emdb_password: "{{ emdb_password }}"
+    # remote_username: "{{ secret }}"
+    # remote_keyfile: "{{ secret_key }}" 
+    artifacts_user: "{{ auth_username }}"
+    artifacts_password: "{{ auth_password }}"
+    btmp_user: "{{ si_username }}"
+    btmp_password: "{{ si_password }}"
+    user_iloadm: "{{ elk_user }}"
+    password_iloadm: "{{ elk_password }}"        
+    synergon_username: "{{ synergon_username }}"
+    synergon_password: "{{ synergon_password }}"
+    network_username: '{{ ar_username }}'    
+    network_password: '{{ ar_token }}'
+    network_usergroup: "{{ lookup('env', 'VROPS_USERNAME') }}"
+    network_grouppass: "{{ lookup('env', 'VROPS_PASSWORD') }}"  
+    ilo_deco_adm_password: '{{ auth_password }}'
+    ilo_deco_adm_username: '{{ auth_username }}'
+    vcenter_username: "{{vcenter_username}}"
+    vcenter_password: "{{vcenter_password}}"
+    remote_username: "{{remote_username}}"
+    remote_password: "{{remote_password}}"    

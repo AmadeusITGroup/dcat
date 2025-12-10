@@ -1,0 +1,72 @@
+---
+- name: Test
+  hosts: localhost
+  gather_facts: no
+
+  tasks: 
+
+    - name: "update entry for DECO server for nas dts server info"
+      azure_update_module_vals_phy:
+        connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatprod;AccountKey=hLme4AAtr8Sz5n5GxqmSL2E/8rjNyN1Cs2GynOhWTH1sRsrFqfvCD4pNKGy6Nz/KfFXsKvmhoO23+AStR4F/8g==;EndpointSuffix=core.windows.net"
+        hostname: "ob7dx100"
+        module_name: "backup"
+        status: "F"           
+      register: update_status
+      delegate_to: localhost
+
+    - name: Show deletion result
+      debug:
+        var: update_status
+
+    - name: "update entry for DECO server for nas dts server info"
+      azure_update_module_vals_phy:
+        connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatprod;AccountKey=hLme4AAtr8Sz5n5GxqmSL2E/8rjNyN1Cs2GynOhWTH1sRsrFqfvCD4pNKGy6Nz/KfFXsKvmhoO23+AStR4F/8g==;EndpointSuffix=core.windows.net"
+        hostname: "ob7dx100"
+        module_name: "ilo"
+        status: "F"           
+      register: update_status
+      delegate_to: localhost
+
+    - name: Show deletion result
+      debug:
+        var: update_status
+
+    - name: "update entry for DECO server for nas dts server info"
+      azure_update_module_vals_phy:
+        connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatprod;AccountKey=hLme4AAtr8Sz5n5GxqmSL2E/8rjNyN1Cs2GynOhWTH1sRsrFqfvCD4pNKGy6Nz/KfFXsKvmhoO23+AStR4F/8g==;EndpointSuffix=core.windows.net"
+        hostname: "ob7dx100"
+        module_name: "shutdown"
+        status: "F"           
+      register: update_status
+      delegate_to: localhost
+
+    - name: Show deletion result
+      debug:
+        var: update_status
+
+    - name: "update entry for DECO server for nas dts server info"
+      azure_update_module_vals_phy:
+        connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatprod;AccountKey=hLme4AAtr8Sz5n5GxqmSL2E/8rjNyN1Cs2GynOhWTH1sRsrFqfvCD4pNKGy6Nz/KfFXsKvmhoO23+AStR4F/8g==;EndpointSuffix=core.windows.net"
+        hostname: "ob7dx100"
+        module_name: "cmdb_update"
+        status: "F"           
+      register: update_status
+      delegate_to: localhost
+
+    - name: Show deletion result
+      debug:
+        var: update_status
+
+    - name: "update entry for DECO server for nas dts server info"
+      azure_update_module_vals_phy:
+        connection_string: "DefaultEndpointsProtocol=https;AccountName=awxdcatprod;AccountKey=hLme4AAtr8Sz5n5GxqmSL2E/8rjNyN1Cs2GynOhWTH1sRsrFqfvCD4pNKGy6Nz/KfFXsKvmhoO23+AStR4F/8g==;EndpointSuffix=core.windows.net"
+        hostname: "ob7dx100"
+        module_name: "deco_date"
+        status: "F"           
+      register: update_status
+      delegate_to: localhost
+
+    - name: Show deletion result
+      debug:
+        var: update_status
+

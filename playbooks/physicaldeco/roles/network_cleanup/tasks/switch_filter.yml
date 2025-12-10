@@ -1,0 +1,68 @@
+---
+    - name: "This playbook is to fetch network switch port data"
+      throttle: 1
+      block:
+        - name: VM_host list
+          shell: cat host_list_network.yml
+          delegate_to: localhost
+          register: host_list_network            
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            host_list_network: "{{ host_list_network.stdout }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: host_list_network == ""
+
+        - name: "network Switch list"
+          network_ssh:
+            hostname: "{{NETWORK_SWITCH_FQDN}}"
+            ph_server: "{{ inventory_hostname }}"
+            username: "ptr1"
+            password: "REthunderbird@499"          
+          register: net_fetch
+          delegate_to: localhost
+
+        - set_fact:
+            swit: "{{ net_fetch.sw_name | join(', ') }}"
+          #when: net_fetch is search("muc")   
+
+        - debug: 
+            msg: "{{ swit }}"
+          #when: net_fetch is search("muc")              
+                    
+        - set_fact:
+            sw: "{{ swit | regex_findall('([a-z0-9-]+).run.cfg') | unique }}"
+          #when: net_fetch is search("muc")   
+
+        - debug: 
+            msg: "{{ sw }}"
+          #when: net_fetch is search("muc")  
+
+        - name: "VM host list"
+          shell: echo "{{ item }}" >> cisco_sw_list.yml
+          loop: "{{ sw }}"                    	
+          delegate_to: localhost
+          when: sw is search("muc") and sw is not search("muc-az")
+
+        - name: "VM host list"
+          shell: echo "{{ item }}" >> arista_sw_list.yml
+          loop: "{{ sw }}"                    	
+          delegate_to: localhost
+          when: sw is search("muc-az")  
+
+        - name: "VM host list"
+          shell: echo "no error" >> cisco_sw_list.yml                   	
+          delegate_to: localhost
+          when: net_fetch is not search("ERROR")
+
+        - name: "VM host list"
+          shell: echo "no error" >> arista_sw_list.yml                    	
+          delegate_to: localhost
+          when: net_fetch is not search("ERROR")                       
+            
+
+      rescue:
+        - debug:
+            var: swit

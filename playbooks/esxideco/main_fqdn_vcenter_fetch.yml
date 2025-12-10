@@ -1,0 +1,49 @@
+---
+
+- name: "Filter hostlist for FQDN, Vcenter Fetch"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks: 
+    - name: Fqdn Vcenter Filter Hostlist
+      ansible.builtin.import_role:
+        name: fqdn_fetch_esxi
+        tasks_from: filter_hostlist_fetch_fqdn.yml
+
+- name: "Create TR for FQDN, Vcenter Fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+  tasks:
+    - name: Fqdn Vcenter create TR
+      ansible.builtin.import_role:
+        name: fqdn_fetch_esxi
+        tasks_from: create_tr_fqdn_fetch.yml
+
+- name: "Fqdn and vcenter update"
+  # hosts: enclosures
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  vars:
+    cmdb_url_update: "{{ hostvars['localhost']['config_data']['cmdb_url_update'] }}"
+  tasks: 
+    - name: Fqdn and vcenter update
+      ansible.builtin.import_role:
+        name: fqdn_fetch_esxi
+        tasks_from: fetch_fqdn_esxi.yml
+
+- name: "ADD info to TR for FQDN, Vcenter Fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+
+    - name: Fqdn Vcenter Add Info
+      ansible.builtin.import_role:
+        name: fqdn_fetch_esxi
+        tasks_from: add_info_fqdn_fetch.yml

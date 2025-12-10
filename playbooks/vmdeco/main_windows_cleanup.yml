@@ -1,0 +1,29 @@
+---
+- name: "Windows AD Cleanup"
+  hosts: all:vmdeco
+  gather_facts: no 
+  tasks: 
+    - name: Check CMDB status for EOL Obsolete
+      ansible.builtin.import_role:
+        name: windows_ad_cleanup
+        tasks_from: check_eol_status.yml
+
+
+    - name: Filter Windows Servers
+      ansible.builtin.import_role:
+        name: windows_ad_cleanup
+        tasks_from: filter_windows_servers.yml
+
+- name: SUCCESS- Create TR for AD Cleanup
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Windows TR
+      ansible.builtin.import_role:
+        name: windows_ad_cleanup
+        tasks_from: create_tr_ad_cleanup.yml
+
+  
+
+
+        

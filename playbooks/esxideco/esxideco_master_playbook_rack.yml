@@ -1,0 +1,234 @@
+---
+  - name: "ESXI master playbook- RACK"
+    hosts: esxideco_rack
+    serial: 80
+    gather_facts: no
+    vars:
+      esxi_group: "{{ hostvars.localhost.rack_hostnames }}"
+      graceperiod_flag: "{{ graceperiod_flag }}"
+      input: "{{ lookup('file','config.json') | from_json }}"
+      
+
+    tasks:    
+    - name: set env data
+      set_fact:
+        env_data: "{{ hostvars.localhost.env_data }}"
+      run_once: true
+
+    - debug:
+        msg: "ESXI Master Trigger"
+      run_once: true
+
+    - debug:
+        var: env_data
+      run_once: true
+
+#     - name: Parse JSON data to filter instance id from snow
+#       set_fact:
+#         host_instances: "{{ associated_cis }}"
+
+#     - name: Filter host-specific information
+#       set_fact:
+#         host_info: "{{ host_instances | selectattr('hosts', 'equalto', inventory_hostname) | list }}"
+
+#     - name: Filtering instance ID for specific hosts
+#       set_fact:
+#         instanceid: "{% if host_info | length > 0 and host_info[0].instance_id is defined %}{{ host_info[0].instance_id }}{% else %}{% endif %}"
+#       when: host_info | length > 0      
+
+#     # - debug:
+#     #     var: input        
+
+    - name: set DEV env variable
+      set_fact:
+        state_file: "{{ input.dev.state_file_url }}"
+        lookup_file_phy: "{{ input.dev.lookup_file_phy }}"
+        lookup_file_info_gather: "{{ input.dev.lookup_file_info_gather }}"
+        ipam_grid: "{{ input.dev.ipam_dev_grid }}" 
+        dns_grid: "{{ input.dev.dns_dev_grid }}"
+        cmdb_url_update: "{{ input.dev.cmdb_url_update }}" 
+        cmdb_rtu: "{{ input.dev.cmdb_rtu }}"
+        winaproach_category: "{{ input.dev.winaproach_category }}"
+        ptr_system: "{{ input.dev.ptr_system }}" 
+        ipam_network_view: "{{ input.dev.ipam_network_view }}"
+        dns_network_view: "{{ input.dev.dns_network_view }}"
+        san_box: "{{ input.dev.san_box }}"
+        bird_api: "{{ input.dev.bird_api }}"       
+        synergon_url: "{{input.dev.synergon_url}}"
+        storage_account_name: "{{ input.dev.storage_account_name }}"
+        resource_group: "{{ input.dev.resource_group }}"
+        azure_subscription_id: "{{ input.dev.azure_subscription_id }}"
+        awx_instance: "{{ input.dev.awx_instance }}"   
+      run_once: True
+      delegate_to: localhost
+      when: env_data == "dev"
+
+    - name: set PROD env variable
+      set_fact:
+        state_file: "{{ input.prod.state_file_url }}"
+        ipam_grid: "{{ input.prod.ipam_prod_grid }}"
+        lookup_file_phy: "{{ input.prod.lookup_file_phy }}"
+        lookup_file_info_gather: "{{ input.prod.lookup_file_info_gather }}"
+        cmdb_url_update: "{{ input.prod.cmdb_url_update }}"
+        cmdb_rtu: "{{ input.prod.cmdb_rtu }}" 
+        dns_grid: "{{ input.prod.dns_prod_grid }}"
+        san_box: "{{ input.prod.san_box }}" 
+        dns_network_view: "{{ input.prod.dns_network_view }}" 
+        ipam_network_view: "{{ input.prod.ipam_network_view }}"
+        winaproach_category: "{{ input.prod.winaproach_category }}"
+        ptr_system: "{{ input.prod.ptr_system }}"
+        bird_api: "{{ input.prod.bird_api }}" 
+        synergon_url: "{{input.dev.synergon_url}}"   
+        storage_account_name: "{{ input.prod.storage_account_name }}"
+        resource_group: "{{ input.prod.resource_group }}"
+        azure_subscription_id: "{{ input.prod.azure_subscription_id }}"
+        awx_instance: "{{ input.prod.awx_instance }}"                     
+      run_once: True
+      delegate_to: localhost                                       
+      when: env_data == "prod"
+
+    - name: "data check"
+      shell: echo "{{ storage_account_name }}" >> storage_account_name.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false 
+
+    - name: "data check"
+      shell: echo "{{ awx_instance }}" >> awx_instance.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ resource_group }}" >> resource_group.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false 
+    
+    - name: "data check"
+      shell: echo "{{ azure_subscription_id }}" >> azure_subscription_id.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false 
+
+    - name: "data check"
+      shell: echo "{{ winaproach_category }}" >> winaproach_category.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+    - name: "data check"
+      shell: echo "{{ ptr_system }}" >> ptr_system.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false 
+
+    - name: "data check"
+      shell: echo "{{ state_file }}" >> state_file.yml   
+      delegate_to: localhost
+      run_once: True 
+
+
+    - name: "data check"
+      shell: echo "{{ cmdb_url_update }}" >> cmdb_url_update.yml   
+      delegate_to: localhost
+      run_once: True       
+
+    - name: "data check"
+      shell: echo "{{ cmdb_rtu }}" >> cmdb_rtu.yml   
+      delegate_to: localhost
+      run_once: True 
+
+    - name: "data check"
+      shell: echo "{{ ipam_grid }}" >> ipam_grid.yml
+      delegate_to: localhost
+      run_once: True
+
+    - name: "data check"
+      shell: echo "{{ dns_grid }}" >> dns_grid.yml   
+      delegate_to: localhost
+      run_once: True
+
+    - name: "data check"
+      shell: echo "{{ san_box }}" >> san_box.yml   
+      delegate_to: localhost
+      run_once: True  
+
+    - name: "data check"
+      shell: echo "{{ bird_api }}" >> bird_api.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false         
+
+
+    - name: "data check"
+      shell: echo "{{ synergon_url }}" >> synergon_url.yml   
+      delegate_to: localhost
+      run_once: True
+      changed_when: false
+
+#  ########################### import the playbooks for each module ############################################                                                        
+
+  - import_playbook: main_azure_conn_string_rack.yml
+
+  - import_playbook: main_populate_files_rack.yml
+
+  - import_playbook: main_groupingowners_rack.yml
+
+  - import_playbook: main_idempotency_validator_rack.yml
+
+  - import_playbook: main_healthcheck_esxi_rack.yml
+
+  - import_playbook: main_idempotency_validator_rack.yml
+  
+  #- import_playbook: main_filter_esxi_rack.yml
+  
+  - import_playbook: main_cmdb_check_duplicate_rack.yml
+  
+  - import_playbook: main_idempotency_validator_rack.yml
+  
+  - import_playbook: main_fqdn_fetch_rack.yml  
+
+  - import_playbook: main_idempotency_validator_rack.yml
+
+  - import_playbook: main_cmdb_fetch_bgp_rack.yml    
+  
+  - import_playbook: main_idempotency_validator_rack.yml
+
+  - import_playbook: main_server_info_gather_rack.yml    
+  
+  - import_playbook: main_idempotency_validator_rack.yml
+
+  - import_playbook: main_storage_info_fetch_rack.yml
+
+  - import_playbook: main_idempotency_validator_rack.yml
+
+  - import_playbook: main_ilo_reset_rack.yml
+
+  - import_playbook: main_idempotency_validator_rack.yml
+
+  - import_playbook: main_server_shutdown_rack.yml
+  
+  - import_playbook: main_idempotency_validator_rack.yml
+  
+  - import_playbook: main_ipam_cleanup_rack.yml
+  
+  - import_playbook: main_idempotency_validator_rack.yml
+
+  - import_playbook: main_network_cleanup_rack.yml
+
+  - import_playbook: main_idempotency_validator_rack.yml
+
+  - import_playbook: main_dcm_rack.yml
+
+  - import_playbook: main_idempotency_validator_rack.yml
+
+  - import_playbook: main_vcenter_deregister_rack.yml
+
+  - import_playbook: main_idempotency_validator_rack.yml
+
+  - import_playbook: main_cmdb_update_rack.yml
+
+  - import_playbook: main_logs_rack.yml
+
+  - import_playbook: main_idempotency_validator_rack.yml

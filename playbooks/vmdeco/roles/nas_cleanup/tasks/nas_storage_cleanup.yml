@@ -1,0 +1,61 @@
+    - name: "set fact to empty variables before loop starts"
+      set_fact:
+        export_rule_index: ""
+        export_result: []
+        share_result: []
+        export_result_ip: []
+        share_result_ip: []
+        collect_export_result_failure: []
+        cifs_share_access_control: ""
+        time: ""
+        file_failure: "nas_hostname_failure.yml"
+        file_success: "nas_hostname_success.yml"
+
+    - include: "fetch_nfs_export_policy.yml"
+      vars:
+        nas_hostname : '{{ storage_hostname }}'
+      when: 'nas_os_detail_w == "linux"'   
+
+    - include: "nfs_storage_export_policy.yml"
+      vars:
+        nfs_export_policy_name : '{{ inner_item }}'
+        nas_hostname : '{{ storage_hostname }}'
+      loop:  "{{ export_result }}"
+      loop_control:
+        loop_var: inner_item
+      register: output_nfs
+      when: nas_os_detail_w == "linux" and export_result != ""
+
+########################################################
+    - include: "fetch_nfs_export_policy_ip.yml"
+      vars:
+        file_export_ip : "{{ip_address}}.yml"
+        nas_hostname : '{{ storage_hostname }}'
+      when: nas_os_detail_w == "linux" and ip_address != ""
+
+    - include: "nfs_storage_export_policy_ip.yml"
+      vars:
+        nfs_export_policy_name_ip: '{{ inner_item_export_ip }}'
+        nas_hostname : '{{ storage_hostname }}'
+      loop:  "{{ export_result_ip }}"
+      loop_control:
+        loop_var: inner_item_export_ip 
+      register: output_nfs_ip
+      when: nas_os_detail_w == "linux" and export_result_ip != ""
+
+########################################## NO NAS CLEANUP FOR WINDOWS MACHINES #########################################################
+    # - include: "fetch_cifs_sharenames.yml"
+    #   vars:
+    #     nas_hostname : '{{ storage_hostname }}'
+    #   when: 'nas_os_detail_w == "windows"'
+
+    # - include: "cifs_shares.yml"
+    #   vars:
+    #     cifs_share_name_result: '{{ inner_item_share }}'
+    #     nas_hostname : '{{ storage_hostname }}'
+    #   loop:  "{{ share_result }}" 
+    #   loop_control:
+    #     loop_var: inner_item_share
+    #   register: output_cifs
+    #   when: nas_os_detail_w == "windows" and share_result != ""
+    

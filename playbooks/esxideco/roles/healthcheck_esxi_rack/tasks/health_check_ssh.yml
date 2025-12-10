@@ -1,0 +1,62 @@
+---
+- name: SSH Health check status for ESXi
+  throttle: 1
+  block:
+
+    - name: "SSH connection - ESXi"
+      ssh_check_esxi_with_pass:
+        hostname: "{{ esxi_fqdn }}"
+        username: "{{ remote_username }}"
+        password: "{{ remote_password }}"
+      delegate_to: localhost
+      register: connect
+      until: '"Successfully" in connect.msg'
+      retries: 3
+      delay: 10
+
+    - name: "Debug SSH connection result"
+      debug:
+        var: connect
+
+    - name: Get timestamp from the system (for SSH success)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      run_once: true
+      register: tstamp
+
+    - name: "Set timestamp fact (for SSH success)"
+      set_fact:
+        time: "{{ tstamp.stdout }}"
+      run_once: true
+
+    - name: "SSH success"
+      shell: echo "#{{ inventory_hostname }}, {{ time }}, [INFO], SSH connectivity is enabled for {{ inventory_hostname }}" >> esxi_ssh_success.yml
+      delegate_to: localhost
+
+    - name: Unset rescue_triggered fact
+      set_fact:
+        ssh_rescue_triggered: false
+
+  rescue:
+    - name: Set rescue_triggered fact
+      set_fact:
+        ssh_rescue_triggered: true
+
+    - name: Rescue on SSH connection issue - ESXi
+      debug:
+        msg: "Rescue SSH connection issue - ESXi"
+
+    - name: Get timestamp from the system (rescue)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      run_once: true
+      register: tstamp
+
+    - name: "Set timestamp fact (rescue)"
+      set_fact:
+        time: "{{ tstamp.stdout }}"
+      run_once: true
+
+    - name: "ESXi host list failure to file before grace period"
+      shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to SSH ESXi server {{ inventory_hostname }}, either connection or credential issue" >> esxi_ssh_fail.yml
+      delegate_to: localhost

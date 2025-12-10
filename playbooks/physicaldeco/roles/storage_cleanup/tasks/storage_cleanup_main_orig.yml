@@ -1,0 +1,133 @@
+---
+# - name: "Storage Cleanup 
+#          NOTE: storage cleanup will proceed once the server is shutdown"
+#   hosts: all
+#   gather_facts: no
+#   connection: local
+#   throttle: 1
+#   vars:
+#       host_wwpns: [10000090fa19f232,10000090fa19f233,10000090fa19e9b2,10000090fa19e9b3,10000090fa19e594,10000090fa19e595,10000090FA19E595,10000090FA19F232] ############### need to store this in state file
+#   tasks:
+    - name: Handle Storage Cleanup Errors
+      throttle: 1
+      block:
+
+        - set_fact:
+            file_storage_cleanup_fail: "storage_cleanup_failure.yml"
+            file_storage_cleanup_suc: "storage_cleanup_success.yml"
+            file_info_san: "info_san.txt" 
+            file_info_storage: "Info_Host_Volume.txt"
+            fabric_list: []
+            fabric_trim: []
+            fabric_prod: []
+            # host_wwpns: [10000090fa19f232,10000090fa19f233,10000090fa19e9b2,10000090fa19e9b3,10000090fa19e594,10000090fa19e595,10000090FA19E595,10000090FA19F232] ############### need to store this in state file
+
+        - name: "Check entry for DECO server and fetch information for cleanup"
+          storage_state_value_fetch:
+            hostname: "{{inventory_hostname}}"
+            artifacts_user: "{{ artifacts_user }}"
+            artifacts_password:  "{{ artifacts_password }}"
+            state_file_url: "{{ state_file }}"
+            lookup_file_storage_phy: "{{ lookup_file_info_gather }}"                        
+          register: storage_info_result
+          delegate_to: localhost     
+
+        - debug:
+            var: storage_info_result
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+        - set_fact:
+              time: "{{tstamp.stdout}}"
+
+        - name: "unable to fetch data from state file writing to failure file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], unable to fetch data from state file.{{ storage_info_result.module_update }}" >> {{file_storage_cleanup_fail}}                    
+          delegate_to: localhost   
+          when: storage_info_result.module_update is search("ERROR")
+
+        - meta: end_host
+          when: storage_info_result.module_update is search("ERROR")
+
+        - set_fact: 
+            info_state_file: '{{storage_info_result.module_update.info_storage_cleanup}}'
+
+        - debug:
+            var: info_state_file  
+############### SAN storage cleanup task ######################
+        # - include: "san_storage_cleanup.yml"
+        #   vars:
+        #     ipaddr: '{{ item }}'
+        #   loop: "{{ info_state_file }}"
+        #   register: SAN_Storage_Cleanup_Output
+        #   ignore_errors: True
+################  SAN storage cleanup task checking if its success or fail put when condition for san check only if san cleanup was success #############
+        # - include: "san_storage_cleanup_check.yml"
+        #   vars:
+        #     ipaddr: '{{ item }}'
+        #   loop: "{{ info_state_file }}"
+        #   register: confirmation
+        #   ignore_errors: True
+
+        # - name: "Confirm_san_cleanup"
+        #   debug:
+        #     var: confirmation
+# ############## Controller cleanup steps and tasks ##############       
+        - set_fact:
+            fabric_list: "{{ fabric_list + [item.6.0]}}"
+          loop: "{{ info_state_file}}"
+
+        # - set_fact:
+        #     fabric_list : ["CB7b","Fabrice1"] 
+        # - debug:
+        #     var: fabric_list 
+        - set_fact:
+            fabric_trim: "{{ fabric_trim + [item[:-1]] }}"
+          when: item is not search("Fabric")
+          loop: "{{ fabric_list }}" 
+
+
+        - set_fact:
+            fabric_final: "{{ fabric_trim | unique }}" 
+
+        - debug:
+            var: fabric_final           
+# # ############ enable this and test for prod fabrics ###################
+        - set_fact:
+            fabric_prod: "{{fabric_prod +[item | regex_replace('^Fabric','')]}}"
+          when: item is search("Fabric")   
+          loop:  "{{fabric_final}}"    
+
+        - include: "fetch_svc_names.yml"
+          vars:
+            fabric_name: '{{ item }}'
+          loop: "{{ fabric_final }}"
+          register: storage_controller_Output
+          ignore_errors: True
+
+        - name: "Debug SAN_Storage_Cleanup_Output" 
+          debug:
+            var: storage_controller_Output          
+
+############# idempotency logic file update needs to be put here ###########################
+
+        - include: "idem_update_storage.yml"
+
+      rescue: 
+        - name: When above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors on san_storage_cleanup_main" 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+              time: "{{tstamp.stdout}}"
+              
+        - name: "collecting failure info to failure file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], check errors on san_storage_cleanup_main module." >> {{file_storage_cleanup_fail}}                    
+          delegate_to: localhost  
+  

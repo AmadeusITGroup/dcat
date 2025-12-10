@@ -1,0 +1,222 @@
+---
+- name: "Check vCenter API Status"
+  block:
+
+    - name: Check if API is up or not
+      uri:
+        url: "{{ v_center }}"
+        validate_certs: no
+      delegate_to: localhost
+      register: vcenter_result
+      until: "vcenter_result.status == 200"
+      retries: 3
+      delay: 10
+
+    - name: Debug API status
+      debug:
+        msg: >
+          API connectivity check:
+          - URL: {{ v_center }}
+          - Status Code: {{ vcenter_result.status }}
+          - Response Time: {{ vcenter_result.elapsed }}
+          - Content: {{ vcenter_result.content | default('No content returned') }}
+
+    - name: Get timestamp from the system (success)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp_success
+
+    - name: Set timestamp fact (success)
+      set_fact:
+        time: "{{ tstamp_success.stdout }}"
+
+    - name: Log API connectivity success to a file
+      shell: echo "#vCenter API - {{ time }}, [INFO], Successfully connected to {{ v_center }}" >> vcenter_api_success.yml
+      delegate_to: localhost
+
+    - name: Unset rescue_triggered fact
+      set_fact:
+        api_rescue_triggered: false
+
+  rescue:
+
+    - name: Set rescue_triggered fact
+      set_fact:
+        api_rescue_triggered: true
+
+    - name: Debug API connectivity failure
+      debug:
+        msg: "Failed to connect to the vCenter API after 3 retries."
+
+    - name: Get timestamp from the system (rescue)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp_failure
+
+    - name: Set timestamp fact (rescue)
+      set_fact:
+        time: "{{ tstamp_failure.stdout }}"
+
+    - name: Log API connectivity failure to a file
+      shell: echo "!vCenter API - {{ time }}, [ERROR], Unable to connect to {{ v_center }} after 3 retries" >> vcenter_api_fail.yml
+      delegate_to: localhost
+
+
+- name: "Gather and Process vCenter Host Facts"
+  block:
+
+    - name: Ensure vCenter FQDN does not contain protocol
+      set_fact:
+        v_center_fqdn: "{{ v_center | regex_replace('^https?://', '') }}"
+        vcenter_username: "{{ domain_username }}"
+        vcenter_password: "{{ domain_password }}"
+
+    - name: Debug variables before running vCenter host facts
+      debug:
+        msg:
+          - "vCenter FQDN: {{ v_center_fqdn }}"
+          - "vCenter Username: {{ vcenter_username }}"
+          - "vCenter Password: {{ vcenter_password | default('Not shown', true) }}"
+          - "ESXi Hostname: {{ esxi_fqdn }}"
+      delegate_to: localhost
+
+    - name: Gather vCenter host facts
+      community.vmware.vmware_host_facts:
+        hostname: "{{ v_center_fqdn }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        esxi_hostname: "{{ esxi_fqdn }}"
+        # esxi_hostname: "{{ inventory_hostname }}"
+        validate_certs: no
+      register: vcenter_facts
+      delegate_to: localhost
+
+    - name: Debug ESXi facts
+      debug:
+        var: vcenter_facts
+      delegate_to: localhost
+
+    - name: "Start SSH service on ESXi hosts from vCenter"
+      community.vmware.vmware_host_service_manager:
+        hostname: "{{ v_center_fqdn }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: false
+        esxi_hostname: "{{ esxi_fqdn }}"
+        service_name: TSM-SSH
+        state: start
+      delegate_to: localhost
+      # loop: "{{ associated_cis }}"
+      register: ssh_service_status
+
+    - name: Debug SSH service result
+      debug:
+        var: ssh_service_status
+
+    - name: "Check SSH service status on ESXi hosts"
+      community.vmware.vmware_host_service_info:
+        hostname: "{{ v_center_fqdn }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: false
+        esxi_hostname: "{{ esxi_fqdn }}"
+      delegate_to: localhost
+      register: esxi_services
+      # loop: "{{ associated_cis }}"
+
+    - name: Debug SSH service status result
+      debug:
+        var: esxi_services
+
+    - name: "Disable ESXi Shell Interactive Timeout"
+      community.vmware.vmware_host_config_manager:
+        hostname: "{{ v_center_fqdn }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_fqdn }}"
+        options:
+          UserVars.ESXiShellInteractiveTimeOut: "600"
+      ignore_errors: yes
+      delegate_to: localhost
+      # loop: "{{ associated_cis }}"
+      register: interactive_timeout_status
+
+    - name: Debug Interactive Timeout Result
+      debug:
+        var: interactive_timeout_status
+
+    - name: "Set ESXi Shell Auto-Disable Timeout"
+      community.vmware.vmware_host_config_manager:
+        hostname: "{{ v_center_fqdn }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        esxi_hostname: "{{ esxi_fqdn }}"
+        options:
+          UserVars.ESXiShellTimeOut: "600"
+      ignore_errors: yes
+      delegate_to: localhost
+      # loop: "{{ associated_cis }}"
+      register: shell_timeout_status
+
+    - name: Debug Shell Auto-Disable Timeout Result
+      debug:
+        var: shell_timeout_status
+        
+    - name: Extract ESXi host maintenance mode status
+      set_fact:
+        maintenance_mode: "{{ vcenter_facts.ansible_facts.ansible_in_maintenance_mode }}"
+        esxi_hostname: "{{ esxi_fqdn }}"
+
+    - name: Check maintenance mode and proceed or fail
+      # when: maintenance_mode is defined and maintenance_mode | string == "true"
+      when: maintenance_mode is defined and maintenance_mode == true
+
+
+      block:
+        - name: Debug success message
+          debug:
+            msg: "The ESXi host {{ esxi_hostname }} is in maintenance mode. Proceeding."
+
+        - name: Get timestamp from the system (success)
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp_success
+
+        - name: Set timestamp fact (success)
+          set_fact:
+            time: "{{ tstamp_success.stdout }}"
+
+        - name: Log maintenance mode success
+          shell: echo "#vCenter Host Facts - {{ time }}, [INFO], ESXi host {{ esxi_hostname }} is in Maintenance Mode. Proceeding with tasks." >> vcenter_host_facts_success.yml
+          delegate_to: localhost
+
+        # Unset rescue_triggered fact in the success case
+        - name: Unset rescue_triggered fact
+          set_fact:
+            maint_rescue_triggered: false
+
+  rescue:
+    - name: Set rescue_triggered fact
+      set_fact:
+        maint_rescue_triggered: true
+
+    - name: Debug failure message
+      debug:
+        msg: "The ESXi host {{ esxi_hostname }} is NOT in maintenance mode or status is undefined."
+
+    - name: Get timestamp from the system (failure)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp_failure
+
+    - name: Set timestamp fact (failure)
+      set_fact:
+        time: "{{ tstamp_failure.stdout }}"
+
+    - name: Log failure to retrieve ESXi facts
+      shell: echo "!vCenter Host Facts - {{ time }}, [ERROR], ESXi host {{ esxi_hostname }} is NOT in Maintenance Mode or status is undefined." >> vcenter_host_facts_fail.yml
+      delegate_to: localhost
+
+

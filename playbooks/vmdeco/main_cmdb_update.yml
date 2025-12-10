@@ -1,0 +1,73 @@
+---
+- name: "cmdb update"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update
+        tasks_from: filter_hostlist_cmdb_update.yml
+
+- name: "Create TR for cmdb update"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_id_cmdb_up: ""
+    graceperiod_flag: True
+    cmdb_check: "F"
+    vmdelete: "T"
+  tasks:
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update
+        tasks_from: create_tr_cmdb_update.yml
+
+- name: "cmdb update"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update
+        tasks_from: cmdb_update.yml
+      when: (cmdb_check == "F") and cmdb_check is defined and (vmdelete == "T") and vmdelete is defined
+
+- name: "ADD info TR for cmdb update"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_id_cmdb_up: ""
+    graceperiod_flag: True
+    cmdb_check: "F"
+    vmdelete: "T"
+  tasks:
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update
+        tasks_from: add_info_cmdb_update.yml
+
+- name: "cmdb update"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update
+        tasks_from: cmdb_logging.yml
+
+- name: "Logger for cmdb update"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_id_cmdb_up: ""
+    graceperiod_flag: True
+    cmdb_check: "F"
+    vmdelete: "T"
+  tasks:
+    - name: cmdb update
+      ansible.builtin.import_role:
+        name: cmdb_update
+        tasks_from: logger_cmdb.yml

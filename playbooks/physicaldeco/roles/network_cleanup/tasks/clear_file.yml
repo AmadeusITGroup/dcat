@@ -1,0 +1,67 @@
+---
+- name: "clear file MODULE "
+  hosts: localhost
+  gather_facts: no
+ 
+
+  tasks:
+
+
+    - name: "Logger and Create/Update TR- Win@proach "
+      block:
+
+        - name: "Set header"
+          shell: echo > net_fail_arista.yml       
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > net_fail_cisco.yml       
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > net_jump.yml       
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > net_list.yml       
+          run_once: true
+          delegate_to: localhost                                     
+
+        - name: "Set header"
+          shell: echo > network_tr_arista.yml       
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > network_tr_cisco.yml     
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > record_net_arista.json     
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > record_net_cisco.json     
+          run_once: true
+          delegate_to: localhost
+
+        - name: "Set header"
+          shell: echo > sw_arista_info.yml     
+          run_once: true
+          delegate_to: localhost
+                         
+        - name: "Set header"
+          shell: echo > sw_arista_info_final.yml    
+          run_once: true
+          delegate_to: localhost
+
+          
+      rescue: 
+        - name: when above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check app logger "       

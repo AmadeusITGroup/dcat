@@ -1,0 +1,47 @@
+---
+- name: Update Change Record Overview
+  hosts: localhost
+
+  tasks:
+    - name: Storage Cleanup Failure- Update the overview of the Change Record for failure
+      uri:
+        url: "https://WIN@PROACH_URL/aproach-api/v1.0/changerecords/{{ cr }}"
+        method: PUT
+        headers:
+          Content-Type: "application/json"
+        body: |
+          {
+            "operation": "cr_update_overview",
+            "changeRecord": {
+              "Overview": {
+                "text": "Storage Cleanup for one or more servers failed. Kindly refer the associated TR/PTR for more details."
+              }
+            }
+          }
+        body_format: json
+        status_code: 200
+        url_username: "{{ winAproach_username }}"
+        url_password: "{{ winAproach_password }}"
+        force_basic_auth: yes
+      when: result_storage_cleanup_fin_v is search("ERROR")
+    - name: Storage Cleanup Success- Update the overview of the Change Record for success
+      uri:
+        url: "https://WIN@PROACH_URL/aproach-api/v1.0/changerecords/{{ cr }}"
+        method: PUT
+        headers:
+          Content-Type: "application/json"
+        body: |
+          {
+            "operation": "cr_update_overview",
+            "changeRecord": {
+              "Overview": {
+                "text": "All the servers submitted as part of this request have been decommissioned. You may now close this CR."
+              }
+            }
+          }
+        body_format: json
+        status_code: 200
+        url_username: "{{ winAproach_username }}"
+        url_password: "{{ winAproach_password }}"
+        force_basic_auth: yes
+      when: result_storage_cleanup_fin_v is not search("ERROR") 

@@ -1,0 +1,15 @@
+- name: Fetch azure table entry for each CI
+  azure_update_ref:
+    connection_string: "{{ conn_string }}"
+    hostname: "{{ ci_item }}"
+  register: idem_status
+
+- name: Get cmdb_update_status
+  set_fact:
+    cmdb_update_status: "{{ idem_status.module_update.cmdb }}"
+
+- name: Set fail_fast = true if cmdb_update_status is F
+  set_fact:
+    fail_fast: true
+    close_ritm: F
+  when: cmdb_update_status == "F"

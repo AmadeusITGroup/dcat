@@ -1,0 +1,72 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    associated_cis: "{{ associated_cis }}"
+
+  tasks:
+
+  - name: Display input JSON
+    set_fact:
+      jsondata: "{{ associated_cis }}"
+      
+  - name: fetch host details
+    gather_host:
+      host_info: "{{ jsondata| to_json }}"
+    register: host_list
+
+  - name: display data
+    debug:
+      var: host_list
+
+  - name: Display input JSON
+    set_fact:
+      host_info: "{{ host_list.host_list }}"
+    register: host_list_data
+
+  - debug:
+      var: host_list_data
+
+  # - name: fetch host details
+  #   diff_server:
+  #     host: "{{ associated_cis | to_json }}"
+  #     cmdb_rtu: "{{CMDB_URL}}"
+  #   register: host_list
+
+  - name: fetch host details
+    diff_os:
+      host: "{{ associated_cis | to_json }}"
+      cmdb_rtu: "{{CMDB_URL}}"
+    register: host_list
+
+  - debug:
+      var: host_list
+
+  # - set_fact:
+  #     linux: "{{ host_list.phy_list}}" 
+  #   register: linux
+
+  # - debug:
+  #     var: linux.ansible_facts.linux
+
+  # - set_fact:
+  #     testdata: "{{ linux.ansible_facts.linux }}"
+
+  # - debug:
+  #     var: testdata
+
+
+  # - name: check db or non db 
+  #   identifydbservertest:
+  #     server_names: "{{ testdata }}"
+  #   register: op
+
+  # - name: printing output 
+  #   debug:
+  #     var: op
+
+  # - name: Add hosts to SSH group
+  #   add_host:
+  #     hostname: "{{ item }}"
+  #     groups: sshkey
+  #   loop: '{{ host_list.linux }}' 

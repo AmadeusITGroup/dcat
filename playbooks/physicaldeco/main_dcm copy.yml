@@ -1,0 +1,19 @@
+---
+- name: "dcm_update"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: dcm_update
+      ansible.builtin.import_role:
+        name: dcm
+        tasks_from: fetching_dcm_info.yml
+
+- name: "Create TR for dcm_update"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: dcm_update
+      ansible.builtin.import_role:
+        name: dcm
+        tasks_from: create_tr_dcm.yml 
+

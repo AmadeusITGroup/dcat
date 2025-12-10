@@ -1,0 +1,21 @@
+#
+- name: awx creds username to var
+  set_fact:
+    pAccount_user_del: "{{ paccount_username }}"
+  delegate_to: localhost
+
+- name: awx creds password to var
+  set_fact:
+    paccount_password: "{{ paccount_password }}"
+  delegate_to: localhost
+
+- name: "Delete '{{ inventory_hostname }}' from vcenter"
+  vmware_guest:
+    hostname: '{{ hostname }}'
+    username: "{{ pAccount_user_del }}"
+    password: "{{ paccount_password }}"
+    validate_certs: no
+    name: '{{ vmname }}'
+    state: absent
+  delegate_to: localhost
+  register: result

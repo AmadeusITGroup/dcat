@@ -1,0 +1,113 @@
+---
+# - name: "This playbook collect all logs for cmdb"
+#   hosts: all
+#   gather_facts: no
+#   vars:  
+#     file_failure_stat: "vm_cmdb_stat_failure.yml"
+#     file_suc_cmdb_stat: "vm_cmdb_stat_success.yml"
+#     record_id_cmdb_status_json: "record_id_cmdb_status.json"
+#     vm_status_check_cmdb: ""
+#     cmdb_stat_check_agp: ""
+#     vm_poweroff_before_gp_check: ""
+#     fqdn: ""
+                  
+#   ####collect logs####
+
+#   tasks:             
+    - name: "collecting logs for cmdb success and failure"
+      block:
+
+        - set_fact:
+            file_failure_stat: "vm_cmdb_stat_failure.yml"
+            file_suc_cmdb_stat: "vm_cmdb_stat_success.yml"
+            record_id_cmdb_status_json: "record_id_cmdb_status.json"
+
+        - name: Handle the error if success file empty
+          block:
+
+            - name: Display the JSON file content
+              shell: cat record_cmdb_stat.json
+              delegate_to: localhost
+              register: TR_result_cmdb_stat  
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                record_id_cmdb_stat: "{{ TR_result_cmdb_stat.stdout[1:-1] }}"
+              delegate_to: localhost         
+
+            - meta: end_host
+              when: record_id_cmdb_stat == ""
+
+            - name: VM_host list
+              shell: cat vm_cmdb_stat_success.yml
+              delegate_to: localhost
+              register: success_cmdb        
+
+            - name: save the vm list to a Variable as a Fact
+              set_fact:
+                cmdb_stat_success_n: "{{ success_cmdb.stdout }}" 
+              delegate_to: localhost
+
+            - name: "success log list"
+              shell: echo '{{cmdb_stat_success_n}}' >> cmdb_stat_log.yml                     
+              delegate_to: localhost
+              when: '"{{inventory_hostname}}" in cmdb_stat_success_n'
+
+          rescue:
+            - debug:
+                msg: "exception occurred as success cmdb file is empty"
+
+        - name: Handle the error if failure file empty
+          block:  
+
+            - name: VM_host list
+              shell: cat vm_cmdb_stat_failure.yml
+              delegate_to: localhost
+              register: failure_cmdb            
+
+            - name: save the vm list to a Variable as a Fact
+              set_fact:
+                cmdb_stat_failure_n: "{{ failure_cmdb.stdout }}" 
+              delegate_to: localhost
+
+            - name: "success log list"
+              shell: echo '{{cmdb_stat_failure_n}}' >> cmdb_stat_log.yml                    
+              delegate_to: localhost
+              when: '"{{inventory_hostname}}" in  cmdb_stat_failure_n'
+
+          rescue:
+            - debug:
+                msg: "exception occurred as failure cmdb file is empty" 
+
+      
+        - name: Find unique entries
+          shell: cat cmdb_stat_log.yml | sort -u | uniq -u | grep -v -e '^[[:space:]]*$' > final_cmdb_stat_log.yml
+          delegate_to: localhost           
+         
+
+      rescue:
+        - debug:
+            msg: "exception occurred during cmdb status check logging"         
+
+                  
+
+                                
+                
+
+      
+        
+
+        
+              
+
+                        
+    
+    
+   
+    
+
+    
+        
+    
+        
+    

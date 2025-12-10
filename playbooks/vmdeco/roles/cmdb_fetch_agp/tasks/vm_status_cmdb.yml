@@ -1,0 +1,157 @@
+--- 
+    - name: Handle the error
+      throttle: 1
+      block:       
+        - set_fact:
+            file_failure_stat: "vm_cmdb_stat_failure.yml"
+            file_suc_cmdb_stat: "vm_cmdb_stat_success.yml"
+            record_id_cmdb_status_json: "record_id_cmdb_status.json"
+            file_failure_stat_cmdb: vm_cmdb_stat_failure_cmdb.yml
+            file_failure_stat_owner: vm_cmdb_stat_failure_owner.yml
+
+        - name: Display the JSON file content
+          shell: cat record_cmdb_stat.json
+          delegate_to: localhost
+          register: TR_result_cmdb_stat  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_cmdb_stat: "{{ TR_result_cmdb_stat.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: record_id_cmdb_stat == ""
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+          
+        - name: "Test CMDB custom module"
+          server_details:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: '{{ inventory_hostname |lower }}'
+            instance_id: '{{ instanceid }}'
+            cmdb_server: "{{ cmdb_url_update }}"
+            user_name: "{{ emdb_username }}"
+            pass_word: "{{ emdb_password }}" 
+          delegate_to: localhost
+          register: output
+          until: '"Exception" not in output.cmdb_result'
+          retries: 3
+          delay: 30
+
+        - debug:
+            var: output
+
+        - set_fact:
+            vm_cmdb_status: "{{output.cmdb_result}}"
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"  
+
+        - name: "VM host list for failure cmdb and requester"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ vm_cmdb_status }}." >> {{file_failure_stat}}                    
+          delegate_to: localhost                    
+          when: '"You are good to proceed with deco for server" not in vm_cmdb_status'
+
+        - name: "VM host list for failure cmdb "
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ vm_cmdb_status }}." >> {{file_failure_stat_cmdb}}                    
+          delegate_to: localhost                    
+          when: vm_cmdb_status is defined and vm_cmdb_status is not search("proceed with deco for server")
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_cmdb_stat_failure_agp.txt
+          delegate_to: localhost
+          when: vm_cmdb_status is defined and vm_cmdb_status is not search("proceed with deco for server")
+
+        - name: "VM host list for failure requester "
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ vm_cmdb_status }}." >> {{file_failure_stat_owner}}                    
+          delegate_to: localhost                    
+          when: '"Kindly check with application team" in vm_cmdb_status'
+
+        - meta: end_host
+          when: '"You are good to proceed with deco for server" not in vm_cmdb_status'
+
+        - name: "VM host list for success"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], You are good to proceed with deco for server." >> {{file_suc_cmdb_stat}}                    
+          delegate_to: localhost 
+          when: '"You are good to proceed with deco for server" in vm_cmdb_status' 
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "update entry for DECO server"
+          azure_update_module_vals:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "vm_status_check_cmdb"
+            status: "T"
+          register: update_status
+          delegate_to: localhost
+          when: '"You are good to proceed with deco for server" in vm_cmdb_status and graceperiod_flag == "False"'
+
+        - name: "update entry for DECO server"
+          azure_update_module_vals:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+            module_name: "cmdb_stat_check_agp"
+            status: "T"
+          register: update_status
+          delegate_to: localhost
+          when: '"You are good to proceed with deco for server" in vm_cmdb_status and graceperiod_flag == "True"'
+
+
+      rescue:
+        - name: when above one throws error the below task should execute
+          debug:
+             msg: "Exception occurred but rescued - check errors for CMDB_Fetch module"
+
+        - set_fact:
+            vm_cmdb_status: "Exception occurred but rescued - check errors for CMDB_Fetch module"
+            v_center_msg: "" 
+            vm_hd_name: "" 
+            vm_poweroff_msg: ""
+            CMDB_RESULT: ""
+            output_delete: ""                      
+
+##################################################################################
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+                  
+        - set_fact:
+            time: "{{tstamp.stdout}}"  
+
+        - name: "VM host list"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], vm status cmdb module failed while fetching server name.either connection or access issue or server not found " >> {{file_failure_stat}}                    
+          delegate_to: localhost
+          when: '"Exception occured" in vm_cmdb_status'
+
+        - name: "Write Failure host to file"
+          shell: echo "{{ inventory_hostname }} Failure" >> vm_cmdb_stat_failure_agp.txt
+          delegate_to: localhost
+          when: '"Exception occured" in vm_cmdb_status'
+
+        - name: "VM host list"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], vm status cmdb module failed while fetching server name.either connection or access issue or server not found " >> {{file_failure_stat_cmdb}}                    
+          delegate_to: localhost
+          when: '"Exception occured" in vm_cmdb_status'

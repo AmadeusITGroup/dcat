@@ -1,0 +1,269 @@
+---
+# - name: "SAN Storage Cleanup 
+#          NOTE: IF THE SERVER IS SHUTDOWN SAN STORAGE CLEANUP WILL NOT PROCESS"
+#   hosts: all
+#   gather_facts: no
+#   connection: local
+#   throttle: 1
+#   vars:
+#       file_info_storage_phy: "info_storage_phy.txt" 
+#       file_success_storage_info: "success_storage_info.yml" 
+#       file_failure_storage_info: "failure_storage_info.yml" 
+#       filtered_output: []
+#       filtered_output_no_info: []
+#       #switch_ip: ["10.82.108.102","10.82.108.102"]
+ 
+#   tasks:
+    - name: Handle SAN Storage Cleanup Errors
+      throttle: 1
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_for_storage_info_fetch.json
+          delegate_to: localhost
+          register: TR_result_storage_info_fetch 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_storage_info_fetch: "{{ TR_result_storage_info_fetch.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: record_id_storage_info_fetch== ""
+
+        - name: "Include credentials from creds.yml"
+          ansible.builtin.include_vars:
+            file: creds.yml
+            name: creds
+
+        - set_fact:
+            file_success_storage_info: "storage_info_fetch_success.yml"
+            file_failure_storage_info: "storage_info_fetch_failure.yml" 
+            file_info_storage_phy: "info_storage_phy.txt"   
+            filtered_output: []
+            filtered_output_no_info: []
+            #module_update: []
+
+        - name: "Check entry for DECO server and fetch wwpn information of host"
+          storage_state_value_fetch:
+            hostname: "{{inventory_hostname}}"
+            artifacts_user: "{{ artifacts_user }}"
+            artifacts_password:  "{{ artifacts_password }}"
+            state_file_url: "{{ state_file }}"
+            lookup_file_storage_phy: "{{ lookup_file_info_gather }}"                        
+          register: info_result_host
+          delegate_to: localhost     
+
+        - debug:
+            var: info_result_host
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+        - set_fact:
+              time: "{{tstamp.stdout}}"
+
+        - name: "unable to fetch data from state file writing to failure file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], unable to fetch data from state file.{{ info_result_host.module_update }}" >> {{file_failure_san}}                    
+          delegate_to: localhost   
+          when: info_result_host.module_update is search("Error")
+
+        - meta: end_host
+          when: info_result_host.module_update is search("Error")
+
+        - name: "Host WWPN - Output"
+          set_fact:
+            host_wwpns_info: "{{ info_result_host.module_update.host_info}}"
+
+        - set_fact:
+            host_wwpns: "{{ host_wwpns_info.WWPN }}"
+
+        - name: "collecting host wwpn to info file"
+          shell: echo "{{ inventory_hostname }}, host wwpn - {{ host_wwpns| to_json }}." >> {{file_info_storage_phy}}                    
+          delegate_to: localhost 
+
+        - name: converting each wwpn into the format with colon
+          set_fact:
+            formatted_wwpn: "{{formatted_wwpn | default([]) + [item | regex_replace('(\\w{2})','\\1:')]}}"
+          loop:  "{{host_wwpns}}"        
+
+        - name: removing the trailing colons
+          set_fact: 
+            formatted_wwpn: "{{formatted_wwpn | map('regex_replace','(:$)','') | list}}"
+
+        - set_fact:
+            broc_file: brocade_inventory.yml  
+
+        - name: Fetching all the switch IPs into list variable- Read YAML file
+          slurp:
+            path: "{{ broc_file }}"
+          delegate_to: localhost
+          register: switch_ip_yaml_file
+
+        - name: Extract IP adresses to list
+          set_fact:
+            decoded_out: "{{ switch_ip_yaml_file.content| b64decode | from_yaml }}" #| map(attribute='server_ip') | list }}"
+  
+        - set_fact:
+            switch_ip_list : "{{ decoded_out | regex_findall('\\bserver_ip=([\\d.]+)')}}"    
+
+        - debug:
+            var: switch_ip_list
+
+        - name: "Custom module for fetching the info" 
+          storage_switch_host_info_fetch:
+            username: "svc-deco-storage"
+            password: "{{ synergon_password }}"
+            ipaddr: "{{ item.1 }}"
+            host_wwpn: "{{ item.0 }}"
+          with_nested:
+            - "{{ formatted_wwpn }}"
+            - "{{ switch_ip_list }}"
+          delegate_to: localhost
+          register: storage_cleanup_info
+          #ignore_errors: True 
+
+        - name: getting the values to store in the state file
+          set_fact:
+            info_state_file: "{{ storage_cleanup_info.results }}"
+
+        - set_fact:        
+            switch_result: "{{ info_state_file | map(attribute='switch_info_output') | list}}"
+
+        - set_fact:
+            switch_result_custom: "{{ switch_result | map('first') | list }}"
+
+        - set_fact:
+            switch_result_custom_part: "{{ switch_result | map('last') | list }}"            
+
+        - debug:
+            var: switch_result_custom_part   
+
+        - name: "collecting data to info file"
+          shell: echo "{{ inventory_hostname }}, {{ switch_result_custom_part | to_json}}." >> {{file_info_storage_phy}}                    
+          delegate_to: localhost 
+          when: switch_result_custom!=[]                     
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp  
+
+        - set_fact:
+              time: "{{tstamp.stdout}}"
+
+        - name: collecting if any exception occurred
+          set_fact:
+            filtered_output_no_info: "{{ filtered_output_no_info + [item] }}"
+          when: '"no device"not in item and "success"not in item'
+          loop: "{{ switch_result_custom_part}}"
+
+        - debug:
+            var: filtered_output_no_info
+
+        - name: "collecting failure info to failure file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], {{ filtered_output_no_info }}." >> {{file_failure_storage_info}}                    
+          delegate_to: localhost 
+          when: filtered_output_no_info!=[]
+
+        - meta: end_host
+          when: filtered_output_no_info!=[]
+
+        - name: Writing all the no device info to failure file when length of list of no device equals length of original list
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], no device found for any of the switches kindly verify ." >> {{file_failure_storage_info}}                    
+          delegate_to: localhost 
+          when: switch_result_custom | select("equalto","no device") | list |length == switch_result_custom | length
+
+        - meta: end_host
+          when: switch_result_custom | select("equalto","no device") | list |length == switch_result_custom | length      
+         
+        - name: dropping all items which contains no information for parameters
+          set_fact:
+            filtered_output: "{{ filtered_output + [item] }}"
+          loop: "{{ switch_result_custom }}"
+          when: item != "no device" and not item is string
+
+        - debug:
+            var: filtered_output
+
+        - name: "collecting data to info file"
+          shell: echo "{{ inventory_hostname }}, {{ filtered_output | to_json}}." >> {{file_info_storage_phy}}                    
+          delegate_to: localhost 
+          when: filtered_output is defined and filtered_output != []
+
+        - name: "update storage cleanup state file for DECO server"
+          storage_state_values_update:
+            hostname: "{{ inventory_hostname }}"
+            module_name: "info_storage_cleanup"
+            status: "{{ filtered_output }}"
+            artifacts_user: "{{ artifacts_user }}"
+            artifacts_password:  "{{ artifacts_password }}"
+            state_file_url: "{{ state_file }}"
+            lookup_file_info: "{{ lookup_file_info_gather }}"               
+          register: update_status_info_storage_cleanup
+          delegate_to: localhost
+          when: filtered_output is defined and filtered_output != []
+
+        - debug:
+            var: update_status_info_storage_cleanup  
+
+        - set_fact:
+             check_update_flag: "{{ update_status_info_storage_cleanup.module_update }}"
+          when: update_status_info_storage_cleanup.module_update is defined           
+
+        - name: "collecting failure info to failure file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to update the information to state file.{{ check_update_flag }}" >> {{file_failure_storage_info}}                    
+          delegate_to: localhost 
+          when: check_update_flag is defined and check_update_flag is not search("successfully")
+
+        - meta: end_host
+          when: check_update_flag is defined and check_update_flag is not search("successfully")           
+
+        - name: "collecting success info to success file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO], Successfully fetched storage information and updated to state file." >> {{file_success_storage_info}}                    
+          delegate_to: localhost 
+          when: check_update_flag is defined and check_update_flag is search("successfully")
+
+        - name: "update entry for DECO server "
+          update_module_vals_phy:
+            hostname: "{{inventory_hostname}}"
+            module_name: "san_info_fetch"
+            status: "T"
+            artifacts_user: "{{ artifacts_user }}"
+            artifacts_password: "{{ artifacts_password }}"
+            state_file_url: "{{ state_file }}"
+            lookup_file_phy: "{{ lookup_file_phy }}"            
+          register: update_status_state_file
+          delegate_to: localhost
+          when: check_update_flag is defined and check_update_flag is search("successfully")
+
+        - set_fact:
+             check_state_flag: "{{ update_status_state_file.state_update }}"
+          when: update_status_state_file.state_update is defined 
+
+        - name: "collecting failure info of state file updation "
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to update state file as TRUE.{{ check_state_flag }}" >> {{file_failure_storage_info}}                    
+          delegate_to: localhost 
+          when: check_state_flag is defined and check_state_flag is not search("successfully")
+
+        - debug:
+            var: update_status_state_file
+
+      rescue: 
+        - name: When above one throws error the below task should execute
+          debug:
+            msg: "Exception occurred but rescued - check errors on san_storage_cleanup_main" 
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp 
+
+        - set_fact:
+              time: "{{tstamp.stdout}}"
+              
+        - name: "collecting failure info to failure file"
+          shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], check errors on san_storage_cleanup_wwpn_info_gather module." >> {{file_failure_storage_info}}                    
+          delegate_to: localhost  
+  

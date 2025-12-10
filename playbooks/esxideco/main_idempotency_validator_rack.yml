@@ -1,0 +1,9 @@
+---
+- name: "State File Execution - Idempotency"
+  hosts: all:esxideco_rack
+  gather_facts: no    
+  tasks:
+    - name: Run idempotency validator
+      ansible.builtin.import_role:
+        name: idem_rack
+        tasks_from: idempotency_validator.yml

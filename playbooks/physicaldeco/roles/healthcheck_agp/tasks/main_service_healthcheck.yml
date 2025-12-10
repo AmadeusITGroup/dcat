@@ -1,0 +1,20 @@
+---
+  - import_playbook: health_check.yml
+
+  - import_playbook: health_check_network_validation.yml
+
+  - import_playbook: health_check_san_validation.yml
+
+  - import_playbook: physical_ssh.yml
+    
+  - import_playbook: create_tr_health_check.yml
+
+  - import_playbook: add_info_healthcheck.yml
+
+  - import_playbook: create_ptr_health_check.yml
+
+  - import_playbook: create_tr_health_check_ssh.yml
+
+  - import_playbook: add_info_healthcheck_ssh.yml
+
+  - import_playbook: create_ptr_health_check_ssh.yml 

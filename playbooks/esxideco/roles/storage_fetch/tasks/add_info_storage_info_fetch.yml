@@ -1,0 +1,315 @@
+---   
+        
+    - name: "Handling TR record_id to update and close the TR for Storage info fetch "
+      block:
+      
+        - set_fact: 
+            file_storage_info_fetch_success: "storage_info_fetch_success.yml"
+            file_storage_info_fetch_failure: "storage_info_fetch_failure.yml"  
+            file_storage_info_fetch_fin: "storage_info_fetch_final.yml"   
+            file_attach_storage_info: "info_storage_esxi.txt"    
+            file_attach_final: "storage_fetch_information_final.txt"                  
+
+        - name: Display the JSON file content
+          shell: cat record_for_storage_info_fetch.json
+          delegate_to: localhost
+          register: TR_result_storage_info_fetch 
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_storage_info_fetch: "{{ TR_result_storage_info_fetch.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: record_id_storage_info_fetch== ""
+
+ #############  success info gathering ##########################
+        - name : handling error in the success block
+          block:
+            - name: Display the JSON file content
+              shell: cat storage_info_fetch_success.yml
+              delegate_to: localhost
+              register: result_storage_info_fetch_suc
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_storage_info_fetch_suc_v: "{{ result_storage_info_fetch_suc.stdout }}" 
+              delegate_to: localhost  
+
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are Storage info fetch success results for the servers"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_storage_info_fetch_suc: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_storage_info_fetch_suc_v }}" 
+              when: result_storage_info_fetch_suc_v != ""  
+
+
+            # - name: " Merge Success information to single final file "
+            #   shell: echo "{{content_storage_info_fetch_suc}}" >> storage_info_fetch_final.yml                    
+            #   delegate_to: localhost
+            #   when: result_storage_info_fetch_suc_v != "" 
+
+            - name: Append multi-line content to YAML file
+              blockinfile:
+                path: storage_info_fetch_final.yml
+                block: "{{ content_storage_info_fetch_suc }}"
+                marker: ""
+              delegate_to: localhost
+              when: result_storage_info_fetch_suc_v != ""
+
+          rescue:
+            - debug:
+                msg: "Rescue for no success file found and continue"   
+                   
+  ####################### Failure info gathering ########################## 
+        - name : handling error in the failure block
+          block:          
+            - name: Display the JSON file content
+              shell: cat storage_info_fetch_failure.yml
+              delegate_to: localhost
+              register: result_storage_info_fetch_fail
+
+            - name: save the Json data to a Variable as a Fact
+              set_fact:
+                result_storage_info_fetch_fail_v: "{{ result_storage_info_fetch_fail.stdout }}" 
+              delegate_to: localhost  
+    
+            
+            - set_fact:
+                form1: "***********************************************************************"
+                form2: "Below are Storage info fetch failure results for the servers"
+                form3: "***********************************************************************"
+            - set_fact:
+                content_storage_info_fetch_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ result_storage_info_fetch_fail_v }}"
+              when: result_storage_info_fetch_fail_v != ""    
+       
+            # - name: " Merge Failure information to to single final file"
+            #   shell: echo "{{ content_storage_info_fetch_fail }}" >> storage_info_fetch_final.yml                    
+            #   delegate_to: localhost
+            #   when: result_storage_info_fetch_fail_v != ""
+
+            - name: "Append Failure information to the final file"
+              blockinfile:
+                path: storage_info_fetch_final.yml
+                block: "{{ content_storage_info_fetch_fail }}"
+                marker: "# {mark} FAILURE INFO BLOCK"
+              delegate_to: localhost
+              when: result_storage_info_fetch_fail_v != ""
+
+
+          rescue:
+            - debug:
+                msg: "Rescue for no failure file found and continue"
+
+##########################  merging both failure and success results ###########################
+
+        - name: Display the JSON file content
+          shell: cat storage_info_fetch_final.yml
+          delegate_to: localhost
+          register: result_storage_info_fetch_fin
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            result_storage_info_fetch_fin_v: "{{ result_storage_info_fetch_fin.stdout }}" 
+          delegate_to: localhost
+
+########################   results added to TR  ############################################
+        - name: "add message to TR"
+          add_message_to_tr:
+            record_id: "{{record_id_storage_info_fetch}}"
+            message: "{{ result_storage_info_fetch_fin_v }}"             
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost
+          register: add_msg_output 
+
+########################   results added to TR  ############################################
+
+
+        - name: Display the JSON file content
+          shell: cat "info_storage_esxi.txt"    
+          delegate_to: localhost
+          register: result_storage_info_esxi
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            result_storage_info_esxi: "{{ result_storage_info_esxi.stdout }}" 
+          delegate_to: localhost
+
+
+        - name: "add message to TR"
+          add_message_to_tr:
+            record_id: "{{record_id_storage_info_fetch}}"
+            message: "{{ result_storage_info_esxi }}"             
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost
+          register: add_msg_output 
+######################### Adding attachment to the TR ###################################
+
+
+        - name: "Add attachments to TR"
+          block:              
+
+            - name: Get stats about the file to be attached
+              stat:
+                path: storage_info_fetch_success.yml
+              register: storage_info_file
+
+            - name: Get stats about the final info fetch file
+              stat:
+                path: storage_fetch_information_final.txt
+              register: storage_info_final
+              
+            - name: "Add attachments to TR "
+              add_attachment_to_tr:
+                record_id: "{{record_id_storage_info_fetch}}"
+                attachments: "{{ file_storage_info_fetch_success }}"             
+                username: "{{ winaproach_username }}"     
+                password: "{{ winaproach_password }}"                       
+              delegate_to: localhost
+              register: add_attachment_output_info_storage
+              when :  storage_info_file.stat.exists
+
+            # - name: "Add message to TR final info fetch"
+            #   add_attachment_to_tr:
+            #     record_id: "{{record_id_storage_info_fetch}}"
+            #     attachments: "{{ file_attach_final }}"             
+            #     username: "{{ winaproach_username }}"     
+            #     password: "{{ winaproach_password }}"                       
+            #   delegate_to: localhost
+            #   register: add_attachment_output_info_storage_final
+            #   when :  storage_info_final.stat.exists 
+
+          rescue:
+            - debug:
+                msg: "Unable to add attachments to the TR"    
+
+
+          
+        # - name: Display the JSON file content
+        #   shell: cat winaproach_category.yml
+        #   delegate_to: localhost
+        #   register: result_winaproach_category
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     win_category: "{{ result_winaproach_category.stdout }}" 
+        #   delegate_to: localhost
+
+        # - name: Display the JSON file content
+        #   shell: cat ptr_system.yml
+        #   delegate_to: localhost
+        #   register: result_ptr_system
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     ptr_sys: "{{ result_ptr_system.stdout }}" 
+        #   delegate_to: localhost             
+
+################################ PTR creation ###################################
+
+        - name: read yaml file from the specific location 
+          set_fact:
+            file_content: "{{lookup('file', 'machinegroups.yml')}}"
+
+        - name: split the file content
+          set_fact:
+            lines: "{{file_content.split('\n')}}"
+
+        - name: convert the lines in the file to dict
+          set_fact:
+            res_dict: "{{ res_dict | default({}) | combine({ item.split('\t')[0]: item.split('\t')[1] }) }}"
+          loop: "{{ lines }}"
+
+
+        - name: find which key is preset in the log
+          set_fact: 
+            present_key: "{{ present_key | default([]) + [item] }}"
+          loop: "{{ res_dict.keys() }}"
+          when: content_storage_info_fetch_fail is defined and item in content_storage_info_fetch_fail
+
+        - name: print the corresponded  value of the key present
+          set_fact:
+            allowner_name: "{{ allowner_name | default({}) | combine({item:res_dict[item]}) }}"
+          loop: "{{ present_key }}"
+          when: content_storage_info_fetch_fail is defined
+
+        - name: all owners with format
+          set_fact:
+            all_owner_Final: | 
+              {% for key,value in allowner_name.items()%}
+              {{ key }} : {{ value }}
+              {% endfor %}
+          when: content_storage_info_fetch_fail is defined
+
+        - set_fact:
+            Requester_group: "Requester_group: {{requester_group}}"
+            Requester_name: "Requester_name: {{requester_name}}"
+
+        - name: "writing output to File"
+          shell: echo -e "{{content_storage_info_fetch_fail}}\n\n{{Requester_group}}\n{{Requester_name}}\n\nOwner group Details below:\n{{all_owner_Final}}" > groups_ptr.yml
+          delegate_to: localhost
+          when: content_storage_info_fetch_fail is defined
+
+        - name: Display the JSON file content
+          shell: cat groups_ptr.yml
+          delegate_to: localhost
+          register: result_groups
+          when: content_storage_info_fetch_fail is defined
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            support_groups: "{{ result_groups.stdout }}" 
+          delegate_to: localhost
+          when: content_storage_info_fetch_fail is defined
+
+        - name: Create PTR
+          problem_tr:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            ptr_title: "ESXI DECO: Storage info fetch details with failed TR - {{ record_id_storage_info_fetch }}"
+            tr_map: "{{ record_id_storage_info_fetch }}"
+            assignee_group: "OSX04SMG" #"DINFDECO" 
+            ptr_logs: "{{ support_groups }}"
+            winaproach_category: "{{ win_category }}"
+            ptr_system: "{{ ptr_sys }}"          
+          register: ptr_out_storage_info_fetch
+          until: '"Successfully" in ptr_out_storage_info_fetch.msg'
+          retries: 3
+          delay: 10
+          when: result_storage_info_fetch_fin_v is search("ERROR")
+
+        - name: "Add message to TR final info fetch"
+          add_attachment_to_tr:
+            record_id: "{{ ptr_out_storage_info_fetch.id }}"
+            attachments: "{{ file_attach_final }}"             
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"                       
+          delegate_to: localhost
+          register: add_attachment_output_info_storage_final
+          when :  result_storage_info_fetch_fin_v is search("ERROR")        
+
+        - name: Update TR with PTR
+          tr_overview:
+            win_url: "{{win_url}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            task_id: "{{ record_id_storage_info_fetch }}"
+            prob_id: "{{ ptr_out_storage_info_fetch.id }}"                   
+          register: update_overview  
+          when: result_storage_info_fetch_fin_v is search("ERROR")
+
+############################# closing TR  ####################            
+        # - name: "[CLOSE TR]"
+        #   close_tr:
+        #     record_id: "{{record_id_storage_info_fetch}}"
+        #     username: "{{ winaproach_username }}"
+        #     password: "{{ winaproach_password }}"
+        #   register: close_tr_output
+       
+      rescue:
+        - debug:
+            msg: "Exception occurred so rescued the main tr result block for Storage info fetch "

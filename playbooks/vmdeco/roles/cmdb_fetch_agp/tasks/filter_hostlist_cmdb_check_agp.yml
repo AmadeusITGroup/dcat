@@ -1,0 +1,69 @@
+---
+    - name: "Check entry for DECO server"
+      throttle: 1
+      block:
+
+        - set_fact:
+            host_list: host_list_cmdb_agp.yml
+
+        - name: Display the JSON vcenter file content
+          shell: cat check_vcenter.yml
+          delegate_to: localhost
+          register: result_check_vcenter
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vcenter: "{{ result_check_vcenter.stdout }}" 
+          delegate_to: localhost
+
+        - meta: end_host
+          when: '"{{ inventory_hostname }}" in check_vcenter'            
+
+        - name: Display the JSON file content
+          shell: cat failure_vm_agp.yml
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            vm_list: "{{ TR_result_healthcheck.stdout }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: '"{{ inventory_hostname }}" in vm_list'                     
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server"
+          azure_update_ref:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status
+          delegate_to: localhost
+      
+
+        - set_fact: 
+            cmdb_stat_check_agp: '{{idem_status.module_update.cmdb_stat_check_agp}}'
+
+        - set_fact: 
+            vm_poweroff_before_gp_check: '{{idem_status.module_update.vm_poweroff_before_gp}}'                    
+           
+
+        - name: "VM list"
+          shell: echo "{{ inventory_hostname }}," >> {{ host_list }}                   
+          delegate_to: localhost
+          when: cmdb_stat_check_agp == "F" and vm_poweroff_before_gp_check == "T"                  
+
+            
+      rescue:
+        - debug:
+            msg: "Failed to fect hostlist for CMDB status check After graceperiod"      
+

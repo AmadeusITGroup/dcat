@@ -1,0 +1,38 @@
+---
+      - set_fact:
+          client_match : '{{ inventory_hostname }}'
+          export_rule_index: ""
+          file_export: "{{ inventory_hostname }}.yml"  
+          export_result: []
+          share_result: []
+          export_result_ip: []
+          share_result_ip: []
+          collect_export_result: []
+          fail_output_no_cleanup: []
+          nas_os_detail_w: ""
+          nas_os_detail_result: ""
+          cifs_share_access_control: ""
+          time: ""
+          storage_inventory_list: "{{ nas_box }}"
+          file_export_collect: "collect{{ inventory_hostname }}.yml"
+          file_failure: "nas_hostname_failure.yml"
+          file_success: "nas_hostname_success.yml"
+          vm_nas_proceed: "vm_nas_proceed.yml"
+          nas_no_cleanup_check: ""
+          graceperiod_flag: ""
+          nas_info_log: "nas_info_gather.txt"
+
+      - include: "fetch_os_type.yml"       
+
+      - include: "fetch_ipaddress.yml"
+        when: 'nas_os_detail_w == "linux"' # or nas_os_detail_w == "windows"'       
+
+      - include: "nas_storage_cleanup.yml"
+        vars:
+          storage_hostname: '{{ item }}'
+        #loop:  "{{ lookup('file', '{{storage_inventory_list}}').splitlines()}}"
+        loop: "{{ storage_inventory_list }}"
+        
+      - include: "nas_cleanup_idem_update.yml" 
+
+ 

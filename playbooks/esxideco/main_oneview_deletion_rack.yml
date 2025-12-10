@@ -1,0 +1,104 @@
+---
+- name: "OneView/Xclarity filter host"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: OneView Xclarity filter host
+      ansible.builtin.import_role:
+        name: oneview_xclarity
+        tasks_from: filter_hostlist_oneview_xclarity.yml
+
+- name: "Create TR for OneView/Xclarity"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: TR for OneView/Xclarity
+      ansible.builtin.import_role:
+        name: oneview_xclarity
+        tasks_from: create_tr_oneview_xclarity.yml
+
+# ======================================================================================================
+# Oneview Xclarity deregister
+# ======================================================================================================
+
+- name: "OneView/xclarity Deregister"
+  hosts: "{{ target_hosts }}"
+  gather_facts: no
+  tasks: 
+    - name: "OneView/xclarity Deregister"
+      ansible.builtin.import_role:
+        name: oneview_xclarity
+        tasks_from: main_oview_lxca.yml
+
+
+# - name: "ILO Reset"
+#   hosts: "enclosures"
+#   gather_facts: no
+#   vars:
+#     synergon_url: "{{ hostvars['localhost']['config_data']['synergon_url'] }}"
+#     remote_username: "root"
+#     remote_password: "N1Flheim!"  
+#   tasks:
+
+#     # - name: Set DNS and CMDB variables from config_data
+#     #   set_fact:
+#     #     synergon_url: "{{ config_data.synergon_url }}"
+
+#     - name: Display the JSON file content
+#       shell: cat private_endpoint_connection_string.yml
+#       delegate_to: localhost
+#       register: result_private_endpoint_connection_string
+
+#     - name: save the Json data to a Variable as a Fact
+#       set_fact:
+#         private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+#       delegate_to: localhost      
+            
+#     - name: "Check entry for DECO server for filter hostlist for ILO Reset"
+#       azure_update_ref_esxi:
+#         connection_string: "{{ private_endpoint_connection_string }}"
+#         hostname: "{{inventory_hostname}}"
+#       register: idem_status 
+#       delegate_to: localhost
+    
+
+#     # - set_fact: 
+#     #     cmdb_fetch: '{{idem_status.module_update.cmdb_fetch}}'  
+
+#     - set_fact: 
+#         esxi_type: '{{idem_status.module_update.esxi_type}}'  
+
+#     - name: ilo_reset Lenovo Blades
+#       ansible.builtin.import_role:
+#         name: ilo_reset
+#         tasks_from: ilo_reset_lenovo.yml
+#       when: esxi_type == "LenovoEnclosure"
+
+
+#     - name: ilo_reset HP Blades
+#       ansible.builtin.import_role:
+#         name: ilo_reset
+#         tasks_from: ilo_reset_hp.yml
+#       when: esxi_type == "HPEnclosure"
+
+# ======================================================================================================
+
+
+
+
+- name: "Add info to TR for OneView/xclarity Deregister"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    win_category: "{{ hostvars['localhost']['config_data']['winaproach_category'] }}"
+    ptr_sys: "{{ hostvars['localhost']['config_data']['ptr_system'] }}"
+  tasks:
+    - name: Set local variables from config_data
+      set_fact:
+        ptr_sys: "{{ config_data.ptr_system }}"
+        win_category: "{{ config_data.winaproach_category }}"
+        
+    - name: oneview/xclarity add info
+      ansible.builtin.import_role:
+        name: oneview_xclarity
+        tasks_from: add_info_onevie_xclarity.yml

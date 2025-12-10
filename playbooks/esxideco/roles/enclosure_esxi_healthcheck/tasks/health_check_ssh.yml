@@ -1,0 +1,129 @@
+---
+- name: SSH Health check status for ESXi
+  throttle: 1
+  block:
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      run_once: true
+      register: result_private_endpoint_connection_string
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      run_once: true
+      delegate_to: localhost
+
+    - name: "Check entry for DECO server from Azure"
+      azure_update_ref_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"                        
+      register: idem_status
+      delegate_to: localhost    
+
+    - debug:
+        var: idem_status
+
+    - set_fact: 
+        healthy: '{{idem_status.module_update.healthy}}'                 
+
+    - name: End play for this host
+      meta: end_host
+      when: healthy != "T"
+
+    - name: "SSH connection - ESXi"
+      ssh_check_esxi_with_pass:
+        hostname: "{{ esxi_fqdn }}"
+        username: "{{ remote_username }}"
+        password: "{{ remote_password }}"
+      delegate_to: localhost
+      register: connect
+      until: '"Successfully" in connect.msg'
+      retries: 3
+      delay: 10
+
+    - name: "Debug SSH connection result"
+      debug:
+        var: connect
+
+    - name: Get timestamp from the system (for SSH success)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp
+      run_once: true
+
+    - name: "Set timestamp fact (for SSH success)"
+      set_fact:
+        time: "{{ tstamp.stdout }}"
+      run_once: true
+
+    - name: "SSH success"
+      # shell: echo "#{{ inventory_hostname }}, {{ time }}, [INFO], SSH connectivity is enabled for {{ inventory_hostname }}" >> esxi_ssh_success.yml
+      # shell: echo "#{{ inventory_hostname }}, {{ enclosure }}, {{ time }}, [INFO], SSH connectivity is enabled for {{ inventory_hostname }}" >> esxi_ssh_success.yml
+      shell: echo "#{{ esxi_fqdn }}, {{ inventory_hostname[:-3]  }}, {{ time }}, [INFO], SSH connectivity is enabled for {{ esxi_fqdn }}" >> esxi_ssh_success.yml
+      delegate_to: localhost
+      when: "'Successfully' in connect.msg"
+
+
+    # - name: "update entry for DECO server for Healthy status"
+    #   azure_update_module_vals_esxi:
+    #     connection_string: "{{ private_endpoint_connection_string }}"
+    #     hostname: "{{inventory_hostname}}"
+    #     module_name: "healthy"
+    #     status: "T"           
+    #   register: update_status_info_state
+    #   delegate_to: localhost
+    #   when: "'Successfully' in connect.msg"
+
+
+    - name: Unset rescue_triggered fact
+      set_fact:
+        ssh_rescue_triggered: false
+
+  rescue:
+    - name: Set rescue_triggered fact
+      set_fact:
+        ssh_rescue_triggered: true
+
+    - name: Rescue on SSH connection issue - ESXi
+      debug:
+        msg: "Rescue SSH connection issue - ESXi"
+
+    - name: Get timestamp from the system (rescue)
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      run_once: true
+      register: tstamp
+
+    - name: "Set timestamp fact (rescue)"
+      set_fact:
+        time: "{{ tstamp.stdout }}"
+      run_once: true
+
+    - name: "ESXi host list failure to file before grace period"
+      # shell: echo "!{{ inventory_hostname }}, {{ time }}, [ERROR], Unable to SSH ESXi server {{ inventory_hostname }}, either connection or credential issue" >> esxi_ssh_fail.yml
+      # shell: echo "!{{ inventory_hostname }}, {{ enclosure }}, {{ time }}, [ERROR], Unable to SSH ESXi server {{ inventory_hostname }}, either connection or credential issue" >> esxi_ssh_fail.yml
+      # shell: echo "!{{ esxi_fqdn }}, {{ inventory_hostname }}, {{ time }}, [ERROR], Unable to SSH ESXi server {{ esxi_fqdn }}, either connection or credential issue" >> esxi_ssh_fail.yml
+      shell: echo "!{{ esxi_fqdn }}, {{ inventory_hostname[:-3] }}, {{ time }}, [ERROR], Unable to SSH ESXi server {{ esxi_fqdn }}, either connection or credential issue" >> esxi_ssh_fail.yml
+      delegate_to: localhost
+      when: "'Successfully' not in connect.msg"
+
+    - name: Display the JSON file content
+      shell: cat private_endpoint_connection_string.yml
+      delegate_to: localhost
+      register: result_private_endpoint_connection_string
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+      delegate_to: localhost
+
+    - name: "update entry for DECO server for Healthy status"
+      azure_update_module_vals_esxi:
+        connection_string: "{{ private_endpoint_connection_string }}"
+        hostname: "{{inventory_hostname}}"
+        module_name: "healthy"
+        status: "F"           
+      register: update_status_info_state
+      delegate_to: localhost

@@ -1,0 +1,56 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    associated_cis: "{{ associated_cis }}"
+    graceperiod_flag: "{{ graceperiod_flag }}"
+       
+  tasks: 
+
+  - name: Display input JSON
+    set_fact:
+      serial: 20 #15 
+
+  - name: register env information
+    debug: 
+      msg: "{{ serial }}"
+    register: serial_number
+
+  - name: Display input JSON
+    set_fact:
+      jsondata: "{{ associated_cis }}"
+      
+  - name: fetch host details
+    gather_host:
+      host_info: "{{ jsondata| to_json }}"
+    register: host_list
+
+  - name: display data
+    debug:
+      var: host_list
+
+
+#   - debug:
+#       var: vm_list
+
+  - name: Add hosts to vmdeco group
+    add_host:
+      hostname: "{{ item }}"
+      groups: vmdeco
+    loop: '{{ host_list.host_list }}'
+
+  - name: register env information
+    debug: 
+      msg: "dev"
+    register: env_data
+  
+     
+- import_playbook: workflow/main_approval.yml
+  vars:
+    serial_number: "5"
+    associated_cis: "{{ associated_cis }}"  
+    cr: "{{ cr }}"
+    env: "{{env_data}}" 
+    
+  no_log: true
+  run_once: True

@@ -1,0 +1,306 @@
+---    
+    - name: "Handling Create TR- Win@proach "
+      block: 
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""
+
+        - set_fact:
+            ilo_record_id: ""
+            ilo_success: "ilo_reconfig_success.yml"
+
+        - name: VM_host list
+          shell: cat host_list_ilo_reconfig.yml
+          delegate_to: localhost
+          register: hostlist_phy              
+
+        - name: save the Phy list to a Variable as a Fact
+          set_fact:
+            phy_hostlist: "{{ hostlist_phy.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: phy_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat bird_api.yml
+          delegate_to: localhost
+          register: result_bird
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            bird_api: "{{ result_bird.stdout }}" 
+          delegate_to: localhost                    
+
+        - name: TR creation for ILO Reconfigure
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "ilo disk cleanup"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: PHYSICAL DECO : ILO Reconfigure"
+            ci: "{{ phy_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id
+          delegate_to: localhost
+        
+        - set_fact:
+            ilo_record_id: "{{ticket_id.id.ticketId}}"
+    
+        - copy:
+            content: '{{ ilo_record_id|to_json }}'
+            dest: record_ilo_reconfigure.json
+          delegate_to: localhost
+
+    
+      rescue:
+        - debug:
+            msg: "Failed to Create Phy DECO - ilo reconfigure TR"
+
+    - name: "Handling Create TR- Win@proach  -retry 1"
+      block: 
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""
+
+        - name: Display the JSON file content
+          shell: cat record_ilo_reconfigure.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ilo_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: ilo_record_id == ""
+
+        - name: Phy_host list
+          shell: cat host_list_ilo_reconfig.yml
+          delegate_to: localhost
+          register: hostlist_phy              
+
+        - name: save the phy list to a Variable as a Fact
+          set_fact:
+            phy_hostlist: "{{ hostlist_phy.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: phy_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat bird_api.yml
+          delegate_to: localhost
+          register: result_bird
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            bird_api: "{{ result_bird.stdout }}" 
+          delegate_to: localhost                    
+
+        - name: TR creation for ILO Reconfigure
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "ilo disk cleanup"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: PHYSICAL DECO : ILO Reconfigure"
+            ci: "{{ phy_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id
+          delegate_to: localhost
+          when: ilo_record_id == "" 
+            
+
+        - set_fact:
+            ilo_record_id: "{{ticket_id.id.ticketId}}"
+          when: ilo_record_id == ""   
+         
+        - copy:
+            content: '{{ ilo_record_id|to_json }}'
+            dest: record_ilo_reconfigure.json
+          delegate_to: localhost
+          when: ilo_record_id == "" 
+
+    
+      rescue:
+        - debug:
+            msg: "Failed to Create PHY DECO - ILO RECONFIG TR"
+
+    - name: "Handling Create TR- Win@proach retry 2"
+      block: 
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""
+
+        - name: Display the JSON file content
+          shell: cat record_ilo_reconfigure.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ilo_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: ilo_record_id == ""                           
+
+        - name: Phy_host list
+          shell: cat host_list_ilo_reconfig.yml
+          delegate_to: localhost
+          register: hostlist_phy              
+
+        - name: save the phy list to a Variable as a Fact
+          set_fact:
+            phy_hostlist: "{{ hostlist_phy.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: phy_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat bird_api.yml
+          delegate_to: localhost
+          register: result_bird
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            bird_api: "{{ result_bird.stdout }}" 
+          delegate_to: localhost                    
+            
+        - name: TR creation for ILO Reconfigure
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "ilo disk cleanup"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: PHYSICAL DECO : ILO Reconfigure"
+            ci: "{{ phy_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id
+          delegate_to: localhost
+          when: ilo_record_id == "" 
+
+        - set_fact:
+            ilo_record_id: "{{ticket_id.id.ticketId}}"
+          when: ilo_record_id == "" 
+
+        - copy:
+            content: '{{ ilo_record_id|to_json }}'
+            dest: record_ilo_reconfigure.json
+          delegate_to: localhost
+          when: ilo_record_id == "" 
+    
+      rescue:
+        - debug:
+            msg: "Failed to Create PHY DECO - ILO RECONFIG TR"            
+
+
+    - name: "Handling Start Implementation- Win@proach "
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_ilo_reconfigure.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            ilo_record_id: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: ilo_record_id == ""                            
+
+        - name: Sleep for 62 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 62
+          delegate_to: localhost           
+
+        - name: Start Implementation
+          winaproach:
+            system: prod
+            type: task_record
+            operation: start_implementation
+            username: "{{ winAproach_username }}"
+            password: "{{ winAproach_password }}"
+            fields:
+              task_id: "{{ ilo_record_id }}"
+          register: start_implementation
+          delegate_to: localhost
+          
+    
+      rescue:
+        - debug:
+            msg: "Failed to Start Implementation on PHY DECO - ilo Reconfigure TR :'{{ ilo_record_id }}'"
+       

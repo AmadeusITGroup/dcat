@@ -1,0 +1,67 @@
+---
+- name: "Filter hostlist for cmdb fetch agp"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_agp_phy
+        tasks_from: filter_hostlist_cmdb_check_status_agp_phy.yml
+
+- name: "Create TR for cmdb fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    cmdb_fetch_agp: "F"
+    graceperiod_flag: True
+    san_info_fetch: ""
+  tasks:
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_agp_phy
+        tasks_from: create_tr_cmdb_status_check_agp_phy.yml
+
+- name: "CMDB FETCH"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_agp_phy
+        tasks_from: cmdb_status_check.yml
+      when: (cmdb_fetch_agp == "F") and cmdb_fetch_agp is defined and (poweron == "T") and poweron is defined 
+
+- name: "Add info to TR for cmdb fetch"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    cmdb_fetch_agp: "F"
+    graceperiod_flag: True
+    san_info_fetch: ""
+  tasks:
+    - name: cmdb fetch
+      ansible.builtin.import_role:
+        name: cmdb_fetch_agp_phy
+        tasks_from: add_info_cmdb_status_check_agp_phy.yml
+
+# - name: "CMDB FETCH"
+#   hosts: all:vmdeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: cmdb fetch
+#       ansible.builtin.import_role:
+#         name: cmdb_fetch_agp_phy
+#         tasks_from: cmdb_fetch_agp_logging.yml
+
+# - name: "Logger for CMDB Fetch"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+    # cmdb_fetch_agp: "F"
+    # graceperiod_flag: True
+    # san_info_fetch: ""
+#   tasks:
+#     - name: cmdb fetch
+#       ansible.builtin.import_role:
+#         name: cmdb_fetch_agp_phy
+#         tasks_from: logger_cmdb_fetch_agp.yml

@@ -1,0 +1,55 @@
+---
+- name: "ilo_reconfigure"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: ilo_reconfigure
+      ansible.builtin.import_role:
+        name: ilo_reconfigure
+        tasks_from: filter_hostlist_ilo_reconfig.yml
+
+- name: "Create TR for ilo_reconfigure"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    # ilo_reconfig: "F"
+    # graceperiod_flag: False
+  tasks:
+    - name: ilo_reconfigure
+      ansible.builtin.import_role:
+        name: ilo_reconfigure
+        tasks_from: create_tr_ilo_reconfigure.yml
+
+
+- name: Re-Configure iLO for Target Server
+  hosts: physicaldeco
+  gather_facts: no
+  vars:
+    remote_username: "{{ remote_username }}"
+    remote_keyfile: "{{ remote_keyfile }}"
+  tasks:
+
+    - name: Apply iLO configuration role
+      ansible.builtin.import_role:
+        name: ilo_reconfigure
+        tasks_from: configure_ilo.yml
+      # vars:
+      #   target_server: "{{ inventory_hostname }}"
+      #   custom_hostname: "{{ custom_hostname }}"
+      #   user_iloadm: "{{ user_iloadm }}"
+      #   password_iloadm: "{{ password_iloadm }}"
+      #   ilo_interface_user: "{{ ilo_interface_user }}"
+      #   ilo_interface_password: "{{ ilo_interface_password }}" 
+
+
+- name: "Add info TR for ilo_reconfigure"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    # graceperiod_flag: False
+    # ilo_reconfig: "F"
+  tasks:
+    - name: ilo_reconfigure
+      ansible.builtin.import_role:
+        name: ilo_reconfigure
+        tasks_from: add_info_ilo_reconfigure.yml

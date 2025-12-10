@@ -1,0 +1,14 @@
+---
+
+
+# - name: Include configuration tasks
+#   import_tasks: configure_ilo.yml
+#   vars:
+#     ansible_ssh_private_key_file: "{{ remote_keyfile }}"
+#     user_iloadm: "{{ user_iloadm }}"
+#     password_iloadm: "{{ password_iloadm }}"
+#     password_iloadm: "{{ elk_password }}"
+#     ilo_interface_user: "{{ ilo_interface_user }}"
+#     ilo_interface_password: "{{ ilo_interface_password }}" 
+
+#   delegate_to: "{{ target_server }}"

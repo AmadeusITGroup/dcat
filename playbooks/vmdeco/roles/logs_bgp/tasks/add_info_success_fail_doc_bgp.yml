@@ -1,0 +1,280 @@
+---  
+    - name: "Handling TR record_id"
+      block:
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - meta: end_host
+          when: record_id_healthcheck != ""      
+
+        - name: Display the JSON file content
+          shell: cat record_doc_bgp.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_doc_bgp: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost        
+
+        - meta: end_host
+          when: record_doc_bgp == ""
+
+        - name: VM_host list
+          shell: cat success_vm_bgp.yml
+          delegate_to: localhost
+          register: vm_result_suc              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_success_bgp: "{{ vm_result_suc.stdout }}" 
+          delegate_to: localhost
+
+
+        - name: VM_host list
+          shell: cat failure_vm_bgp.yml
+          delegate_to: localhost
+          register: vm_result_fai
+
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_fail_bgp: "{{ vm_result_fai.stdout }}" 
+          delegate_to: localhost
+
+        - meta: end_host
+          when: vm_success_bgp == "" and vm_fail_bgp == "" 
+        
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Following are Success VM list before graceperiod"
+            form3: "***********************************************************************"            
+        - set_fact:
+            doc_content_success: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ vm_success_bgp }}"
+          when: vm_success_bgp != "" 
+
+        - name: " Merge failure information to single final file "
+          shell: echo "{{doc_content_success}}" >> doc_bgp_final.yml                    
+          delegate_to: localhost
+          when: vm_success_bgp != ""
+
+        - name: VM_host list
+          shell: cat failure_vm_bgp.yml
+          delegate_to: localhost
+          register: vm_result_fai
+
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            vm_fail_bgp: "{{ vm_result_fai.stdout }}" 
+          delegate_to: localhost
+
+        - name: Split the string into lines
+          set_fact:
+            vm_fail_line: "{{ vm_fail_bgp.split('\n') }}"
+
+        - name: Convert the list to a set to remove duplicates
+          set_fact:
+            vm_fail_list: "{{ vm_fail_line | unique }}"
+
+        - name: Join the lines back into a single string
+          set_fact:
+            vm_fail_bgp: "{{ vm_fail_list | join('\n') }}"                                   
+
+        - set_fact:
+            form1: "***********************************************************************"
+            form2: "Following are Failure VM list before graceperiod"
+            form3: "***********************************************************************"            
+        - set_fact:
+            doc_content_fail: "{{ form1 +'\n'+ form2 +'\n'+ form3 +'\n'+ vm_fail_bgp }}"
+          when: vm_fail_bgp != "" 
+
+
+        - name: " Merge failure information to single final file "
+          shell: echo "{{doc_content_fail}}" >> doc_bgp_final.yml                    
+          delegate_to: localhost
+          when: vm_fail_bgp != ""           
+          
+            
+      rescue:
+        - debug:
+            msg: "unable to collect success/fail VM list"
+
+    - name: "Handling add message in TR"
+      block: 
+
+        - name: VM_host list
+          shell: cat doc_bgp_final.yml
+          delegate_to: localhost
+          register: vm_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            doc_bgp_fin: "{{ vm_result.stdout }}" 
+          delegate_to: localhost
+            
+        - meta: end_host
+          when: doc_bgp_fin == ""
+
+        - name: Display the JSON file content
+          shell: cat record_doc_bgp.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_doc_bgp: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost           
+        
+        
+        - name: "Add message to TR"
+          add_message_to_tr:
+            record_id: "{{record_doc_bgp}}"
+            message: "{{ doc_bgp_fin }}"             
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}" 
+          delegate_to: localhost
+          register: add_msg_output
+                                  
+
+      rescue:
+        - debug:
+            var: 'add_msg_output'
+
+    - name: "Close TR"
+      block:  
+        
+        - name: Display the JSON file content
+          shell: cat record_doc_bgp.json
+          delegate_to: localhost
+          register: TR_result
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_doc_bgp: "{{ TR_result.stdout[1:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: record_doc_bgp == ""
+
+        - name: "Test custome module [CLOSE TR]"
+          close_tr:
+            record_id: "{{record_doc_bgp}}"
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+          register: close_tr_output
+                                   
+
+      rescue:
+        - debug:
+            var: close_tr_output      
+
+    - name: "update the flow"
+      block:
+
+        - name: VM_host list
+          shell: cat doc_bgp_final.yml
+          delegate_to: localhost
+          register: vm_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            doc_bgp_fin: "{{ vm_result.stdout }}" 
+          delegate_to: localhost        
+                          
+       # Complete success No failures
+        - name: Check snow api call back
+          update_snow:
+            action: Phase1
+            ritm_number: "{{ ritm_number }}"
+            status: Success
+            comments: Trigger-1 of decommissioning has succeeded for the following servers. These servers are powered off for a graceperiod of 7 days. After the graceperiod they would be decommissioned permanently and thus no recovery would be possible. {{ vm_success_bgp }}.
+            comments: Trigger-1 of decommissioning has succeeded for the following servers. These servers are powered off for a graceperiod of 7 days. After the graceperiod they would be decommissioned permanently and thus no recovery would be possible. {{ vm_success_bgp }}.
+            username: "{{ SN_USERNAME }}"
+            password: "{{ SN_PASSWORD }}"
+          run_once: True  
+          register: api_result
+          when: doc_bgp_fin is search("Success") and doc_bgp_fin is not search("Failure")
+       
+       # complete failure no success
+        - name: Check snow api call back
+          update_snow:
+            action: Phase1
+            ritm_number: "{{ ritm_number }}"
+            status: Running
+            comments: Trigger-1 of decommissioning has failed for the following servers. Investigation in progress for the following ci's {{ vm_fail_bgp }}.
+            username: "{{ SN_USERNAME }}"
+            password: "{{ SN_PASSWORD }}" 
+          run_once: True  
+          register: api_result
+          when: doc_bgp_fin is search("Failure") and doc_bgp_fin is not search("Success")
+        
+        # some success and some failures
+        - name: Check snow api call back
+          update_snow:
+            action: Phase1
+            ritm_number: "{{ ritm_number }}"
+            status: Running
+            comments: Trigger-1 of decommissioning has succeeded for the following servers. These servers are powered off for a graceperiod of 7 days. After the graceperiod they would be decommissioned permanently and thus no recovery would be possible- {{ vm_success_bgp }}.  Trigger-1 of decommissioning has failed for the following servers. Investigation in progress for the following ci's- {{ vm_fail_bgp }}.
+            username: "{{ SN_USERNAME }}"
+            password: "{{ SN_PASSWORD }}" 
+          run_once: True  
+          register: api_result
+          when: doc_bgp_fin is search("Failure") and doc_bgp_fin is search("Success")       
+          
+        - set_fact:
+            grace_flag: True
+
+        - name: "Success CIs Scheduled for Phase-2"
+          set_fact:
+            scheduled_cis: "{{ vm_success_bgp.splitlines() }}"
+          
+        - name: "Scheduled CIs List"
+          set_fact:
+            scheduled_list: "{{ scheduled_cis | map('regex_replace', '^(.*)$', '{\"hosts\": \"\\1\"}') | map('from_yaml') | list }}"
+                  
+        - name: run scheduler
+          schedule_job:
+            id: "12839"
+            cr: "{{cr}}"
+            associated_cis: "{{ scheduled_list }}"
+            retention_days: "{{ retention_days }}"
+            grace_flag: "{{ grace_flag }}"
+            requester_name: "{{ requester_name  }}"      
+            requester_group: "{{ requester_group }}"
+            ritm_number: "{{ ritm_number }}"
+            pillar: "{{ pillar }}"
+            mit_ticket: "{{ mit_ticket }}"
+            cis: "{{ vm_success_bgp }}"
+            user_name: "{{ auth_username }}"
+            pass_word: "{{ auth_password }}"
+          register: schedule_result
+          delegate_to: localhost
+          when: doc_bgp_fin is search("Success") and grace_flag == true
+
+        - debug:
+            var: schedule_result
+        
+        - debug:
+            msg: "Following VMs have completed phase 1 and are scheduled for phase 2: {{ vm_success_bgp }}"
+          when: doc_bgp_fin is search("Success")
+
+        - debug:
+            msg: "Following VMs have failed phase 1 and have to be retriggered: {{ vm_fail_bgp }}"
+          when: doc_bgp_fin is search("Failure")
+
+      rescue:
+        - debug:
+            msg: "Phase -1 update failure"  
+            
+        
+            
+             

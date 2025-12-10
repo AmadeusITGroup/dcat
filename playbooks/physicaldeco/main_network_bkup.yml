@@ -1,0 +1,82 @@
+---
+- name: "Network Cleanup"
+  hosts: physicaldeco
+  gather_facts: no 
+  tasks: 
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup
+        tasks_from: filter_hostlist_network.yml
+
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup
+        tasks_from: switch_filter.yml
+
+- name: "Create TR for network"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    #record_for_network: ""
+    #network_remove: "false"
+    graceperiod_flag: True
+    #cmdb_stat_check_agp: true
+  tasks:        
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup
+        tasks_from: create_tr_network_cisco.yml 
+
+- name: "network Cleanup"
+  hosts: physicaldeco
+  gather_facts: no
+  # vars:
+  #   csv: "nodes.csv"
+  #   retention_days: "{{ retention_days }}"   
+  tasks: 
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup
+        tasks_from: network_switch_port.yml
+      when: (network == "F") and network is defined and (backup_remove == "T") and backup_remove is defined
+
+- name: "Add info TR for network"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    #record_for_network: ""
+    #network_remove: "false"
+    graceperiod_flag: True
+    #cmdb_stat_check_agp: true
+  tasks:
+
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup
+        tasks_from: sw_arista_formation.yml 
+
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup
+        tasks_from: add_info_network_cisco.yml  
+
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup
+        tasks_from: create_tr_network_arista.yml 
+
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup
+        tasks_from: add_info_network_arista.yml       
+
+    # - name: network
+    #   ansible.builtin.import_role:
+    #     name: network_cleanup
+    #     tasks_from: network_logging.yml
+
+
+    # - name: network
+    #   ansible.builtin.import_role:
+    #     name: network_cleanup
+    #     tasks_from: logger_network.yml

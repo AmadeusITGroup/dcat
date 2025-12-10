@@ -1,0 +1,85 @@
+---
+- name: Obtain Connection String for Private Endpoint
+  hosts: localhost
+  gather_facts: false
+  vars:
+    azure_client_id: '{{ az_client_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+    storage_account_name: '{{ storage_account_name }}'
+    resource_group: '{{ resource_group }}'
+    azure_subscription_id: '{{ azure_subscription_id }}'
+
+  tasks:
+
+    # - name: Display the JSON file content
+    #   shell: cat storage_account_name.yml
+    #   delegate_to: localhost
+    #   register: result_storage_account_name
+
+    # result_storage_account_name: "{{ hostvars['localhost']['config_data']['storage_account_name'] }}"
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        storage_account_name: "{{ hostvars['localhost']['config_data']['storage_account_name'] }}"
+      delegate_to: localhost
+
+ 
+    # - name: save the Json data to a Variable as a Fact
+    #   set_fact:
+    #     storage_account_name: "{{ result_storage_account_name.stdout }}"
+    #   delegate_to: localhost
+
+    # - name: Display the JSON file content
+    #   shell: cat resource_group.yml
+    #   delegate_to: localhost
+    #   register: result_resource_group
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        resource_group: "{{ hostvars['localhost']['config_data']['resource_group'] }}"
+      delegate_to: localhost
+ 
+    # - name: save the Json data to a Variable as a Fact
+    #   set_fact:
+    #     resource_group: "{{ result_resource_group.stdout }}"
+    #   delegate_to: localhost
+
+    # - name: Display the JSON file content
+    #   shell: cat azure_subscription_id.yml
+    #   delegate_to: localhost
+    #   register: result_azure_subscription_id
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        azure_subscription_id: "{{ hostvars['localhost']['config_data']['azure_subscription_id'] }}"
+      delegate_to: localhost
+ 
+    # - name: save the Json data to a Variable as a Fact
+    #   set_fact:
+    #     azure_subscription_id: "{{ result_azure_subscription_id.stdout }}"
+    #   delegate_to: localhost
+
+    - name: Retrieve Storage Account Key
+      azure_rm_storageaccount_info:
+        resource_group: "{{ resource_group }}"
+        name: "{{ storage_account_name }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_client_secret }}"
+        tenant: "{{ azure_tenant_id }}"
+        subscription_id: '{{ azure_subscription_id }}'
+        show_connection_string: true
+      register: storage_account_info
+
+    - name: Set Storage Account Key
+      set_fact:
+        storage_account_key: "{{ storage_account_info.storageaccounts[0].primary_endpoints.key }}"
+
+    - name: Get Private Endpoint Connection String
+      set_fact:
+        private_endpoint_connection_string: "DefaultEndpointsProtocol=https;AccountName={{ storage_account_name }};AccountKey={{ storage_account_key }};EndpointSuffix=core.windows.net"
+
+    - name: "data check"
+      shell: echo "{{ private_endpoint_connection_string }}" >> private_endpoint_connection_string.yml   
+      delegate_to: localhost
+      

@@ -1,0 +1,383 @@
+---
+- name: Test Playbook (Handle all test operations from here)
+  hosts: localhost
+  gather_facts: no
+  vars:
+    azure_client_id: '{{ az_client_id }}'
+    azure_client_secret: '{{ az_client_password }}'
+    azure_tenant_id: '{{ az_tenant_id }}'
+    storage_account_name: '{{ storage_account_name }}'
+    resource_group: '{{ resource_group }}'
+    azure_subscription_id: '{{ azure_subscription_id }}'
+    input: "{{ lookup('file','config.json') | from_json }}"
+
+  tasks:
+    - name: testing
+      debug:
+        msg: "Launching Parent Play"
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        storage_account_name: "{{ input.prod.storage_account_name }}"
+      delegate_to: localhost
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        resource_group: "{{ input.prod.resource_group }}"
+      delegate_to: localhost
+
+    - name: save the Json data to a Variable as a Fact
+      set_fact:
+        azure_subscription_id: "{{ input.prod.azure_subscription_id }}"
+      delegate_to: localhost
+
+    - name: Retrieve Storage Account Key
+      azure_rm_storageaccount_info:
+        resource_group: "{{ resource_group }}"
+        name: "{{ storage_account_name }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_client_secret }}"
+        tenant: "{{ azure_tenant_id }}"
+        subscription_id: '{{ azure_subscription_id }}'
+        show_connection_string: true
+      register: storage_account_info
+
+    - name: Set Storage Account Key
+      set_fact:
+        storage_account_key: "{{ storage_account_info.storageaccounts[0].primary_endpoints.key }}"
+
+    - name: Get Private Endpoint Connection String
+      set_fact:
+        private_endpoint_connection_string: "DefaultEndpointsProtocol=https;AccountName={{ storage_account_name }};AccountKey={{ storage_account_key }};EndpointSuffix=core.windows.net"
+
+    - name: Display host input JSON
+      set_fact:
+        jsondata: "{{ associated_cis }}"
+        
+    - name: print hosts json data
+      debug:
+        var: jsondata
+    
+    - name: Extract hosts from jsondata
+      set_fact:
+        server_list: "{{ jsondata | map(attribute='hosts') | list }}"
+
+    - name: Show server_list
+      debug:
+        var: server_list
+
+    - name: Check entries for Enclosure in CMDB
+      get_esxi_type_cmdb:
+        conn_str: "{{ private_endpoint_connection_string }}"
+        server_name: "{{ item }}"
+        cmdb_server: "{{ cmdb_url_update }}"
+        user_name: "{{ emdb_username }}"
+        pass_word: "{{ emdb_password }}" 
+      delegate_to: localhost
+      register: enclosure_cmdb_check
+      retries: 3
+      delay: 1
+      ignore_errors: yes
+      loop: "{{ server_list }}"
+      loop_control:
+        loop_var: item
+
+    - name: Debug CMDB check results
+      debug:
+        var: enclosure_cmdb_check.results
+
+
+    - name: Combine hostname and type into a list
+      set_fact:
+        hostname_and_type: "{{ hostname_and_type | default([]) + [{'hostname': item.item,'server_type':item.server_type}] }}"
+      loop: "{{ enclosure_cmdb_check.results }}"
+
+
+    - name: Show the combined results
+      debug:
+        var: hostname_and_type
+
+    - name: Initialize lists for racks and enclosures
+      set_fact:
+        rack_hostnames: []
+        enclosure_hostnames: []
+      # delegate_to: localhost
+      # run_once: true
+
+    - name: Separate hostnames into racks
+      set_fact:
+        rack_hostnames: "{{ rack_hostnames + [item.hostname] }}" 
+      when: "'Rack' in item.server_type"
+      loop: "{{ hostname_and_type }}"
+      # delegate_to: localhost
+      # run_once: true
+
+    - name: Separate hostnames into enclosures
+      set_fact:
+        enclosure_hostnames: "{{ enclosure_hostnames + [item.hostname] }}"
+      when: "'Enclosure' in item.server_type"
+      loop: "{{ hostname_and_type }}"
+
+    - debug:
+        var: rack_hostnames
+
+    - debug:
+        var: enclosure_hostnames
+
+    - name: Setting dynamic inventory for RACK
+      add_host:
+        hostname: "{{ item }}"
+        groups: esxideco_rack
+      loop: '{{ rack_hostnames }}'
+
+    - name: Setting dynamic inventory for ENCLOSURES
+      add_host:
+        hostname: "{{ item }}"
+        groups: enclosures
+      loop: '{{ enclosure_hostnames }}'
+
+
+    - debug:
+        var: associated_cis
+          
+    - debug:
+        var: cr
+
+    - debug:
+        var: graceperiod_flag
+
+    - debug:
+        var: retention_days
+
+    - debug:
+        var: hostvars['localhost']['rack_hostnames']
+      delegate_to: localhost # Ensure this runs for localhost if not already in a localhost play
+
+    - debug:
+        msg: "Evaluating condition: {{ hostvars['localhost']['rack_hostnames'] | default([]) | length > 0 }}"
+      delegate_to: localhost # Ensure this runs for localhost
+      
+
+    - name: "Check entry for DECO server"
+      final_create_metadata:
+        cr: "{{ cr }}"
+        awx_job_id: "{{ tower_job_id }}" 
+        ritm_number: "{{ ritm_number }}"
+        requestor_name: "{{ requester_name }}"
+        retention_days: "F"
+        requestor_group: "{{ requester_group }}"
+        pillar: "F"
+        mit_ticket: "F"
+        cmdb: "T"
+        connection_string: "{{ private_endpoint_connection_string }}"
+      register: metadata_update
+      delegate_to: localhost
+      # when: '"SUCCESSFULLY" in output.cmdb_result'
+
+    - debug:
+        var: metadata_update 
+      # when: '"SUCCESSFULLY" in output.cmdb_result'    
+
+    # - name: "Check entry for DECO server"
+    #   final_create_cr:
+    #     ci: "{{ inventory_hostname }}"
+    #     cr: "{{ cr }}"
+    #     connection_string: "{{ private_endpoint_connection_string }}"
+    #   register: create_cr_update
+    #   delegate_to: localhost
+
+    - name: "Check entry for DECO server"
+      final_create_cr:
+        ci: "{{ item }}"
+        cr: "{{ cr }}"
+        connection_string: "{{ private_endpoint_connection_string }}"
+      register: create_cr_update
+      delegate_to: localhost
+      loop: "{{ server_list }}"
+
+    - debug:
+        var: create_cr_update     
+
+    # update RITM number in CR overview
+    - name: "Update CR overview with RITM number"
+      update_cr_overview:
+        win_url: "{{winaproach_url}}"
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+        cr: "{{ cr }}"
+        text: "!RITM Number: {{ ritm_number }}"
+      delegate_to: localhost
+      register: update_cr_output 
+      retries: 3
+      delay: 5
+      until: update_cr_output.status.httpStatusCode == "200" and update_cr_output.status.status == "SUCCESS"
+    
+    - debug:
+        var: update_cr_output
+
+    - name: Launching enclosure deco job    # Launches enclosure_deco.yml
+      deco_jobs_esxi:
+        url: "{{awx_instance}}"
+        username: "{{ auth_username }}"
+        password: "{{ auth_password }}"
+        ci: '{{ enclosure_hostnames }}'
+        cr: "'{{ cr }}'"
+        ritm_number: "{{ ritm_number }}"
+        graceperiod_flag: "'{{ graceperiod_flag }}'"
+        requester_name: "{{ requester_name }}"
+        requester_group: "{{ requester_group }}"
+        template_id: "34240"
+      delegate_to: localhost                
+      register: job_status
+      when: enclosure_hostnames != []
+
+    - name: Display ID
+      debug:
+        var: job_status
+      when: enclosure_hostnames != []
+
+    - set_fact:
+        enc_job_id: ""     
+
+    - set_fact:
+        enc_job_id: "{{job_status.status.job}}"
+      when: enclosure_hostnames != [] and job_status is search("job")       
+
+    - name: "Custom module [CREATE TR] for Job details"
+      create_tr:
+        record_type: "TR"
+        title: "CSTY:DECO:DCAT: ESXI ENCLOSURE/ BLADES DECO  -Trigger-Job details " #remove test while putting for production
+        assignee_name: "DecoP112686"
+        assignee_group: "DINFDECO"            
+        severity: "4"
+        overview: "ESXi DECO - Job details"
+        parent_id: "{{ cr }}"            
+        username: "{{ winaproach_username }}"    
+        password: "{{ winaproach_password }}"
+      delegate_to: localhost  
+      no_log: False
+      register: create_tr_output_enc
+      when: enclosure_hostnames != []
+
+    - set_fact:
+        record_enc: "{{create_tr_output_enc.record_id}}"
+      when: enclosure_hostnames != []
+
+    - debug: 
+        var: record_enc
+      when: enclosure_hostnames != []
+
+    - name: "Add message to TR"
+      add_message_to_tr:
+        record_id: "{{ record_enc }}"
+        message: "Enclosure Deco - Trigger - jobID: {{ enc_job_id }}"             
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+      delegate_to: localhost
+      register: add_msg_output
+      when: enclosure_hostnames != [] and enc_job_id != ""
+
+    - name: "Add message to TR"
+      add_message_to_tr:
+        record_id: "{{ record_enc }}"
+        message: "Enclosure Deco - Trigger - fail to launch job need attention"             
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+      delegate_to: localhost
+      register: add_msg_output
+      when: enclosure_hostnames != [] and enc_job_id == ""
+
+    - name: "custom module [CLOSE TR]"
+      close_tr:
+        record_id: "{{ record_enc }}"
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+      register: close_tr_output
+      when: enclosure_hostnames != []
+
+
+
+
+
+
+    - name: Launching rack deco job    # Launches rack_deco.yml
+      deco_jobs_esxi:
+        url: "{{awx_instance}}"  
+        username: "{{ auth_username }}"
+        password: "{{ auth_password }}"
+        ci: '{{ rack_hostnames }}'
+        cr: "'{{ cr }}'"
+        ritm_number: "{{ ritm_number }}"
+        graceperiod_flag: "'{{ graceperiod_flag }}'"
+        requester_name: "{{ requester_name }}"
+        requester_group: "{{ requester_group }}"
+        template_id: "31969"
+      delegate_to: localhost                
+      register: job_status
+      when: hostvars['localhost']['rack_hostnames'] != []
+
+    - name: Display ID
+      debug:
+        var: job_status
+      when: hostvars['localhost']['rack_hostnames'] != []
+
+    - set_fact:
+        rack_job_id: ""     
+
+    - set_fact:
+        rack_job_id: "{{job_status.status.job}}"
+      when: hostvars['localhost']['rack_hostnames'] != [] and job_status is search("job")     
+
+    - name: "Custom module [CREATE TR] for Job details"
+      create_tr:
+        record_type: "TR"
+        title: "CSTY:DECO:DCAT: ESXI RACK DECO -Trigger-Job details " #remove test while putting for production
+        assignee_name: "DecoP112686"
+        assignee_group: "DINFDECO"            
+        severity: "4"
+        overview: "ESXi DECO - Job details"
+        parent_id: "{{ cr }}"            
+        username: "{{ winaproach_username }}"    
+        password: "{{ winaproach_password }}"
+      delegate_to: localhost  
+      no_log: False
+      register: create_tr_output_rack
+      when: hostvars['localhost']['rack_hostnames'] != []      
+
+
+    - set_fact:
+        record_rack: "{{create_tr_output_rack.record_id}}"
+      when: hostvars['localhost']['rack_hostnames'] != []
+
+    - debug: 
+        var: record_rack
+      when: hostvars['localhost']['rack_hostnames'] != []
+
+    - name: "Add message to TR"
+      add_message_to_tr:
+        record_id: "{{ record_rack }}"
+        message: "Rack Deco - Trigger - jobID: {{ rack_job_id }}"             
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+      delegate_to: localhost
+      register: add_msg_output
+      when: hostvars['localhost']['rack_hostnames'] != [] and rack_job_id != ""
+
+    - name: "Add message to TR"
+      add_message_to_tr:
+        record_id: "{{ record_rack }}"
+        message: "Rack Deco - Trigger - fail to launch job need attention"             
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+      delegate_to: localhost
+      register: add_msg_output
+      when: hostvars['localhost']['rack_hostnames'] != [] and rack_job_id == ""
+
+    - name: "custom module [CLOSE TR]"
+      close_tr:
+        record_id: "{{ record_rack }}"
+        username: "{{ winaproach_username }}"
+        password: "{{ winaproach_password }}"
+      register: close_tr_output
+      when: hostvars['localhost']['rack_hostnames'] != []
+

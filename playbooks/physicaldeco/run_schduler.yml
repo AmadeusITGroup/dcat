@@ -1,0 +1,22 @@
+---
+- hosts: localhost
+  gather_facts: no
+
+  tasks: 
+
+  - name: run scheduler
+    schedule_job_san_cleanup:
+      cr: "{{ cr }}"
+      id: 10984
+      associated_cis: "{{ associated_cis }}"
+      retention_days: "{{ retention_days }}"
+      ritm_number: "{{ ritm_number }}"
+      graceperiod_flag: "{{ graceperiod_flag }}"
+      requester_name: "{{ requester_name  }}"      
+      requester_group: "{{ requester_group }}"
+    register: schedule_result
+    delegate_to: localhost
+    run_once: True
+  
+  - debug:
+      var: schedule_result  

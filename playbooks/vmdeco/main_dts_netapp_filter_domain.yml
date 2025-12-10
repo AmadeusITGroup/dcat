@@ -1,0 +1,52 @@
+---
+- name: "Filter dts and netapp based on domain"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: filter domain
+      ansible.builtin.import_role:
+        name: dts_netapp_filter
+        tasks_from: filter_hostlist_dts_netapp_domain.yml
+
+- name: "Create TR for filter domain"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    filter_domain: "F"
+    graceperiod_flag: False
+    instanceid: ""
+  tasks:
+    - name: filter domain
+      ansible.builtin.import_role:
+        name: dts_netapp_filter
+        tasks_from: create_tr_dts_netapp_filter_server.yml
+
+- name: "Filtering hosts for dts and netapp"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no
+  tasks:
+    - name: filter domain dts and netapp
+      ansible.builtin.import_role:
+        name: dts_netapp_filter
+        tasks_from: vcenter_details_graceperiod_dts_server.yml
+      when: (filter_domain == "F") and filter_domain is defined and (instanceid != "F") and instanceid is defined
+
+- name: "Add info to the TR  for filter domain"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    filter_domain: "F"
+    graceperiod_flag: False
+    instanceid: ""
+  tasks:
+    - name: filter domain
+      ansible.builtin.import_role:
+        name: dts_netapp_filter
+        tasks_from: add_info_dts_netapp_filter.yml
+
+    - name: filter domain
+      ansible.builtin.import_role:
+        name: dts_netapp_filter
+        tasks_from: logger_filter_domain.yml

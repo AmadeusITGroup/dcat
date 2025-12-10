@@ -1,0 +1,62 @@
+---
+- name: "ipam cleanup"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no    
+  tasks: 
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: filter_hostlist_dns_ip_removal.yml
+
+- name: "Create TR for ipam cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    dns_check: "F"
+    graceperiod_flag: True
+    nas_check: "T"
+  tasks:
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: create_tr_dns.yml
+
+- name: "ipam cleanup"
+  hosts: all:vmdeco
+  serial: "{{ hostvars.localhost.serial_number.msg }}"
+  gather_facts: no
+  tasks:
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: dns_ip_removal.yml
+      when: (dns_check == "F") and dns_check is defined and (nas_check == "T") and nas_check is defined
+
+- name: "Add info TR for ipam cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: True
+    dns_check: "F"
+    nas_check: "T"
+  tasks:
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: add_info_dns.yml
+
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: logger_dns.yml
+
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: dns_windows_tr.yml
+
+    # - name: ipam cleanup
+    #   ansible.builtin.import_role:
+    #     name: ipam
+    #     tasks_from: dns_logging.yml

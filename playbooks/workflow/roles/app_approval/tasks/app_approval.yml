@@ -1,0 +1,137 @@
+---             
+    - name: "Handling node list, TR and retention days"
+      throttle: 1
+      block:  
+        - set_fact:
+            app_file: "app_group.txt"
+            no_data_file: "no_data_file.txt"
+            logger_file: "deco_results.yml"
+
+
+        # - name: Display the JSON file content
+        #   shell: cat private_endpoint_connection_string.yml
+        #   delegate_to: localhost
+        #   register: result_private_endpoint_connection_string
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+        #   delegate_to: localhost          
+
+        # - name: "Check entry for DECO server"
+        #   final_app_tr:
+        #     ci: "{{ inventory_hostname }}"
+        #     cr: "{{ cr }}"
+        #     event_number: "0"
+        #     event_status: "F"
+        #     created_on: "F"
+        #     last_update: "F"
+        #     connection_string: "{{ private_endpoint_connection_string }}"
+        #   register: app_tr_add
+        #   delegate_to: localhost
+
+        # - debug:
+        #     var: app_tr_add 
+
+        # - set_fact: 
+        #     app_tr: '{{app_tr_add.create_entity_result.event_number}}' 
+
+        # - name: "DECO cmdb check failure "
+        #   shell: echo "{{ inventory_hostname }}, [INFO], already app TR {{ app_tr }} has been processed." >> {{logger_file}}                    
+        #   delegate_to: localhost
+        #   when: app_tr != "0"             
+
+        # - meta: end_host
+        #   when: app_tr != "0"
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Test CMDB custom module"
+          server_details_app:
+            conn_str: "{{ private_endpoint_connection_string }}"
+            server_name: '{{ inventory_hostname |lower }}'
+            instance_id: ''
+            cmdb_server: "{{CMDB_URL}}"
+            user_name: "{{ emdb_username }}"
+            pass_word: "{{ emdb_password }}"  
+          delegate_to: localhost
+          register: output
+          until: '"Exception" not in output.cmdb_result'
+          retries: 3
+          delay: 30
+
+        - set_fact:
+            cmdb_status: "{{output.cmdb_result}}"
+
+        - meta: end_play
+          when: '"Kindly check with application team" in cmdb_status'
+
+        - name: Filter Application owner group 
+          get_app_owner:
+            host: "{{ inventory_hostname }}"
+            cmdb_rtu: ""{{CMDB_URL}}""
+          delegate_to: localhost
+          register: app_owner_result
+
+        - name: Debug raw host_group result
+          debug:
+            msg: "Application Ownership : {{ app_owner_result.status }}"
+        
+        - set_fact:
+            host_group_status: "{{ app_owner_result.status if app_owner_result.status is defined else 'Exception' }}"
+
+
+        - name: "Write host_group_status to no_data_file if Exception"
+          shell: echo "{{ inventory_hostname }}:{{ host_group_status }}" >> {{ no_data_file }}
+          delegate_to: localhost
+          when: "'Exception' in host_group_status"
+
+        - name: "Log missing group info in logger_file if Exception"
+          shell: echo "{{ inventory_hostname }} - Unable to find app group from CMDB" >> {{ logger_file }}
+          delegate_to: localhost
+          when: "'Exception' in host_group_status"
+
+
+        - name: Compute initial group_code_result
+          group_code:
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}" 
+            url: "{{WIN@PROACH_URL}}"
+            group: "{{ host_group_status }}"
+          delegate_to: localhost
+          register: group_code_result
+
+
+        - name: Normalize group_code 
+          set_fact:
+            group_code: "{{ group_code_result.status if group_code_result.status is defined else 'Exception' }}"
+        
+        - name: Override group_code when Exception for any server
+          set_fact:
+            group_code: "{{ requester_group }}"
+          when: "'Exception' in host_group_status or (group_code is defined and 'Exception' in group_code)"
+
+        - name: Debug final group_code
+          debug:
+            msg: "Final group_code={{ group_code }}"
+
+        - name: Write group_code to logger_file
+          shell: echo "{{ inventory_hostname }} - Found Appgroup, Assigned ticket to {{ group_code }}" >> {{ logger_file }}
+          delegate_to: localhost
+
+        - name: Write group_code to owner_file
+          shell: echo "{{ inventory_hostname }} {{ group_code }}" >> {{ app_file }}
+          delegate_to: localhost
+
+
+      rescue:
+        - debug:
+            msg: "DECO flow unable to fetch owner group for host {{ inventory_hostname}}"

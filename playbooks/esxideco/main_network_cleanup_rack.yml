@@ -1,0 +1,19 @@
+---
+- name: "Network Cleanup"
+  hosts: esxideco_rack
+  gather_facts: no 
+  tasks: 
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup_rack
+        tasks_from: filter_hostlist_network.yml
+
+- name: "network Cleanup"
+  hosts: esxideco_rack
+  gather_facts: no 
+  tasks: 
+    - name: network cleanup
+      ansible.builtin.import_role:
+        name: network_cleanup_rack
+        tasks_from: network_switch_port.yml
+      when: network_cleanup == "F" and ipam_cleanup == "T"

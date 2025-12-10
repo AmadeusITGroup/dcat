@@ -1,0 +1,54 @@
+---
+# - name: "Filter hostlist for IP_DNS Removal"
+#   hosts: all
+#   throttle: 1
+#   serial: 5  
+#   gather_facts: no
+#   vars:
+#     graceperiod_flag: ""
+#     dns_check: ""
+#     nas_check: ""
+#     host_list: host_list_ip_dns.yml
+
+#   tasks:
+    - name: "Check entry for DECO server"
+      block:
+
+        - set_fact:
+            host_list: host_list_ip_dns.yml
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost
+
+        - name: "Check entry for DECO server"
+          azure_update_ref:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status
+          delegate_to: localhost
+        
+
+        - set_fact: 
+            dns_check: "{{idem_status.module_update.dns}}"
+                    
+
+        - set_fact: 
+            nas_check: '{{idem_status.module_update.nasstorage}}'          
+
+        - name: "VM list"
+          shell: echo "{{ inventory_hostname }}," >> {{ host_list }}                   
+          delegate_to: localhost
+          when: dns_check == "F" and nas_check == "T"                 
+
+            
+      rescue:
+        - debug:
+            msg: "Failed to fect hostlist for VM IP_DNS Removal"      
+

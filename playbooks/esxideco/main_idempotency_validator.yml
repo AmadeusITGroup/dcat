@@ -1,0 +1,31 @@
+---
+
+# - name: Set target_hosts dynamically
+#   hosts: localhost
+#   gather_facts: no
+#   tasks:
+#     - name: Set target_hosts as blades
+#       set_fact:
+#         target_hosts: "blades"
+#       run_once: true
+#       delegate_to: localhost
+
+
+# - name: Debug - Blades Group After Refresh
+#   hosts: localhost
+#   gather_facts: no
+#   tasks:
+#     - name: Debug target hosts
+#       debug:
+#         var: target_hosts
+
+
+- name: "State File Execution - Idempotency"
+  # hosts: enclosures
+  hosts: "{{ target_hosts }}"
+  gather_facts: no    
+  tasks:
+    - name: Run idempotency validator
+      ansible.builtin.import_role:
+        name: idem
+        tasks_from: idempotency_validator.yml

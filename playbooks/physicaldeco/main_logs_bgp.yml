@@ -1,0 +1,36 @@
+---
+- name: "success/Failure logs"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: success/Failure logs
+      ansible.builtin.import_role:
+        name: logs_bgp
+        tasks_from: success_fail_doc_bgp.yml
+        
+
+- name: "Create TR for success/Failure logs"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: False 
+  tasks:
+    - name: success/Failure logs
+      ansible.builtin.import_role:
+        name: logs_bgp
+        tasks_from: create_tr_success_fail_doc_bgp.yml
+
+    - name: success/Failure logs
+      ansible.builtin.import_role:
+        name: logs_bgp
+        tasks_from: add_info_success_fail_doc_bgp.yml
+
+    # - name: success/Failure logs
+    #   ansible.builtin.import_role:
+    #     name: logs_bgp
+    #     tasks_from: logger_success_fail_doc_bgp.yml
+
+    # - name: success/Failure logs
+    #   ansible.builtin.import_role:
+    #     name: logs_bgp
+    #     tasks_from: close_logger_tr.yml

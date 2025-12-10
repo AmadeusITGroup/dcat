@@ -1,0 +1,12 @@
+---
+- name: Ping Playbook
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Ping all hosts
+      ansible.builtin.ping:
+
+    - name: Output success message
+      ansible.builtin.debug:
+        msg: "Successfully pinged all hosts from Template 2!"

@@ -1,0 +1,47 @@
+---
+- name: "poweron process"
+  hosts: physicaldeco
+  gather_facts: no 
+  tasks: 
+    - name: poweron process
+      ansible.builtin.import_role:
+        name: ilo_poweron
+        tasks_from: filter_hostlist_poweron.yml
+
+- name: "Create TR for poweron"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_for_poweron: ""
+    graceperiod_flag: True
+  tasks:        
+    - name: poweron cleanup
+      ansible.builtin.import_role:
+        name: ilo_poweron
+        tasks_from: create_tr_for_poweron.yml
+
+- name: "poweron Cleanup"
+  hosts: physicaldeco
+  gather_facts: no   
+  tasks: 
+    - name: poweron cleanup
+      ansible.builtin.import_role:
+        name: ilo_poweron
+        tasks_from: poweron_ilo.yml
+      when: (poweron == "F") and poweron is defined  and (shutdown_bgp == "T") and shutdown_bgp is defined
+
+- name: "Add info TR for backup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    graceperiod_flag: true
+  tasks:
+    - name: poweron server
+      ansible.builtin.import_role:
+        name: ilo_poweron
+        tasks_from: add_info_for_poweron.yml
+
+    # - name: poweron
+    #   ansible.builtin.import_role:
+    #     name: ilo_poweron
+    #     tasks_from: logger_poweron.yml

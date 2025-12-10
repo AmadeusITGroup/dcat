@@ -1,0 +1,58 @@
+---
+- name: "ipam cleanup"
+  hosts: all:physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: filter_hostlist_dns_ip_removal.yml
+
+- name: "Create TR for ipam cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    dns: "F"
+    graceperiod_flag: True
+  tasks:
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: create_tr_dns.yml
+
+- name: "ipam cleanup"
+  hosts: all:physicaldeco
+  gather_facts: no   
+  tasks: 
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: dns_ip_removal.yml
+      when: (dns == "F") and dns is defined and shutdown == "T" and shutdown is defined
+
+- name: "Add info TR for ipam cleanup"
+  hosts: localhost
+  gather_facts: no
+  vars:   
+    graceperiod_flag: True
+    dns: "F"
+  tasks:
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: add_info_dns.yml
+
+    # - name: ipam cleanup
+    #   ansible.builtin.import_role:
+    #     name: ipam
+    #     tasks_from: logger_dns.yml
+
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam
+        tasks_from: dns_windows_tr.yml
+
+    # - name: ipam cleanup
+    #   ansible.builtin.import_role:
+    #     name: ipam
+    #     tasks_from: dns_logging.yml

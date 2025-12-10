@@ -1,0 +1,53 @@
+---
+# - name: Collate arista_out_formatted
+#   hosts: localhost
+#   gather_facts: false
+
+#   tasks:
+    - name: "Collate arista_out_formatted"
+      block:
+
+        - name: VM_host list
+          shell: cat sw_arista_info.yml
+          delegate_to: localhost
+          register: vm_result              
+
+        - name: save the vm list to a Variable as a Fact
+          set_fact:
+            arista_out_formatted: "{{ vm_result.stdout }}" 
+          delegate_to: localhost
+
+
+        - name: Print arista_final
+          debug:
+            var: arista_out_formatted
+
+
+        - name: "Switch_port fetch"
+          network_final:
+            swt_arista: "{{ arista_out_formatted }}" 
+          register: arista_list
+          delegate_to: localhost
+
+        - set_fact:
+            arista_final: "{{ arista_list.output_data }}"
+
+        - name: Convert list to string
+          set_fact:
+            arista_final_string: "{{ arista_final | join('') }}"        
+
+        - debug:
+            msg: "{{ arista_final_string | type_debug }}"        
+            
+
+        - name: Print formatted arista final
+          debug:
+            var: arista_final_string 
+
+        - name: "data arista"
+          shell: echo '{{arista_final_string}}' >> sw_arista_info_final.yml
+          delegate_to: localhost
+
+      rescue:           
+        - debug:
+            var: arista_out_formatted

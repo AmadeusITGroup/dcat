@@ -1,0 +1,67 @@
+---
+- name: "cmdb duplicate check"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: cmdb duplicate check
+      ansible.builtin.import_role:
+        name: cmdb_duplicate_check
+        tasks_from: filter_hostlist_cmdb_check_dup.yml
+
+- name: "Create TR for cmdb duplicate check"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_cmdb_dup_info: ""
+    graceperiod_flag: False
+    cmdb_dup_check: "F"
+  tasks:
+    - name: cmdb duplicate check
+      ansible.builtin.import_role:
+        name: cmdb_duplicate_check
+        tasks_from: create_tr_cmdb_duplicate_check_info.yml
+
+- name: "cmdb duplicate check"
+  hosts: physicaldeco
+  gather_facts: no    
+  tasks: 
+    - name: cmdb duplicate check
+      ansible.builtin.import_role:
+        name: cmdb_duplicate_check
+        tasks_from: cmdb_check_duplicates.yml
+      when: cmdb_dup_check == "F" and ilo_reconfig == "T"
+
+- name: "ADD info TR for cmdb duplicate check"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    record_cmdb_dup_info: ""
+    graceperiod_flag: False
+    cmdb_dup_check: "F"
+  tasks:
+    - name: cmdb duplicate check
+      ansible.builtin.import_role:
+        name: cmdb_duplicate_check
+        tasks_from: add_info_cmdb_duplicate_check.yml
+
+# - name: "cmdb duplicate check"
+#   hosts: all:vmdeco
+#   gather_facts: no    
+#   tasks: 
+#     - name: cmdb duplicate check
+#       ansible.builtin.import_role:
+#         name: cmdb_duplicate_check
+#         tasks_from: cmdb_logging.yml
+
+# - name: "Logger for cmdb duplicate check"
+#   hosts: localhost
+#   gather_facts: no
+#   vars:
+    # record_cmdb_dup_info: ""
+    # graceperiod_flag: False
+    # cmdb_dup_check: "F"
+#   tasks:
+#     - name: cmdb duplicate check
+#       ansible.builtin.import_role:
+#         name: cmdb_duplicate_check
+#         tasks_from: logger_cmdb.yml

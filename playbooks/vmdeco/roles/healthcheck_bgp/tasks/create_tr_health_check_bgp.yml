@@ -1,0 +1,415 @@
+---  
+    - name: "Handling Create TR- Win@proach for health check task "
+      block:
+
+        # - name: Display the JSON file content
+        #   shell: cat check_artifacts.yml
+        #   delegate_to: localhost
+        #   register: result_check_arti
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     check_artifacts: "{{ result_check_arti.stdout }}" 
+        #   delegate_to: localhost
+
+
+        - name: Display the JSON file content
+          shell: cat check_remedy.yml
+          delegate_to: localhost
+          register: result_check_remedy
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy: "{{ result_check_remedy.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat check_synergon.yml
+          delegate_to: localhost
+          register: result_check_synergon
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_synergon: "{{ result_check_synergon.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat check_vcenter.yml
+          delegate_to: localhost
+          register: result_check_vcenter
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vcenter: "{{ result_check_vcenter.stdout }}" 
+          delegate_to: localhost
+
+        # - name: Display the JSON file content
+        #   shell: cat check_artifacts_success.yml
+        #   delegate_to: localhost
+        #   register: result_check_arti_suc
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     check_artifacts_success: "{{ result_check_arti_suc.stdout }}" 
+        #   delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_synergon_success.yml
+          delegate_to: localhost
+          register: result_check_syner_success
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_synergon_success: "{{ result_check_syner_success.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_remedy_success.yml
+          delegate_to: localhost
+          register: result_check_remedy_succ
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy_success: "{{ result_check_remedy_succ.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_vcenter_success.yml
+          delegate_to: localhost
+          register: result_check_vcenter_succ
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vcenter_success: "{{ result_check_vcenter_succ.stdout }}" 
+          delegate_to: localhost                                                                                                              
+
+        - meta: end_host
+          when: check_remedy == "" and check_synergon == "" and check_vcenter == "" and check_synergon_success == "" and check_remedy_success == "" and check_vcenter_success == ""      
+
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: VM DECO : Service health check before grace period"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"            
+            severity: "3"
+            overview: "VM DECO - Service health check - CMDB Remedy/RTU - Artifacts Repo - Synergon - vcenter"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output          
+
+        - set_fact:
+            record_id: "{{create_tr_output.record_id}}"
+   
+    
+        - copy:
+            content: '{{ record_id|to_json }}'
+            dest: record_healthcheck.json
+          delegate_to: localhost
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_id }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Failed to Create VM DECO - TR"
+
+    - name: "Handling Create TR- Win@proach for health check task - Retry 1"
+      block:
+
+        # - name: Display the JSON file content
+        #   shell: cat check_artifacts.yml
+        #   delegate_to: localhost
+        #   register: result_check_arti
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     check_artifacts: "{{ result_check_arti.stdout }}" 
+        #   delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat check_remedy.yml
+          delegate_to: localhost
+          register: result_check_remedy
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy: "{{ result_check_remedy.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat check_synergon.yml
+          delegate_to: localhost
+          register: result_check_synergon
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_synergon: "{{ result_check_synergon.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat check_vcenter.yml
+          delegate_to: localhost
+          register: result_check_vcenter
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vcenter: "{{ result_check_vcenter.stdout }}" 
+          delegate_to: localhost                                           
+                                                                      
+        # - name: Display the JSON file content
+        #   shell: cat check_artifacts_success.yml
+        #   delegate_to: localhost
+        #   register: result_check_arti_suc
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     check_artifacts_success: "{{ result_check_arti_suc.stdout }}" 
+        #   delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_synergon_success.yml
+          delegate_to: localhost
+          register: result_check_syner_success
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_synergon_success: "{{ result_check_syner_success.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_remedy_success.yml
+          delegate_to: localhost
+          register: result_check_remedy_succ
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy_success: "{{ result_check_remedy_succ.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_vcenter_success.yml
+          delegate_to: localhost
+          register: result_check_vcenter_succ
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vcenter_success: "{{ result_check_vcenter_succ.stdout }}" 
+          delegate_to: localhost                                                                                                              
+
+        - meta: end_host
+          when: check_remedy == "" and check_synergon == "" and check_vcenter == "" and check_synergon_success == "" and check_remedy_success == "" and check_vcenter_success == ""      
+      
+
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: record_id_healthcheck == ""                          
+
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: VM DECO : Service health check before grace period"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"            
+            severity: "3"
+            overview: "VM DECO - Service health check - CMDB Remedy/RTU - Artifacts Repo - Synergon - vcenter"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output   
+          when: record_id_healthcheck == ""       
+
+        - set_fact:
+            record_id: "{{create_tr_output.record_id}}"
+          when: record_id_healthcheck == ""    
+
+    
+        - copy:
+            content: '{{ record_id|to_json }}'
+            dest: record_healthcheck.json
+          delegate_to: localhost
+          when: record_id_healthcheck == ""
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_id }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Retried and Failed to Create VM DECO - TR"
+
+    - name: "Handling Create TR- Win@proach for health check task-Retry 2 "
+      block:
+
+        # - name: Display the JSON file content
+        #   shell: cat check_artifacts.yml
+        #   delegate_to: localhost
+        #   register: result_check_arti
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     check_artifacts: "{{ result_check_arti.stdout }}" 
+        #   delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat check_remedy.yml
+          delegate_to: localhost
+          register: result_check_remedy
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy: "{{ result_check_remedy.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat check_synergon.yml
+          delegate_to: localhost
+          register: result_check_synergon
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_synergon: "{{ result_check_synergon.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat check_vcenter.yml
+          delegate_to: localhost
+          register: result_check_vcenter
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vcenter: "{{ result_check_vcenter.stdout }}" 
+          delegate_to: localhost                                                
+                                                                     
+        # - name: Display the JSON file content
+        #   shell: cat check_artifacts_success.yml
+        #   delegate_to: localhost
+        #   register: result_check_arti_suc
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     check_artifacts_success: "{{ result_check_arti_suc.stdout }}" 
+        #   delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_synergon_success.yml
+          delegate_to: localhost
+          register: result_check_syner_success
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_synergon_success: "{{ result_check_syner_success.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_remedy_success.yml
+          delegate_to: localhost
+          register: result_check_remedy_succ
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_remedy_success: "{{ result_check_remedy_succ.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat check_vcenter_success.yml
+          delegate_to: localhost
+          register: result_check_vcenter_succ
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            check_vcenter_success: "{{ result_check_vcenter_succ.stdout }}" 
+          delegate_to: localhost                                                                                                              
+
+        - meta: end_host
+          when: check_remedy == "" and check_synergon == "" and check_vcenter == "" and check_synergon_success == "" and check_remedy_success == "" and check_vcenter_success == ""      
+     
+
+
+        - name: Display the JSON file content
+          shell: cat record_healthcheck.json
+          delegate_to: localhost
+          register: TR_result_healthcheck  
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: record_id_healthcheck == ""    
+          
+        - name: "Custom module [CREATE TR]"
+          create_tr:
+            record_type: "TR"
+            title: "CSTY:DECO:DCAT: VM DECO : Service health check before grace period"
+            assignee_name: "DecoP112686"
+            assignee_group: "DINFDECO"            
+            severity: "3"
+            overview: "VM DECO - Service health check - CMDB Remedy/RTU - Artifacts Repo - Synergon - vcenter"
+            parent_id: "{{ cr }}"            
+            username: "{{ winaproach_username }}"     
+            password: "{{ winaproach_password }}"
+          delegate_to: localhost  
+          no_log: False
+          register: create_tr_output 
+          when: record_id_healthcheck == ""
+       
+
+        - set_fact:
+            record_id: "{{create_tr_output.record_id}}"
+          when: record_id_healthcheck == ""  
+  
+    
+        - copy:
+            content: '{{ record_id|to_json }}'
+            dest: record_healthcheck.json
+          delegate_to: localhost
+          when: record_id_healthcheck == ""
+
+        - name: adding documentation tag
+          tr_documentation:
+            username: "{{ winaproach_username }}"    
+            password: "{{ winaproach_password }}"
+            win_url: "WIN@PROACH_URL"
+            task_id: "{{ record_id }}"
+          register: add_document
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Retried and Failed to Create VM DECO - TR"                                
+

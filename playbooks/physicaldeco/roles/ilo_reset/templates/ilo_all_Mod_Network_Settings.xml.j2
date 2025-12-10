@@ -1,0 +1,24 @@
+<!--        Firmware support information for this script:            -->
+<!--            iLO 4 - All versions.                                -->
+<!--            iLO 3 - All versions.                                -->
+<!--            iLO 2 - All versions.                                -->
+
+<RIBCL VERSION="2.0">
+   <LOGIN USER_LOGIN="not_required" PASSWORD="not_required">
+      <RIB_INFO MODE="write">
+         <MOD_NETWORK_SETTINGS>
+            <ENABLE_NIC value="Yes"/>
+            <SPEED_AUTOSELECT value="YES"/>
+            <DHCP_ENABLE value="Yes"/>
+            <DNS_NAME value="ilo{{ serial_num }}"/>
+            <DHCP_GATEWAY value="Yes"/>
+            <DHCP_WINS_SERVER value="Yes"/>
+            <DHCP_STATIC_ROUTE value="Yes"/>
+            <SHARED_NETWORK_PORT VALUE="N" />
+         </MOD_NETWORK_SETTINGS>
+      </RIB_INFO>
+      <SERVER_INFO MODE="write">
+         <SERVER_AUTO_PWR VALUE="Off"/>
+      </SERVER_INFO>
+   </LOGIN>
+</RIBCL>

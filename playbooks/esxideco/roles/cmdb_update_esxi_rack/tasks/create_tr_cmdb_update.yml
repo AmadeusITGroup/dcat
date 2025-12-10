@@ -1,0 +1,319 @@
+--- 
+    - name: "Handling Create TR- Win@proach for CMDB Update task "
+      block:     
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""      
+
+        - name: esxi host list
+          shell: cat host_list_cmdb_update_esxi.yml
+          delegate_to: localhost
+          register: hostlist_esxi            
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: esxi_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+          
+        - name: Display the JSON file content
+          shell: cat bird_api.yml
+          delegate_to: localhost
+          register: result_bird
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            bird_api: "{{ result_bird.stdout }}" 
+          delegate_to: localhost                     
+
+        - name: TR creation for CMDB Update task 
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "cmdb status update"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: ESXI RACK DECO : cmdb update"
+            ci: "{{ esxi_hostlist}}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id_cmdb_update_esxi
+          delegate_to: localhost
+
+        - debug:
+            var: ticket_id_cmdb_update_esxi      
+
+        - set_fact:
+            record_id_cmdb_up_esxi: "{{ticket_id_cmdb_update_esxi.id.ticketId}}"
+  
+    
+        - copy:
+            content: '{{ record_id_cmdb_up_esxi|to_json }}'
+            dest: record_cmdb_update_esxi.json
+          delegate_to: localhost
+
+      rescue:
+        - debug:
+            msg: "Failed to Create esxi DECO - cmdb update TR"
+
+    - name: "Handling Create TR- Win@proach for CMDB Update task - retry 1 "
+      block:
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""      
+
+        - name: Display the JSON file content for cmdb update
+          shell: cat record_cmdb_update_esxi.json
+          delegate_to: localhost
+          register: TR_result_cmdb_up_esxi
+
+        - name: save the Json data to a Variable as a Fact for cmdb update
+          set_fact:
+            record_id_cmdb_up_esxi: "{{ TR_result_cmdb_up_esxi.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: record_id_cmdb_up_esxi == ""                                  
+
+        - name: esxi_host list
+          shell: cat host_list_cmdb_update_esxi.yml
+          delegate_to: localhost
+          register: hostlist_esxi             
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: esxi_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost 
+
+        - name: Display the JSON file content
+          shell: cat bird_api.yml
+          delegate_to: localhost
+          register: result_bird
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            bird_api: "{{ result_bird.stdout }}" 
+          delegate_to: localhost                    
+
+        - name: TR creation for CMDB Update task 
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "vm deco cmdb status update"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: ESXI RACK DECO : cmdb update"
+            ci: "{{ esxi_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id_cmdb_update_esxi
+          delegate_to: localhost
+          when: record_id_cmdb_up_esxi == ""
+           
+
+        - set_fact:
+            record_id_cmdb_update_phy: "{{ticket_id_cmdb_update_esxi.id.ticketId}}"
+          when: record_id_cmdb_up_esxi == ""  
+   
+    
+        - copy:
+            content: '{{ record_id_cmdb_update_phy|to_json }}'
+            dest: record_cmdb_update_esxi.json
+          delegate_to: localhost
+          when: ticket_id_cmdb_update_esxi is defined
+
+      rescue:
+        - debug:
+            msg: "Failed to Create esxi DECO - cmdb update TR"
+
+    - name: "Handling Create TR- Win@proach for CMDB Update task -retry 2 "
+      block:
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""      
+
+        - name: Display the JSON file content for cmdb update
+          shell: cat record_cmdb_update_esxi.json
+          delegate_to: localhost
+          register: TR_result_cmdb_up_esxi
+
+        - name: save the Json data to a Variable as a Fact for cmdb update
+          set_fact:
+            record_id_cmdb_up_esxi: "{{ TR_result_cmdb_up_esxi.stdout[1:-1] }}"
+          delegate_to: localhost
+
+        - name: Sleep for 20 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 20
+          delegate_to: localhost
+          when: record_id_cmdb_up_esxi == ""                                 
+
+        - name: esxi_host list
+          shell: cat host_list_cmdb_update_esxi.yml
+          delegate_to: localhost
+          register: hostlist_esxi              
+
+        - name: save the esxi list to a Variable as a Fact
+          set_fact:
+            esxi_hostlist: "{{ hostlist_esxi.stdout[:-1] }}" 
+          delegate_to: localhost 
+
+        - meta: end_host
+          when: esxi_hostlist == ""
+
+        - name: Display the JSON file content
+          shell: cat winaproach_category.yml
+          delegate_to: localhost
+          register: result_winaproach_category
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            win_category: "{{ result_winaproach_category.stdout }}" 
+          delegate_to: localhost
+
+        - name: Display the JSON file content
+          shell: cat bird_api.yml
+          delegate_to: localhost
+          register: result_bird
+
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            bird_api: "{{ result_bird.stdout }}" 
+          delegate_to: localhost                     
+
+        - name: TR creation for CMDB Update task 
+          create_tr_bird:
+            username: "{{ btmp_user }}"
+            password: "{{ btmp_password }}"
+            bird: "{{ bird_api }}"
+            template_name: "vm deco cmdb status update"
+            cr_id: "{{ cr }}"
+            ticket_title: "CSTY:DECO:DCAT: ESXI RACK DECO : cmdb update"
+            ci: "{{ esxi_hostlist }}"
+            winaproach_category: "{{ win_category }}" 
+          register: ticket_id_cmdb_update_esxi
+          delegate_to: localhost
+          when: record_id_cmdb_up_esxi == ""
+          
+
+        - set_fact:
+            record_id_cmdb_update_phy: "{{ticket_id_cmdb_update_esxi.id.ticketId}}"
+          when: record_id_cmdb_up_esxi == ""
+    
+    
+        - copy:
+            content: '{{ record_id_cmdb_update_phy|to_json }}'
+            dest: record_cmdb_update_esxi.json
+          delegate_to: localhost
+          when: ticket_id_cmdb_update_esxi is defined
+
+      rescue:
+        - debug:
+            msg: "Failed to Create esxi DECO - cmdb update TR"                        
+
+    - name: "Handling Start Implementation- Win@proach cmdb update TR "
+      block:
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""      
+
+        - name: Display the JSON file content for cmdb update
+          shell: cat record_cmdb_update_esxi.json
+          delegate_to: localhost
+          register: TR_result_cmdb_up_esxi
+
+        - name: save the Json data to a Variable as a Fact for cmdb update
+          set_fact:
+            record_id_cmdb_up_esxi: "{{ TR_result_cmdb_up_esxi.stdout[1:-1] }}"
+          delegate_to: localhost         
+
+        - meta: end_host
+          when: record_id_cmdb_up_esxi== "" 
+
+        - name: Sleep for 62 seconds and continue with play
+          ansible.builtin.wait_for:
+            timeout: 62
+          delegate_to: localhost
+
+        - name: Start Implementation for CMDB update TR
+          winaproach:
+            system: prod
+            type: task_record
+            operation: start_implementation
+            username: "{{ winaproach_username }}"
+            password: "{{ winaproach_password }}"
+            fields:
+              task_id: "{{ record_id_cmdb_up_esxi }}"
+          register: start_implementation
+          delegate_to: localhost
+        
+      rescue:
+        - name: dump test output in the rescue block cmdb update
+          debug:
+            msg: "Failed to Start Implementation on esxi DECO - CMDB update :'{{ record_id_cmdb_up_esxi }}'"

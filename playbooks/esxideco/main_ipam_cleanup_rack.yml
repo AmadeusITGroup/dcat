@@ -1,0 +1,52 @@
+---
+- name: "ipam cleanup"
+  hosts: esxideco_rack
+  gather_facts: no    
+  tasks: 
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam_rack
+        tasks_from: filter_hostlist_dns_ip_removal.yml
+
+- name: "Create TR for ipam cleanup"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam_rack
+        tasks_from: create_tr_dns.yml
+
+- name: "ipam cleanup"
+  hosts: esxideco_rack
+  gather_facts: no   
+  tasks: 
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam_rack
+        tasks_from: dns_ip_removal.yml
+      when: ipam_cleanup == "F" and server_shutdown == "T"
+
+- name: "Add info TR for ipam cleanup"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: ipam cleanup
+      ansible.builtin.import_role:
+        name: ipam_rack
+        tasks_from: add_info_dns.yml
+
+    # - name: ipam cleanup
+    #   ansible.builtin.import_role:
+    #     name: ipam
+    #     tasks_from: logger_dns.yml
+
+    # - name: ipam cleanup
+    #   ansible.builtin.import_role:
+    #     name: ipam
+    #     tasks_from: dns_windows_tr.yml
+
+    # - name: ipam cleanup
+    #   ansible.builtin.import_role:
+    #     name: ipam
+    #     tasks_from: dns_logging.yml

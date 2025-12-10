@@ -1,0 +1,54 @@
+---
+    - name: "Check entry for DECO server"
+      block:
+
+        - set_fact:
+            host_list: host_list_ip_dns.yml
+
+        # - name: Display the JSON file content
+        #   shell: cat record_healthcheck.json
+        #   delegate_to: localhost
+        #   register: TR_result_healthcheck  
+
+        # - name: save the Json data to a Variable as a Fact
+        #   set_fact:
+        #     record_id_healthcheck: "{{ TR_result_healthcheck.stdout[1:-1] }}"
+        #   delegate_to: localhost
+
+        # - meta: end_host
+        #   when: record_id_healthcheck != ""
+
+        - name: Display the JSON file content
+          shell: cat private_endpoint_connection_string.yml
+          delegate_to: localhost
+          register: result_private_endpoint_connection_string
+    
+        - name: save the Json data to a Variable as a Fact
+          set_fact:
+            private_endpoint_connection_string: "{{ result_private_endpoint_connection_string.stdout }}"
+          delegate_to: localhost      
+                
+        - name: "Check entry for DECO server for filter hostlist for cmdb duplicate list"
+          azure_update_ref_phy:
+            connection_string: "{{ private_endpoint_connection_string }}"
+            hostname: "{{inventory_hostname}}"
+          register: idem_status 
+          delegate_to: localhost
+        
+
+        - set_fact: 
+            dns_check: '{{idem_status.module_update.dns}}'                  
+
+        - set_fact: 
+            shutdown: '{{idem_status.module_update.shutdown}}'       
+
+        - name: "PHYSICAL list"
+          shell: echo "{{ inventory_hostname }}," >> {{ host_list }}                   
+          delegate_to: localhost
+          when: dns_check == "F" and shutdown == "T"                 
+
+            
+      rescue:
+        - debug:
+            msg: "Failed to fect hostlist for PHYSICAL IP_DNS Removal"      
+

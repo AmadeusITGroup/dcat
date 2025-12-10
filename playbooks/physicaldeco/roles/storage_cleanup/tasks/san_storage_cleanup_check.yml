@@ -1,0 +1,93 @@
+- name: "SAN_cleanup Checking"
+  throttle: 1
+  block:
+
+    - set_fact:
+        ip_addr: "{{ ipaddr.2.0}}"
+        ports: "{{ ipaddr.3}}"
+
+    ########### CHECKING PART ###########################
+
+    - name: "Test custom module for san process confirmation."
+      san_process_check:
+        username: "{{ synergon_username }}"
+        password: "{{ synergon_password }}"
+        ipaddr: "{{ ip_addr }}" 
+        hostname: "{{ inventory_hostname }}"
+        port_name: "{{ inner_item }}"
+      loop: "{{ ports }}"
+      loop_control:
+        loop_var: inner_item
+      register: san_process
+      ignore_errors: True
+
+    - debug:
+        var: san_process
+
+    - name: "Debug san process confirmation"
+      debug:
+        var: san_process.results
+    - set_fact:
+          san_process_info: "{{ san_process.results }}"
+
+    - name: "Testing Switches_Deletion_Check Module"
+      switches_check:
+          ipaddr: "{{ ip_addr }}"
+          hostname: "{{ inventory_hostname }}"
+          check_switches: "{{ san_process_info }}"
+      register: switches_final_output
+      ignore_errors: True
+
+    - name: "Debug Switches_Deletion_Check Module"
+      debug:
+        var: switches_final_output
+
+    - set_fact:
+          result_switch: "{{ switches_final_output.result}}"
+
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp 
+
+    - set_fact:
+        time: "{{tstamp.stdout}}"   
+
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+      when: result_switch == "Fail"
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }},{{ time }}, [ERROR], - SAN CLEANUP Failed for the switch IP {{ip_addr}}." >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost  
+      when: result_switch == "Fail"   
+    - meta: end_host               ### commented this to check for both the port information for same host 
+      when: result_switch == "Fail"
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [INFO],SAN CLEANUP HAS COMPLETED SUCCESSFULLY for switch IP {{ip_addr}} " >> {{file_storage_cleanup_suc}}                    
+      delegate_to: localhost  
+      when: result_switch == "Success"
+
+  rescue: 
+    - name: When above one throws error the below task should execute
+      debug:
+        msg: "Exception occurred but rescued - check errors on san_storage_cleanup_check" 
+    
+    - name: Get timestamp from the system
+      shell: "date +%Y-%m-%d/%H:%M"
+      delegate_to: localhost
+      register: tstamp  
+    
+    - set_fact:
+          time: "{{tstamp.stdout}}"
+    
+    - name: "Write Failure host to file"
+      shell: echo "{{ inventory_hostname }} Failure" >> phy_storage_cleanup_failure.txt                  
+      delegate_to: localhost
+
+    - name: "Physical host list"
+      shell: echo "{{ inventory_hostname }}, {{ time }}, [ERROR], check errors on san_storage_cleanup_check module." >> {{file_storage_cleanup_fail}}                    
+      delegate_to: localhost  
+

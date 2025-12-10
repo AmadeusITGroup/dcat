@@ -1,0 +1,152 @@
+---    
+    - name: Check Blade Status on HP Enclosure
+      block:
+        - name: Check Blade Status on HP Enclosure
+          ssh_check_esxi_with_pass:
+            hostname: "{{ inventory_hostname }}.muc.net"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "SHOW SERVER LIST"
+          register: hp_blade_status
+          delegate_to: localhost
+          retries: 3
+          delay: 5
+          until: hp_blade_status is succeeded
+
+        - name: Get timestamp from the system
+          shell: "date +%Y-%m-%d/%H:%M"
+          delegate_to: localhost
+          register: tstamp              
+
+        - set_fact:
+            time: "{{ tstamp.stdout }}"
+
+        # Log success for HP status check
+        - name: Log Successful HP Blade Status Check
+          shell: echo "#HP Blade Status - {{ time }} , [INFO], Blade status check successful for {{ inventory_hostname }}" >> hp_blade_success.yml
+          delegate_to: localhost
+          when: hp_blade_status is succeeded
+
+      rescue:
+        # Log SSH connection errors during HP status check
+        - name: Log SSH Connection Error During HP Blade Status Check
+          shell: echo "!HP Blade Status - {{ time }} , [ERROR], Failed to connect to HP enclosure for {{ inventory_hostname }}" >> hp_blade_fail.yml
+          delegate_to: localhost
+
+    # ---------------------------- #
+    # INITIALIZE HP BLADE CATEGORIES
+    # ---------------------------- #
+    - name: Initialize Blade Categories
+      set_fact:
+        powered_on: []
+        powered_off: []
+        empty_bays: []
+
+    # ---------------------------- #
+    # SET POWERDELAY TO NOPOWERON
+    # ---------------------------- #
+    - name: Set Power Delay to NOPOWERON for All Servers
+      ssh_check_esxi_with_pass:
+        hostname: "{{ inventory_hostname }}.muc.net"
+        username: "{{ remote_username }}"
+        password: "{{ remote_password }}"
+        command: "SET SERVER POWERDELAY ALL NOPOWERON"
+      delegate_to: localhost
+      register: powerdelay_result
+      retries: 3
+      delay: 5
+      until: powerdelay_result is succeeded
+
+    - name: Log Power Delay Setting Success
+      shell: echo "#PowerDelay - {{ time }} , [INFO], Power delay successfully set to NOPOWERON on {{ inventory_hostname }}" >> hp_blade_success.yml
+      delegate_to: localhost
+      when: powerdelay_result is succeeded
+
+    - name: Log Power Delay Setting Failure
+      shell: echo "!PowerDelay - {{ time }} , [ERROR], Failed to set power delay on {{ inventory_hostname }}" >> hp_blade_fail.yml
+      delegate_to: localhost
+      when: powerdelay_result is failed
+
+    # ---------------------------- #
+    # PARSE BLADE POWER STATUS
+    # ---------------------------- #
+    # - name: Parse HP Blade Powered On Status Output
+    #   set_fact:
+    #     powered_on: "{{ powered_on + [item.split()[0]] }}"
+    #   when: "'On' in item.split() | list"
+    #   loop: "{{ hp_blade_status.output.splitlines()[8:24] }}"
+
+    - name: Parse HP Blade Powered On Status Output
+      set_fact:
+        powered_on: "{{ powered_on + [item.split()[0]] }}"
+      when: "item.split()[4] == 'On'"
+      loop: "{{ hp_blade_status.output.splitlines()[9:25] }}"
+      # ignore_errors: yes 
+
+
+    # - name: Parse Powered Off Blades
+    #   set_fact:
+    #     powered_off: "{{ powered_off + [item.split()[0]] }}"
+    #   when: "'Off' in item.split() | list"
+    #   loop: "{{ hp_blade_status.output.splitlines()[8:24] }}"
+
+    - name: Parse Powered Off Blades
+      set_fact:
+        powered_off: "{{ powered_off + [item.split()[0]] }}"
+      when: "item.split()[4] == 'Off'"
+      loop: "{{ hp_blade_status.output.splitlines()[9:25] }}" 
+
+    # ---------------------------- #
+    # DISPLAY BLADE STATUS RESULTS
+    # ---------------------------- #
+    - name: Display Blade Status
+      debug:
+        msg: |
+          Powered On Blades: {{ powered_on }}
+          Powered Off Blades: {{ powered_off }}
+
+    # ---------------------------- #
+    # POWER ON BLADE TASKS
+    # ---------------------------- #
+    - name: Power On Blades That Are Currently Off
+      block:
+        - name: Power On Blade
+          ssh_check_esxi_with_pass:
+            hostname: "{{ inventory_hostname }}.muc.net"
+            username: "{{ remote_username }}"
+            password: "{{ remote_password }}"
+            command: "POWERON SERVER {{ item }}"
+          loop: "{{ powered_off }}"
+          register: power_on_results
+          delegate_to: localhost
+          loop_control:
+            label: "Powering Blade [{{ item }}]"
+          ignore_errors: yes 
+
+        # Log success for power on
+        - name: Log Success for Powered On HP Blades
+          shell: echo "#Blade [{{ item.item }}] - {{ time }} , [INFO], Blade successfully powered on for {{ inventory_hostname }}" >> hp_blade_success.yml
+          delegate_to: localhost
+          when: item is succeeded
+          loop: "{{ power_on_results.results }}"
+          loop_control:
+            label: "Blade [{{ item.item }}]"
+
+        # Log failure if power on fails
+        - name: Log Failure for Blades That Failed to Power On
+          shell: echo "!Blade [{{ item.item }}] - {{ time }} , [ERROR], Failed to power on blade for {{ inventory_hostname }}" >> hp_blade_fail.yml
+          delegate_to: localhost
+          when: item is failed
+          loop: "{{ power_on_results.results }}"
+          loop_control:
+            label: "Blade [{{ item.item }}]"
+
+      rescue:
+        # Log error if power-on command fails completely
+        - name: Log Error if Power On Command Fails
+          shell: echo "!Blade [{{ item.item }}] - {{ time }} , [ERROR], Failed to power on blade for {{ inventory_hostname }}" >> hp_blade_fail.yml
+          delegate_to: localhost
+          loop: "{{ power_on_results.results }}"
+          when: item.failed
+          loop_control:
+            label: "Blade [{{ item.item }}]"
