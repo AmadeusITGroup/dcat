@@ -35,6 +35,11 @@ The **Data Center Decommissioning Automation Tool (DCAT)** is a comprehensive au
                                             └──────────────────────┘
 ```
 
+
+## Disclaimer
+This project serves as a blueprint and reference implementation for Data Center Decommissioning Automation Tool (DCAT). Users are expected to configure their own environment, set up connectivity, integrate with internal systems (CMDB, ServiceNow, IPAM, Storage, Network, etc.), and implement any additional operational or security requirements specific to their organization.
+
+
 ## Supported Infrastructure Flavors
 
 ### 1. Virtual Machine (VM) Decommissioning
@@ -439,5 +444,4 @@ table.upsert_entity(entity)
 
 3. **Mapping and Correlation** - Ticket data, task progress, and server metadata are all cross-linked in one unified store, simplifying reporting, auditing, and integration with CMDB and ServiceNow.
 
-## Disclaimer
-This project serves as a blueprint and reference implementation for Data Center Decommissioning Automation Tool (DCAT). Users are expected to configure their own environment, set up connectivity, integrate with internal systems (CMDB, ServiceNow, IPAM, Storage, Network, etc.), and implement any additional operational or security requirements specific to their organization.
+
