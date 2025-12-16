@@ -1,0 +1,1 @@
+This project is not aimed at active evolution and code contributions(PRs) are not going to be accepted. Nevertheless, issue reports, feedback, and thoughtful commentary remain welcome and appreciated.
