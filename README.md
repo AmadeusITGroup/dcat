@@ -1,3 +1,9 @@
+<div align="center">
+
+<img src="assets/BMWE2025_NextGenEU_gef_en_RGB.svg" alt="IPCEI Next Generation Cloud Infrastructure and Services" width="50%">
+
+</div>
+
 # Data Center Decommissioning Automation Tool (DCAT)
 
 ## Introduction
